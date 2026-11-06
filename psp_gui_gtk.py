@@ -298,9 +298,15 @@ class PSPGtk(Adw.Application):
         self.file_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.file_list.set_vexpand(True)
         input_box.append(self.file_list)
+        input_actions = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         add = Gtk.Button(label=_("Add Images…"))
+        add.set_hexpand(True)
         add.connect("clicked", self._choose_inputs)
-        input_box.append(add)
+        input_actions.append(add)
+        self.clear_images_button = Gtk.Button(label=_("Clear Images"))
+        self.clear_images_button.connect("clicked", self._clear_images)
+        input_actions.append(self.clear_images_button)
+        input_box.append(input_actions)
         page.append(input_box)
 
         form = Gtk.Grid(column_spacing=12, row_spacing=8)
@@ -449,12 +455,60 @@ class PSPGtk(Adw.Application):
             self.folder_history.remember(path)
             if path and path not in self.files:
                 self.files.append(path)
-                item = Gtk.Label(label=path, xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
-                item.set_tooltip_text(path)
-                self.file_list.append(item)
+        self._refresh_file_list()
         if self.files:
             self._begin_progress(_("Analyzing disc and loading assets"))
             threading.Thread(target=self._analyze_first, args=(self.files[0],), daemon=True).start()
+
+    def _refresh_file_list(self) -> None:
+        child = self.file_list.get_first_child()
+        while child:
+            following = child.get_next_sibling()
+            self.file_list.remove(child)
+            child = following
+        for path in self.files:
+            row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            label = Gtk.Label(label=path, xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
+            label.set_hexpand(True)
+            label.set_tooltip_text(path)
+            row.append(label)
+            remove = Gtk.Button(icon_name="list-remove-symbolic")
+            remove.set_tooltip_text(_("Remove Image"))
+            remove.set_accessible_label(_("Remove {name}").format(name=Path(path).name))
+            remove.add_css_class("flat")
+            remove.connect("clicked", self._remove_image, path)
+            row.append(remove)
+            self.file_list.append(row)
+        self.clear_images_button.set_sensitive(bool(self.files) and not self.busy)
+
+    def _reset_disc_data(self) -> None:
+        self.title_entry.set_text("")
+        self.id_entry.set_text("")
+        self.use_cdda.set_active(False)
+        for key, entry in self.asset_entries.items():
+            entry.set_text("")
+            picture = self.preview.get(key)
+            if picture:
+                picture.set_paintable(None)
+
+    def _remove_image(self, _button, path: str) -> None:
+        if self.busy or path not in self.files:
+            return
+        was_first = self.files[0] == path
+        self.files.remove(path)
+        self._refresh_file_list()
+        if was_first:
+            self._reset_disc_data()
+            if self.files:
+                self._begin_progress(_("Analyzing disc and loading assets"))
+                threading.Thread(target=self._analyze_first, args=(self.files[0],), daemon=True).start()
+
+    def _clear_images(self, _button) -> None:
+        if self.busy or not self.files:
+            return
+        self.files.clear()
+        self._refresh_file_list()
+        self._reset_disc_data()
 
     def _analyze_first(self, path: str) -> None:
         backend = ROOT / "psp_backend.py"
