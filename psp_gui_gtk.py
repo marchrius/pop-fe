@@ -9,6 +9,7 @@ import subprocess
 import signal
 import threading
 import time
+import uuid
 from pathlib import Path
 
 import gi
@@ -231,6 +232,7 @@ class PSPGtk(Adw.Application):
         self.stop_button.set_sensitive(True)
         self.cancel_button.set_sensitive(True)
         self.convert_button.set_sensitive(False)
+        self.xmb_button.set_sensitive(False)
         self.extract_button.set_sensitive(False)
         self.lookup_action("open").set_enabled(False)
         self.progress_timer = GLib.timeout_add(100, self._pulse_progress)
@@ -254,6 +256,7 @@ class PSPGtk(Adw.Application):
         self.stop_button.set_sensitive(False)
         self.cancel_button.set_sensitive(False)
         self.convert_button.set_sensitive(True)
+        self.xmb_button.set_sensitive(True)
         self.extract_button.set_sensitive(True)
         self.lookup_action("open").set_enabled(True)
 
@@ -347,6 +350,10 @@ class PSPGtk(Adw.Application):
             card.append(Gtk.Label(label=label))
             previews.insert(card, -1)
         assets.attach(previews, 0, 7, 3, 1)
+        self.xmb_button = Gtk.Button(label="Anteprima XMB")
+        self.xmb_button.set_halign(Gtk.Align.END)
+        self.xmb_button.connect("clicked", self._preview_xmb)
+        assets.attach(self.xmb_button, 0, 8, 3, 1)
         page.append(assets)
 
         actions = Gtk.Box(spacing=10, halign=Gtk.Align.END)
@@ -519,8 +526,69 @@ class PSPGtk(Adw.Application):
                 self.preview[key].set_filename(path)
 
     def _theme_changed(self, *_args) -> None:
-        # The selected theme is passed to POP-FE; its automatic asset logic remains authoritative.
-        pass
+        self.xmb_button.set_tooltip_text("Mostra il tema selezionato con le immagini reali del gioco")
+
+    def _preview_xmb(self, _button) -> None:
+        if self.busy:
+            return
+        if not self.id_entry.get_text():
+            self._append_log("Carica prima un disco e attendi l’acquisizione dei dati.\n")
+            return
+        directory = WORK_ROOT / "previews" / uuid.uuid4().hex
+        directory.mkdir(parents=True, exist_ok=True)
+        config_path = directory / "config.json"
+        config_path.write_text(json.dumps(self._conversion_config()), encoding="utf-8")
+        window = Adw.Window(transient_for=self.window, modal=False)
+        window.set_title("Anteprima XMB · " + self.theme.get_selected_item().get_string())
+        window.set_default_size(720, 480)
+        toolbar = Adw.ToolbarView()
+        toolbar.add_top_bar(Adw.HeaderBar())
+        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        for edge in ("top", "bottom", "start", "end"):
+            getattr(content, "set_margin_" + edge)(16)
+        message = Gtk.Label(label="Preparazione immagini del tema…", wrap=True)
+        picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
+        content.append(picture)
+        content.append(message)
+        toolbar.set_content(content)
+        window.set_content(toolbar)
+        window.present()
+        self._begin_progress("Preparazione anteprima XMB")
+        threading.Thread(target=self._preview_worker, args=(config_path, directory, picture, message), daemon=True).start()
+
+    def _preview_worker(self, config_path, directory, picture, message) -> None:
+        try:
+            process = subprocess.Popen(
+                [str(PYTHON), "-u", str(ROOT / "psp_backend.py"), "preview", "--config", str(config_path), "--workdir", str(directory)],
+                cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, start_new_session=True,
+            )
+            self.process = process
+            if self.cancel_requested:
+                self._terminate_process()
+            output, errors = process.communicate()
+            if process.returncode:
+                raise RuntimeError(errors or "Preparazione interrotta")
+            result = json.loads(output)
+            GLib.idle_add(self._preview_ready, picture, message, result["image"])
+        except Exception as exc:
+            GLib.idle_add(self._preview_failed, message, str(exc))
+
+    def _preview_ready(self, picture, message, filename) -> bool:
+        self.process = None
+        if self.cancel_requested:
+            return self._preview_failed(message, "Operazione interrotta")
+        picture.set_filename(filename)
+        message.set_text("Simulazione XMB PSP · immagini reali del tema selezionato. "
+                         "La grafica di sistema può variare sulla console; l’audio non viene riprodotto.")
+        self._end_progress("Anteprima XMB pronta", success=True)
+        return GLib.SOURCE_REMOVE
+
+    def _preview_failed(self, message, error) -> bool:
+        self.process = None
+        message.set_text("Anteprima non disponibile. Controlla il log.")
+        self._append_log("Anteprima XMB: " + error + "\n")
+        self._end_progress("Operazione interrotta" if self.cancel_requested else "Anteprima non disponibile")
+        return GLib.SOURCE_REMOVE
 
     def _convert(self, _button) -> None:
         if self.busy:
@@ -531,8 +599,14 @@ class PSPGtk(Adw.Application):
         config_dir = WORK_ROOT
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / "gtk-config.json"
+        config_path.write_text(json.dumps(self._conversion_config()), encoding="utf-8")
+        command = [str(PYTHON), str(ROOT / "psp_backend.py"), "create", "--config", str(config_path)]
+        self._run(command, "Conversione")
+
+    def _conversion_config(self) -> dict:
         assets = {key: entry.get_text() for key, entry in self.asset_entries.items() if entry.get_text() and key != "manual"}
-        config = {
+        return {
+            "theme": self.theme.get_selected_item().get_string(),
             "files": self.files,
             "output": self.psp_entry.get_text(),
             "title": self.title_entry.get_text(),
@@ -551,9 +625,6 @@ class PSPGtk(Adw.Application):
                 "swap_disc": self.swap_disc.get_active(),
             },
         }
-        config_path.write_text(json.dumps(config), encoding="utf-8")
-        command = [str(PYTHON), str(ROOT / "psp_backend.py"), "create", "--config", str(config_path)]
-        self._run(command, "Conversione")
 
     def _extract(self, _button) -> None:
         if self.busy:

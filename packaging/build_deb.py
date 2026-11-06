@@ -18,7 +18,7 @@ def install(source, target, mode=0o644):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='0.1.0')
+    parser.add_argument('--version', default='0.1.1')
     args = parser.parse_args()
     if not args.version or any(c not in '0123456789.+~-' for c in args.version):
         parser.error('version must be a numeric Debian version')
