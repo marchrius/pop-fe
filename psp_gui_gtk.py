@@ -13,6 +13,7 @@ import uuid
 from pathlib import Path
 
 from psp_i18n import _
+from psp_paths import FolderHistory
 
 import gi
 
@@ -53,7 +54,7 @@ class PSPGtk(Adw.Application):
         self.busy = False
         self.cancel_requested = False
         self.progress_timer = None
-        self.last_dir = Path.home()
+        self.folder_history = FolderHistory(Path(GLib.get_user_config_dir()) / APP_ID / "dialogs.json")
         self.log_views: list[Gtk.TextView] = []
         self.status: Gtk.Label | None = None
         self.convert_button: Gtk.Button | None = None
@@ -428,7 +429,7 @@ class PSPGtk(Adw.Application):
 
     def _dialog(self) -> Gtk.FileDialog:
         dialog = Gtk.FileDialog()
-        dialog.set_initial_folder(Gio.File.new_for_path(str(self.last_dir)))
+        dialog.set_initial_folder(Gio.File.new_for_path(str(self.folder_history.current())))
         return dialog
 
     def _choose_inputs(self, _button) -> None:
@@ -445,6 +446,7 @@ class PSPGtk(Adw.Application):
             return
         for index in range(files.get_n_items()):
             path = files.get_item(index).get_path()
+            self.folder_history.remember(path)
             if path and path not in self.files:
                 self.files.append(path)
                 item = Gtk.Label(label=path, xalign=0, ellipsize=Pango.EllipsizeMode.MIDDLE)
@@ -513,14 +515,20 @@ class PSPGtk(Adw.Application):
             path = dialog.open_finish(result).get_path()
         except GLib.Error:
             return
+        if not path:
+            return
+        self.folder_history.remember(path)
         target.set_text(path)
         self._set_preview_for_entry(target, path)
 
     def _folder_done(self, dialog, result, target: Gtk.Entry) -> None:
         try:
-            target.set_text(dialog.select_folder_finish(result).get_path())
+            path = dialog.select_folder_finish(result).get_path()
         except GLib.Error:
-            pass
+            return
+        if path:
+            self.folder_history.remember(path, directory=True)
+            target.set_text(path)
 
     def _set_preview_for_entry(self, target: Gtk.Entry, path: str) -> None:
         for key, entry in self.asset_entries.items():

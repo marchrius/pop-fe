@@ -4,7 +4,7 @@ Costruzione dal repository con `atracdenc/src/atracdenc` già compilato:
 
 ```sh
 python3 packaging/build_deb.py
-sudo apt install ./dist/pop-fe-psp_0.1.3_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.4_amd64.deb
 ```
 
 Il pacchetto è nativo per la distribuzione e l'architettura della macchina di
@@ -30,6 +30,11 @@ con inglese come fallback. Per una singola esecuzione dal terminale:
 `LANGUAGE=it pop-fe-psp` oppure `LANGUAGE=en pop-fe-psp`.
 Chiudi prima eventuali istanze già aperte. I cataloghi UTF-8 sono in `locales/`.
 I messaggi diagnostici emessi dagli strumenti esterni conservano la loro lingua.
+
+Tutti i dialoghi condividono l'ultima cartella selezionata, salvata in
+`~/.config/org.popfe.PSPManager/dialogs.json` (oppure sotto `$XDG_CONFIG_HOME`).
+Se la cartella è stata rimossa, smontata o non è accessibile si apre la home.
+Annullare il dialogo non modifica la preferenza.
 Cache e file di lavoro: `$XDG_CACHE_HOME/org.popfe.PSPManager`, normalmente
 `~/.cache/org.popfe.PSPManager`. Gli script e le risorse installate restano
 in `/usr/share/pop-fe-psp`.
