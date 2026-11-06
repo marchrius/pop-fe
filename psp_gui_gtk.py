@@ -12,6 +12,8 @@ import time
 import uuid
 from pathlib import Path
 
+from psp_i18n import _
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -94,7 +96,7 @@ class PSPGtk(Adw.Application):
         content = self._build_root()
         header.set_title_widget(self.switcher)
         self.menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic")
-        self.menu_button.set_tooltip_text("Menu principale")
+        self.menu_button.set_tooltip_text(_("Main Menu"))
         self.menu_button.set_menu_model(self._main_menu())
         header.pack_end(self.menu_button)
         toolbar = Adw.ToolbarView()
@@ -128,10 +130,10 @@ class PSPGtk(Adw.Application):
     def _main_menu() -> Gio.Menu:
         menu = Gio.Menu()
         for items in (
-            (("Apri immagini o PBP…", "open"), ("Converti", "convert"), ("Estrai", "extract")),
-            (("Pulisci log", "clear-log"),),
-            (("Guida e scorciatoie", "help"), ("Informazioni su POP-FE", "about")),
-            (("Esci", "quit"),),
+            ((_("Open Images or PBP…"), "open"), (_("Convert"), "convert"), (_("Extract"), "extract")),
+            ((_("Clear Log"), "clear-log"),),
+            ((_("Help and Shortcuts"), "help"), (_("About POP-FE"), "about")),
+            ((_("Quit"), "quit"),),
         ):
             section = Gio.Menu()
             for label, action in items:
@@ -147,14 +149,12 @@ class PSPGtk(Adw.Application):
 
     def _show_help(self) -> None:
         dialog = Adw.AlertDialog(
-            heading="Guida a POP-FE",
-            body="Converti: aggiungi le immagini del gioco, verifica dati e anteprime, "
-                 "scegli la destinazione e crea EBOOT.PBP.\n\n"
-                 "Estrai: seleziona il PBP e una cartella di destinazione.\n\n"
-                 "Ctrl+O — Apri immagini o PBP\nAlt+1 — Converti\n"
-                 "Alt+2 — Estrai\nF1 — Guida\nCtrl+Q — Esci",
+            heading=_("POP-FE Help"),
+            body=_("Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\n"
+                   "Extract: select the PBP and an output folder.\n\n"
+                   "Ctrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit"),
         )
-        dialog.add_response("close", "Chiudi")
+        dialog.add_response("close", _("Close"))
         dialog.present(self.window)
 
     def _show_about(self) -> None:
@@ -162,7 +162,7 @@ class PSPGtk(Adw.Application):
             application_name="POP-FE PSP Manager",
             application_icon=APP_ID,
             version=APP_VERSION,
-            comments="Conversione ed estrazione di immagini PlayStation per PSP con POP-FE.",
+            comments=_("Convert and extract PlayStation disc images for PSP with POP-FE."),
             license_type=Gtk.License.LGPL_2_1,
         )
         dialog.present(self.window)
@@ -170,10 +170,10 @@ class PSPGtk(Adw.Application):
     def _close_requested(self, _window) -> bool:
         if not self.busy:
             return False
-        dialog = Adw.AlertDialog(heading="Interrompere l’operazione?",
-                                body="È in corso un’operazione. Uscendo verrà interrotta.")
-        dialog.add_response("cancel", "Continua")
-        dialog.add_response("quit", "Interrompi ed esci")
+        dialog = Adw.AlertDialog(heading=_("Stop the operation?"),
+                                body=_("An operation is running. Quitting will stop it."))
+        dialog.add_response("cancel", _("Continue"))
+        dialog.add_response("quit", _("Stop and Quit"))
         dialog.set_response_appearance("quit", Adw.ResponseAppearance.DESTRUCTIVE)
         dialog.set_default_response("cancel")
         dialog.set_close_response("cancel")
@@ -204,8 +204,8 @@ class PSPGtk(Adw.Application):
         switcher.set_halign(Gtk.Align.CENTER)
         root.append(stack)
         stack.set_vexpand(True)
-        stack.add_titled(self._scroll_page(self._build_convert()), "convert", "Converti")
-        stack.add_titled(self._scroll_page(self._build_extract()), "extract", "Estrai")
+        stack.add_titled(self._scroll_page(self._build_convert()), "convert", _("Convert"))
+        stack.add_titled(self._scroll_page(self._build_extract()), "extract", _("Extract"))
         progress_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         progress_box.set_margin_start(16)
         progress_box.set_margin_end(16)
@@ -213,8 +213,8 @@ class PSPGtk(Adw.Application):
         progress_box.set_margin_bottom(12)
         progress_row = Gtk.Box(spacing=8)
         self.spinner = Gtk.Spinner()
-        self.progress_label = Gtk.Label(label="Pronto", xalign=0, hexpand=True, wrap=True)
-        self.stop_button = Gtk.Button(label="Interrompi", sensitive=False)
+        self.progress_label = Gtk.Label(label=_("Ready"), xalign=0, hexpand=True, wrap=True)
+        self.stop_button = Gtk.Button(label=_("Stop"), sensitive=False)
         self.stop_button.connect("clicked", self._cancel)
         progress_row.append(self.spinner)
         progress_row.append(self.progress_label)
@@ -288,53 +288,53 @@ class PSPGtk(Adw.Application):
         return page
 
     def _build_convert(self) -> Gtk.Widget:
-        page = self._page("Converti immagini PSX in EBOOT.PBP", "Asset automatici, temi e anteprime vengono mantenuti durante la conversione.")
+        page = self._page(_("Convert PSX Images to EBOOT.PBP"), _("Automatic assets, themes and previews are used during conversion."))
         input_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         input_box.add_css_class("section")
-        input_box.append(Gtk.Label(label="Immagini disco", xalign=0))
+        input_box.append(Gtk.Label(label=_("Disc Images"), xalign=0))
         self.file_list = Gtk.ListBox()
         self.file_list.add_css_class("disc-list")
         self.file_list.set_selection_mode(Gtk.SelectionMode.NONE)
         self.file_list.set_vexpand(True)
         input_box.append(self.file_list)
-        add = Gtk.Button(label="Aggiungi immagini…")
+        add = Gtk.Button(label=_("Add Images…"))
         add.connect("clicked", self._choose_inputs)
         input_box.append(add)
         page.append(input_box)
 
         form = Gtk.Grid(column_spacing=12, row_spacing=8)
         form.add_css_class("section")
-        self.psp_entry = self._entry_row(form, 0, "Root PSP")
+        self.psp_entry = self._entry_row(form, 0, _("PSP Root Folder"))
         form.attach(self._browse_button(self._choose_psp), 2, 0, 1, 1)
-        self.title_entry = self._entry_row(form, 1, "Titolo")
-        self.id_entry = self._entry_row(form, 2, "Game ID")
+        self.title_entry = self._entry_row(form, 1, _("Title"))
+        self.id_entry = self._entry_row(form, 2, _("Game ID"))
         page.append(form)
 
         options = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
                               column_spacing=12, row_spacing=6,
                               min_children_per_line=1, max_children_per_line=3)
         options.add_css_class("section")
-        self.no_assets = self._check("Disabilita download assets")
-        self.no_libcrypt = self._check("Disabilita libcrypt")
-        self.use_cdda = self._check("Usa CDDA")
-        self.undither = self._check("PSX-undither")
-        self.watermark = self._check("Watermark")
-        self.nopstitleimg = self._check("Disabilita PSTITLEIMG")
-        self.pic1aslogo = self._check("PIC1 come logo")
-        self.force_ntsc = self._check("Force NTSC")
-        self.swap_disc = self._check("Permetti swap disc")
+        self.no_assets = self._check(_("Disable Asset Downloads"))
+        self.no_libcrypt = self._check(_("Disable LibCrypt Patching"))
+        self.use_cdda = self._check(_("Use CDDA"))
+        self.undither = self._check(_("PSX-undither"))
+        self.watermark = self._check(_("Watermark"))
+        self.nopstitleimg = self._check(_("Disable PSTITLEIMG"))
+        self.pic1aslogo = self._check(_("Use PIC1 as Logo"))
+        self.force_ntsc = self._check(_("Force NTSC"))
+        self.swap_disc = self._check(_("Allow Disc Swapping"))
         for check in (self.no_assets, self.no_libcrypt, self.use_cdda, self.undither, self.watermark, self.nopstitleimg, self.pic1aslogo, self.force_ntsc, self.swap_disc):
             options.insert(check, -1)
         page.append(options)
 
         assets = Gtk.Grid(column_spacing=12, row_spacing=8)
         assets.add_css_class("section")
-        assets.attach(Gtk.Label(label="Assets e tema", xalign=0), 0, 0, 1, 1)
-        themes = Gtk.StringList.new(["Automatico", "98DEMAKE", "ASCIIART", "DOTPAINTING", "OILPAINTING", "WATERCOLOR", "COLORSKETCH"])
+        assets.attach(Gtk.Label(label=_("Assets and Theme"), xalign=0), 0, 0, 1, 1)
+        themes = Gtk.StringList.new([_("Automatic"), "98DEMAKE", "ASCIIART", "DOTPAINTING", "OILPAINTING", "WATERCOLOR", "COLORSKETCH"])
         self.theme = Gtk.DropDown(model=themes)
         assets.attach(self.theme, 1, 0, 2, 1)
         self.theme.connect("notify::selected", self._theme_changed)
-        for row, key, label in ((1, "cover", "Cover / ICON0"), (2, "pic0", "PIC0"), (3, "pic1", "PIC1"), (4, "logo", "Logo"), (5, "snd0", "SND0"), (6, "manual", "Manuale")):
+        for row, key, label in ((1, "cover", _("Cover / ICON0")), (2, "pic0", "PIC0"), (3, "pic1", "PIC1"), (4, "logo", _("Logo")), (5, "snd0", "SND0"), (6, "manual", _("Manual"))):
             entry = self._asset_row(assets, row, key, label)
             self.asset_entries[key] = entry
         previews = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,
@@ -352,20 +352,20 @@ class PSPGtk(Adw.Application):
             card.append(Gtk.Label(label=label))
             previews.insert(card, -1)
         assets.attach(previews, 0, 7, 3, 1)
-        self.xmb_button = Gtk.Button(label="Anteprima XMB")
+        self.xmb_button = Gtk.Button(label=_("XMB Preview"))
         self.xmb_button.set_halign(Gtk.Align.END)
         self.xmb_button.connect("clicked", self._preview_xmb)
         assets.attach(self.xmb_button, 0, 8, 3, 1)
         page.append(assets)
 
         actions = Gtk.Box(spacing=10, halign=Gtk.Align.END)
-        self.status = Gtk.Label(label="Pronto", xalign=0, wrap=True)
+        self.status = Gtk.Label(label=_("Ready"), xalign=0, wrap=True)
         actions.append(self.status)
-        self.cancel_button = Gtk.Button(label="Annulla")
+        self.cancel_button = Gtk.Button(label=_("Cancel"))
         self.cancel_button.set_sensitive(False)
         self.cancel_button.connect("clicked", self._cancel)
         actions.append(self.cancel_button)
-        self.convert_button = Gtk.Button(label="Crea EBOOT.PBP")
+        self.convert_button = Gtk.Button(label=_("Create EBOOT.PBP"))
         self.convert_button.add_css_class("suggested-action")
         self.convert_button.connect("clicked", self._convert)
         actions.append(self.convert_button)
@@ -374,15 +374,15 @@ class PSPGtk(Adw.Application):
         return page
 
     def _build_extract(self) -> Gtk.Widget:
-        page = self._page("Estrai contenuti da EBOOT.PBP", "Esporta immagini disco, CUE e tracce audio presenti nel PBP.")
+        page = self._page(_("Extract EBOOT.PBP Contents"), _("Export disc images, CUE files and audio tracks stored in the PBP."))
         form = Gtk.Grid(column_spacing=12, row_spacing=12)
         form.add_css_class("section")
-        self.extract_pbp = self._entry_row(form, 0, "File PBP")
+        self.extract_pbp = self._entry_row(form, 0, _("PBP File"))
         form.attach(self._browse_button(self._choose_pbp), 2, 0, 1, 1)
-        self.extract_dir = self._entry_row(form, 1, "Cartella output")
+        self.extract_dir = self._entry_row(form, 1, _("Output Folder"))
         form.attach(self._browse_button(self._choose_extract_dir), 2, 1, 1, 1)
         page.append(form)
-        action = Gtk.Button(label="Estrai contenuti", halign=Gtk.Align.END)
+        action = Gtk.Button(label=_("Extract Contents"), halign=Gtk.Align.END)
         self.extract_button = action
         action.add_css_class("suggested-action")
         action.connect("clicked", self._extract)
@@ -422,7 +422,7 @@ class PSPGtk(Adw.Application):
 
     @staticmethod
     def _browse_button(callback) -> Gtk.Button:
-        button = Gtk.Button(label="Scegli…")
+        button = Gtk.Button(label=_("Browse…"))
         button.connect("clicked", callback)
         return button
 
@@ -451,7 +451,7 @@ class PSPGtk(Adw.Application):
                 item.set_tooltip_text(path)
                 self.file_list.append(item)
         if self.files:
-            self._begin_progress("Analisi disco e caricamento assets")
+            self._begin_progress(_("Analyzing disc and loading assets"))
             threading.Thread(target=self._analyze_first, args=(self.files[0],), daemon=True).start()
 
     def _analyze_first(self, path: str) -> None:
@@ -465,22 +465,22 @@ class PSPGtk(Adw.Application):
                 self._terminate_process()
             output, errors = process.communicate()
             if process.returncode != 0:
-                raise RuntimeError(errors or f"Analisi terminata con codice {process.returncode}")
+                raise RuntimeError(errors or _("Analysis exited with code {code}").format(code=process.returncode))
             data = json.loads(output)
             GLib.idle_add(self._apply_backend_metadata, data)
         except Exception as exc:
-            GLib.idle_add(self._append_log, f"Analisi non completata: {exc}\n")
+            GLib.idle_add(self._append_log, _("Analysis did not complete: {error}\n").format(error=exc))
             GLib.idle_add(self._analysis_failed)
 
     def _analysis_failed(self) -> bool:
         self.process = None
-        self._end_progress("Operazione interrotta" if self.cancel_requested else "Analisi fallita: controlla il log")
+        self._end_progress(_("Operation stopped") if self.cancel_requested else _("Analysis failed: check the log"))
         return GLib.SOURCE_REMOVE
 
     def _apply_backend_metadata(self, data: dict) -> bool:
         self.process = None
         if self.cancel_requested:
-            self._end_progress("Operazione interrotta")
+            self._end_progress(_("Operation stopped"))
             return GLib.SOURCE_REMOVE
         self.id_entry.set_text(data.get("disc_id", ""))
         self.title_entry.set_text(data.get("title", ""))
@@ -493,7 +493,7 @@ class PSPGtk(Adw.Application):
                 self.preview[key].set_filename(filename)
         if data.get("cdda"):
             self.use_cdda.set_active(True)
-        self._end_progress("Dati automatici caricati", success=True)
+        self._end_progress(_("Automatic data loaded"), success=True)
         return GLib.SOURCE_REMOVE
 
     def _choose_psp(self, _button) -> None:
@@ -528,34 +528,34 @@ class PSPGtk(Adw.Application):
                 self.preview[key].set_filename(path)
 
     def _theme_changed(self, *_args) -> None:
-        self.xmb_button.set_tooltip_text("Mostra il tema selezionato con le immagini reali del gioco")
+        self.xmb_button.set_tooltip_text(_("Show the selected theme with the game's actual images"))
 
     def _preview_xmb(self, _button) -> None:
         if self.busy:
             return
         if not self.id_entry.get_text():
-            self._append_log("Carica prima un disco e attendi l’acquisizione dei dati.\n")
+            self._append_log(_("Load a disc first and wait for its data to be acquired.\n"))
             return
         directory = WORK_ROOT / "previews" / uuid.uuid4().hex
         directory.mkdir(parents=True, exist_ok=True)
         config_path = directory / "config.json"
         config_path.write_text(json.dumps(self._conversion_config()), encoding="utf-8")
         window = Adw.Window(transient_for=self.window, modal=False)
-        window.set_title("Anteprima XMB · " + self.theme.get_selected_item().get_string())
+        window.set_title(_("XMB Preview · {theme}").format(theme=self.theme.get_selected_item().get_string()))
         window.set_default_size(720, 480)
         toolbar = Adw.ToolbarView()
         toolbar.add_top_bar(Adw.HeaderBar())
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         for edge in ("top", "bottom", "start", "end"):
             getattr(content, "set_margin_" + edge)(16)
-        message = Gtk.Label(label="Preparazione immagini del tema…", wrap=True)
+        message = Gtk.Label(label=_("Preparing theme images…"), wrap=True)
         picture = Gtk.Picture(can_shrink=True, content_fit=Gtk.ContentFit.CONTAIN, vexpand=True)
         content.append(picture)
         content.append(message)
         toolbar.set_content(content)
         window.set_content(toolbar)
         window.present()
-        self._begin_progress("Preparazione anteprima XMB")
+        self._begin_progress(_("Preparing XMB preview"))
         threading.Thread(target=self._preview_worker, args=(config_path, directory, picture, message), daemon=True).start()
 
     def _preview_worker(self, config_path, directory, picture, message) -> None:
@@ -569,7 +569,7 @@ class PSPGtk(Adw.Application):
                 self._terminate_process()
             output, errors = process.communicate()
             if process.returncode:
-                raise RuntimeError(errors or "Preparazione interrotta")
+                raise RuntimeError(errors or _("Preparation interrupted"))
             result = json.loads(output)
             GLib.idle_add(self._preview_ready, picture, message, result["image"])
         except Exception as exc:
@@ -578,37 +578,36 @@ class PSPGtk(Adw.Application):
     def _preview_ready(self, picture, message, filename) -> bool:
         self.process = None
         if self.cancel_requested:
-            return self._preview_failed(message, "Operazione interrotta")
+            return self._preview_failed(message, _("Operation stopped"))
         picture.set_filename(filename)
-        message.set_text("Simulazione XMB PSP · immagini reali del tema selezionato. "
-                         "La grafica di sistema può variare sulla console; l’audio non viene riprodotto.")
-        self._end_progress("Anteprima XMB pronta", success=True)
+        message.set_text(_("PSP XMB simulation · actual images from the selected theme. System graphics may differ on the console; audio is not played."))
+        self._end_progress(_("XMB preview ready"), success=True)
         return GLib.SOURCE_REMOVE
 
     def _preview_failed(self, message, error) -> bool:
         self.process = None
-        message.set_text("Anteprima non disponibile. Controlla il log.")
-        self._append_log("Anteprima XMB: " + error + "\n")
-        self._end_progress("Operazione interrotta" if self.cancel_requested else "Anteprima non disponibile")
+        message.set_text(_("Preview unavailable. Check the log."))
+        self._append_log(_("XMB preview: {error}\n").format(error=error))
+        self._end_progress(_("Operation stopped") if self.cancel_requested else _("Preview unavailable"))
         return GLib.SOURCE_REMOVE
 
     def _convert(self, _button) -> None:
         if self.busy:
             return
         if not self.files or not self.psp_entry.get_text():
-            self._append_log("Seleziona almeno un'immagine e la root PSP.\n")
+            self._append_log(_("Select at least one disc image and the PSP root folder.\n"))
             return
         config_dir = WORK_ROOT
         config_dir.mkdir(parents=True, exist_ok=True)
         config_path = config_dir / "gtk-config.json"
         config_path.write_text(json.dumps(self._conversion_config()), encoding="utf-8")
         command = [str(PYTHON), str(ROOT / "psp_backend.py"), "create", "--config", str(config_path)]
-        self._run(command, "Conversione")
+        self._run(command, _("Conversion"))
 
     def _conversion_config(self) -> dict:
         assets = {key: entry.get_text() for key, entry in self.asset_entries.items() if entry.get_text() and key != "manual"}
         return {
-            "theme": self.theme.get_selected_item().get_string(),
+            "theme": ("", "98DEMAKE", "ASCIIART", "DOTPAINTING", "OILPAINTING", "WATERCOLOR", "COLORSKETCH")[self.theme.get_selected()],
             "files": self.files,
             "output": self.psp_entry.get_text(),
             "title": self.title_entry.get_text(),
@@ -632,11 +631,11 @@ class PSPGtk(Adw.Application):
         if self.busy:
             return
         if not self.extract_pbp.get_text() or not self.extract_dir.get_text():
-            self._append_log("Seleziona il PBP e la cartella di output.\n")
+            self._append_log(_("Select the PBP and an output folder.\n"))
             return
         Path(self.extract_dir.get_text()).mkdir(parents=True, exist_ok=True)
         command = [str(PYTHON), str(ROOT / "popstation.py"), "-v", "dump_pbp", self.extract_pbp.get_text()]
-        self._run(command, "Estrazione", cwd=Path(self.extract_dir.get_text()))
+        self._run(command, _("Extraction"), cwd=Path(self.extract_dir.get_text()))
 
     def _run(self, command: list[str], label: str, cwd: Path = ROOT) -> None:
         if self.busy:
@@ -647,9 +646,9 @@ class PSPGtk(Adw.Application):
             self.process = subprocess.Popen(command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                             text=True, bufsize=1, start_new_session=True)
         except OSError as exc:
-            self._append_log(f"Avvio fallito: {exc}\n")
+            self._append_log(_("Could not start: {error}\n").format(error=exc))
             return
-        self._begin_progress(f"{label} in corso")
+        self._begin_progress(_("{operation} in progress").format(operation=label))
         threading.Thread(target=self._read_process, args=(label,), daemon=True).start()
 
     def _read_process(self, label: str) -> None:
@@ -658,21 +657,21 @@ class PSPGtk(Adw.Application):
             if line.startswith("POPFE_PHASE: "):
                 GLib.idle_add(self._set_phase, line.removeprefix("POPFE_PHASE: ").strip())
             elif line.startswith("Dumping "):
-                GLib.idle_add(self._set_phase, "Estrazione: " + line.removeprefix("Dumping ").strip())
+                GLib.idle_add(self._set_phase, _("Extracting: {section}").format(section=line.removeprefix("Dumping ").strip()))
             GLib.idle_add(self._append_log, line)
         code = self.process.wait()
         GLib.idle_add(self._finished, label, code)
 
     def _finished(self, label: str, code: int) -> bool:
         self.process = None
-        message = "Operazione interrotta" if self.cancel_requested else ("Completato" if code == 0 else f"Errore (codice {code}): controlla il log")
+        message = _("Operation stopped") if self.cancel_requested else (_("Completed") if code == 0 else _("Error (code {code}): check the log").format(code=code))
         self._end_progress(message, success=code == 0 and not self.cancel_requested)
         return GLib.SOURCE_REMOVE
 
     def _cancel(self, _button) -> None:
         if self.busy:
             self.cancel_requested = True
-            self.phase = "Interruzione in corso"
+            self.phase = _("Stopping")
             self.stop_button.set_sensitive(False)
             self._terminate_process()
 

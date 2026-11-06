@@ -20,6 +20,7 @@ import tempfile
 
 from PIL import Image, ImageDraw
 from gamedb import games, libcrypt
+from psp_i18n import _
 
 
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -52,7 +53,7 @@ def analyze(path: str, workdir: pathlib.Path) -> dict:
     subdir = str(workdir) + "/"
     cue, real_cue, img = popfe.process_disk_file(path, 0, temp_files, subdir=subdir)
     if not cue:
-        raise RuntimeError(f"Formato non riconosciuto: {path}")
+        raise RuntimeError(_("Unrecognized format: {path}").format(path=path))
     disc_id, md5 = popfe.get_disc_id(cue, real_cue, subdir + "metadata.iso", is_psp=True)
     game = popfe.get_game_from_gamelist(disc_id)
     result = {
@@ -105,7 +106,7 @@ def create(config: dict, workdir: pathlib.Path) -> None:
     md5_sums: list[str] = []
 
     for index, original in enumerate(config["files"]):
-        print(f"POPFE_PHASE: Analisi disco {index + 1}/{len(config['files'])}", flush=True)
+        print("POPFE_PHASE: " + _("Analyzing disc {current}/{total}").format(current=index + 1, total=len(config['files'])), flush=True)
         source = original
         if pathlib.Path(original).suffix.lower() == ".iso":
             cue = workdir / f"ISO{index}.cue"
@@ -118,7 +119,7 @@ def create(config: dict, workdir: pathlib.Path) -> None:
             source = str(cue)
         cue, real_cue, img = popfe.process_disk_file(source, index, temp_files, subdir=subdir)
         if not cue:
-            raise RuntimeError(f"Formato non riconosciuto: {original}")
+            raise RuntimeError(_("Unrecognized format: {path}").format(path=original))
         disc_id, md5 = popfe.get_disc_id(cue, real_cue, subdir + f"ISO{index:02x}01.iso", is_psp=True)
         cue_files.append(cue)
         real_cue_files.append(real_cue)
@@ -127,15 +128,15 @@ def create(config: dict, workdir: pathlib.Path) -> None:
         md5_sums.append(md5)
 
     disc_ids = list(config.get("disc_ids") or real_disc_ids)
-    print("POPFE_PHASE: Applicazione patch di compatibilità", flush=True)
+    print("POPFE_PHASE: " + _("Applying compatibility patches"), flush=True)
     cue_files, img_files = popfe.apply_ppf_fixes(real_disc_ids, cue_files, img_files, md5_sums, subdir, tag="psp")
-    print("POPFE_PHASE: Preparazione tracce audio", flush=True)
+    print("POPFE_PHASE: " + _("Preparing audio tracks"), flush=True)
     aea_files, extra_data_tracks = popfe.generate_aea_files(cue_files, img_files, subdir)
     options = config.get("options", {})
     cdda = bool(options.get("cdda") or extra_data_tracks)
     manual = config.get("manual")
     if manual:
-        print("POPFE_PHASE: Preparazione manuale", flush=True)
+        print("POPFE_PHASE: " + _("Preparing manual"), flush=True)
         manual = popfe.create_manual(manual, disc_ids[0], subdir=subdir)
 
     def image_asset(key: str):
@@ -144,7 +145,7 @@ def create(config: dict, workdir: pathlib.Path) -> None:
 
     resolved_assets = resolve_theme_assets(config, workdir / "theme")
     subchannels = [popfe.generate_subchannels(libcrypt[disc_id]["magic_word"]) if disc_id in libcrypt else None for disc_id in real_disc_ids]
-    print("POPFE_PHASE: Compressione e scrittura EBOOT.PBP", flush=True)
+    print("POPFE_PHASE: " + _("Compressing and writing EBOOT.PBP"), flush=True)
     popfe.create_psp(
         config["output"], disc_ids, real_disc_ids, config.get("title") or popfe.get_title_from_game(disc_ids[0]),
         image_asset("cover"), image_asset("pic0"), image_asset("pic1"), cue_files, real_cue_files, img_files, [], aea_files,
@@ -194,7 +195,7 @@ def preview_xmb(config: dict, directory: pathlib.Path) -> dict:
                 screen.alpha_composite(image.convert("RGBA").resize(size, Image.Resampling.LANCZOS), position)
     # XMB chrome is illustrative: the real firmware may use a different theme.
     draw = ImageDraw.Draw(screen)
-    draw.text((45, 72), "Game", fill="white", stroke_width=1, stroke_fill="#333333")
+    draw.text((45, 72), _("Game"), fill="white", stroke_width=1, stroke_fill="#333333")
     output = directory / "XMB.png"
     screen.save(output)
     return {"image": str(output), "assets": assets}

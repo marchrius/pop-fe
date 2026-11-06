@@ -4,7 +4,7 @@ Costruzione dal repository con `atracdenc/src/atracdenc` già compilato:
 
 ```sh
 python3 packaging/build_deb.py
-sudo apt install ./dist/pop-fe-psp_0.1.2_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.3_amd64.deb
 ```
 
 Il pacchetto è nativo per la distribuzione e l'architettura della macchina di
@@ -24,6 +24,12 @@ Dopo il caricamento dei dati di un disco, seleziona il tema e premi
 con ICON0, PIC0 e PIC1 reali. Il tema viene preparato in background e le
 immagini vengono risolte con la stessa funzione usata per creare il PBP.
 Si tratta di una simulazione grafica, senza riproduzione audio.
+
+L'interfaccia segue la lingua di sistema: italiano e inglese sono supportati,
+con inglese come fallback. Per una singola esecuzione dal terminale:
+`LANGUAGE=it pop-fe-psp` oppure `LANGUAGE=en pop-fe-psp`.
+Chiudi prima eventuali istanze già aperte. I cataloghi UTF-8 sono in `locales/`.
+I messaggi diagnostici emessi dagli strumenti esterni conservano la loro lingua.
 Cache e file di lavoro: `$XDG_CACHE_HOME/org.popfe.PSPManager`, normalmente
 `~/.cache/org.popfe.PSPManager`. Gli script e le risorse installate restano
 in `/usr/share/pop-fe-psp`.

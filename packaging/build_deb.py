@@ -35,6 +35,7 @@ def main():
         for path in ROOT.glob('*.py'):
             install(path, app / path.name)
         (app / 'VERSION').write_text(args.version + '\n', encoding='utf-8')
+        shutil.copytree(ROOT / 'locales', app / 'locales')
         for directory in ('ppf', 'pspconfigs', 'romhacks'):
             shutil.copytree(ROOT / directory, app / directory)
         install(ROOT / 'binmerge/binmerge', app / 'binmerge/binmerge', 0o755)
