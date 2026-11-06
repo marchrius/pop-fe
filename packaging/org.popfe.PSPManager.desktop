@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=POP-FE PSP Manager
+Comment=Convert and extract PlayStation disc images for PSP
+Comment[it]=Converti ed estrai immagini disco PlayStation per PSP
+Exec=pop-fe-psp
+Icon=org.popfe.PSPManager
+Terminal=false
+Categories=Utility;GTK;
+Keywords=PSP;PlayStation;PBP;CUE;BIN;
+StartupNotify=true
+StartupWMClass=org.popfe.PSPManager

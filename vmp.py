@@ -11,7 +11,10 @@ import hashlib
 import os
 import struct
 try:
-    from Crypto.Cipher import AES
+    try:
+        from Crypto.Cipher import AES
+    except ImportError:
+        from Cryptodome.Cipher import AES
 except:
     print('Crypto is not installed.\nYou should install Crypto by running:\npip3 install Crypto')
 

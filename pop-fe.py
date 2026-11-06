@@ -15,6 +15,15 @@ try:
     from PIL import Image, ImageDraw, ImageFont
 except:
     print('You need to install python module pillow')
+
+# Pillow 10+ removed ImageDraw.textsize(), still used by the bundled
+# procedural themes. Keep the legacy API available for those themes.
+if not hasattr(ImageDraw.ImageDraw, 'textsize'):
+    def _legacy_textsize(self, text, font=None, *args, **kwargs):
+        bbox = self.textbbox((0, 0), text, font=font, *args, **kwargs)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1]
+
+    ImageDraw.ImageDraw.textsize = _legacy_textsize
 import argparse
 import glob
 import hashlib
@@ -49,8 +58,11 @@ except:
     print('rarfile is not installed.\nYou should install requests by running:\npip3 install rarfile')
 try:
     import PyPDF2
-except:
-    print('PyPDF2 is not installed.\nYou should install requests by running:\npip3 install PyPDF2')
+except ImportError:
+    try:
+        import pypdf as PyPDF2
+    except ImportError:
+        print('PDF support requires PyPDF2 or pypdf')
 try:
     import requests
 except:

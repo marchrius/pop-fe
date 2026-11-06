@@ -12,7 +12,10 @@ import struct
 
 from cue import path_basename
 try:
-    from Crypto.Cipher import AES
+    try:
+        from Crypto.Cipher import AES
+    except ImportError:
+        from Cryptodome.Cipher import AES
 except:
     print('Crypto is not installed.\nYou should install Crypto by running:\npip3 install Crypto')
 

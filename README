@@ -25,6 +25,35 @@ Or create a PS3 PKG:
 
 or ...
 
+PSP GUI
+-------
+
+The simplified PSP frontend can be started with the project virtualenv:
+
+  $ source .venv/bin/activate
+  $ python psp_gui.py
+
+On Linux with GTK 4 installed, the native frontend can be started with:
+
+  $ /usr/bin/python3 psp_gui_gtk.py
+
+To build an installable Ubuntu package, run:
+
+  $ python3 packaging/build_deb.py
+
+See packaging/README.md for dependencies and installation instructions.
+
+The native frontend also requires libadwaita Python introspection bindings
+(Debian/Ubuntu: gir1.2-adw-1). Its headerbar menu provides file opening,
+Converti/Estrai navigation, log clearing, help and application information.
+Ctrl+O opens files, Alt+1/Alt+2 switches pages, F1 opens help and Ctrl+Q exits.
+Light and dark appearance follows the desktop preference via libadwaita.
+
+It has two tabs: Conversione accepts one or more CUE/BIN/IMG/ISO images and
+writes the result under PSP/GAME/<game-id>/EBOOT.PBP (raw ISO files are wrapped
+automatically as MODE1/2048); Estrazione accepts an EBOOT.PBP and exports
+PSISO*.img, PSISO*.cue and any available audio tracks as POPS ATRAC/AEA files.
+
 
 Enjoy.
 

@@ -4,8 +4,9 @@
 try:
     from Crypto.Cipher import DES
     from Crypto.Cipher import AES
-except:
-    print('Crypto is not installed.\nYou should install Crypto by running:\npip3 install pycryptodome')
+except ImportError:
+    # Debian/Ubuntu expose their packaged PyCryptodome as Cryptodome.
+    from Cryptodome.Cipher import DES, AES
 
 try:
     from PIL import Image, ImageDraw, ImageFont
