@@ -21,6 +21,7 @@ from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango
 
 
 ROOT = Path(__file__).resolve().parent
+APP_VERSION = (ROOT / "VERSION").read_text(encoding="utf-8").strip()
 APP_ID = "org.popfe.PSPManager"
 WORK_ROOT = Path(GLib.get_user_cache_dir()) / APP_ID
 PYTHON = ROOT / ".venv" / "bin" / "python"
@@ -160,6 +161,7 @@ class PSPGtk(Adw.Application):
         dialog = Adw.AboutDialog(
             application_name="POP-FE PSP Manager",
             application_icon=APP_ID,
+            version=APP_VERSION,
             comments="Conversione ed estrazione di immagini PlayStation per PSP con POP-FE.",
             license_type=Gtk.License.LGPL_2_1,
         )

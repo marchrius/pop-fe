@@ -18,7 +18,7 @@ def install(source, target, mode=0o644):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--version', default='0.1.1')
+    parser.add_argument('--version', default=(ROOT / 'VERSION').read_text(encoding='utf-8').strip())
     args = parser.parse_args()
     if not args.version or any(c not in '0123456789.+~-' for c in args.version):
         parser.error('version must be a numeric Debian version')
@@ -34,6 +34,7 @@ def main():
         app = stage / 'usr/share/pop-fe-psp'
         for path in ROOT.glob('*.py'):
             install(path, app / path.name)
+        (app / 'VERSION').write_text(args.version + '\n', encoding='utf-8')
         for directory in ('ppf', 'pspconfigs', 'romhacks'):
             shutil.copytree(ROOT / directory, app / directory)
         install(ROOT / 'binmerge/binmerge', app / 'binmerge/binmerge', 0o755)
