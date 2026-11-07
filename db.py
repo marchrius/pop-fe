@@ -10541,6 +10541,7 @@ disc_by_md5 = {'000c285ff98c05712009ef3ea6505f43': {'exe': 'SLPM_803.21', 'id': 
  'f15b89e9f21405de114f236d2b5f86e0': {'exe': 'SCES_000.09', 'id': 'SCES00009', 'title': '3D Lemmings (Europe)', 'vct': b'1995090714150000$'},
  'f162a25833bd0fc92e1b0c6da88cdb7a': {'exe': 'SLPM_862.72', 'id': 'SLPM86272', 'title': 'Rakugaki Showtime (Japan)', 'vct': b'1999061514200000$'},
  'f163c066c15537f635ad25a258d87e51': {'exe': 'SLES_031.07', 'id': 'SLES03107', 'title': 'Chaos Break (Europe) (En,Fr,De,It)', 'vct': b'0000082503000000\x00'},
+ 'f166c09b70d2739ee82656cb64c60cf8': {'exe': 'SLES_017.26', 'id': 'SLES01726', 'title': 'Bugs Bunny - Lost in Time (Europe) (En,Fr,De,Es,It,Nl)', 'vct': b'1999052512305500$'},
  'f16ee99a7ea84075c12081dac3970d8e': {'exe': 'SLES_015.99', 'id': 'SLES01599', 'title': "Egypt 1156 A.C. - L'Enigma della Tomba Reale (Italy)", 'vct': b'1998111810101000\x00'},
  'f178ffe24ce7bb625c626623767ac9db': {'exe': 'SCES_215.66', 'id': 'SCES21566', 'title': 'X-Files, The (France) (Disc 3)', 'vct': b'1999082018404495$'},
  'f17fec696dda4073a621110e7b3a47ef': {'exe': 'SCES_036.98', 'id': 'SCES03698', 'title': 'Syphon Filter 3 (France)', 'vct': b'2001082815000000$'},

@@ -45,13 +45,29 @@ def popfe_module():
         return importlib.import_module("pop-fe")
 
 
+def _input_source(path: str, index: int, workdir: pathlib.Path) -> str:
+    """Wrap a raw 2048-byte ISO in a CUE understood by the original backend."""
+    source = pathlib.Path(path)
+    if source.suffix.lower() != ".iso":
+        return path
+    cue = workdir / f"ISO{index}.cue"
+    cue.write_text(
+        f'FILE "{source.resolve()}" BINARY\n'
+        "  TRACK 01 MODE1/2048\n"
+        "    INDEX 01 00:00:00\n",
+        encoding="utf-8",
+    )
+    return str(cue)
+
+
 def analyze(path: str, workdir: pathlib.Path) -> dict:
     popfe = popfe_module()
     shutil.rmtree(workdir, ignore_errors=True)
     workdir.mkdir(parents=True, exist_ok=True)
     temp_files: list[str] = []
     subdir = str(workdir) + "/"
-    cue, real_cue, img = popfe.process_disk_file(path, 0, temp_files, subdir=subdir)
+    source = _input_source(path, 0, workdir)
+    cue, real_cue, img = popfe.process_disk_file(source, 0, temp_files, subdir=subdir)
     if not cue:
         raise RuntimeError(_("Unrecognized format: {path}").format(path=path))
     disc_id, md5 = popfe.get_disc_id(cue, real_cue, subdir + "metadata.iso", is_psp=True)
@@ -107,16 +123,7 @@ def create(config: dict, workdir: pathlib.Path) -> None:
 
     for index, original in enumerate(config["files"]):
         print("POPFE_PHASE: " + _("Analyzing disc {current}/{total}").format(current=index + 1, total=len(config['files'])), flush=True)
-        source = original
-        if pathlib.Path(original).suffix.lower() == ".iso":
-            cue = workdir / f"ISO{index}.cue"
-            cue.write_text(
-                f'FILE "{pathlib.Path(original).resolve()}" BINARY\n'
-                "  TRACK 01 MODE1/2048\n"
-                "    INDEX 01 00:00:00\n",
-                encoding="utf-8",
-            )
-            source = str(cue)
+        source = _input_source(original, index, workdir)
         cue, real_cue, img = popfe.process_disk_file(source, index, temp_files, subdir=subdir)
         if not cue:
             raise RuntimeError(_("Unrecognized format: {path}").format(path=original))

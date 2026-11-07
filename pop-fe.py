@@ -3866,28 +3866,55 @@ def get_disc_id(cue, real_cue_file, tmp, is_psp=False):
         if 'id' in disc_by_md5[md5]:
             rid = disc_by_md5[md5]['id']
 
+    serial_pattern = rb'(?<![A-Z0-9])[A-Z]{4}[-_]?[0-9]{3}[.-]?[0-9]{2}(?![0-9])'
+
+    def known_serial(data):
+        for match in re.finditer(serial_pattern, data, re.IGNORECASE):
+            candidate = re.sub(rb'[^A-Z0-9]', b'', match.group(0)).decode('ascii').upper()
+            if candidate in games:
+                return candidate
+        return None
+
     if not rid:
         print('DISC NOT IN DATABASE', md5)
         print('Trying SYSTEM.CNF lookup')
         try:
-            bc.writetrack(1, tmp)
+            track_number, data_track = next((number, track) for number, track in bc.tracks.items() if track['MODE'] != 'AUDIO')
+            # MODE1/2048 is already a plain ISO; bchunk expects 2352-byte sectors.
+            iso_path = data_track['FILE']
+            if data_track['MODE'] != 'MODE1/2048':
+                bc.writetrack(track_number, tmp)
+                iso_path = tmp
             iso = pycdlib.PyCdlib()
-            iso.open(tmp)
+            iso.open(iso_path)
             extracted = io.BytesIO()
             iso.get_file_from_iso_fp(extracted, iso_path='/SYSTEM.CNF;1')
-            extracted.seek(0)
-            buf = str(extracted.read(1024))
             iso.close()
-            buf = buf.split('cdrom:')[1]
-            while buf[0] == '\\':
-                buf = buf[1:]
-            buf = buf.split('\\')[0].split(';')[0].replace('_', '').replace('.', '')[:9].upper()
-            if buf in games:
-                rid = buf
+            rid = known_serial(extracted.getvalue())
+            if rid:
                 print('Found this name in SYSTEM.CNF:', rid)
                 print('PLEASE REPORT THIS MD5 AND GAME SO I CAN ADD IT TO THE DATABASE')
-        except:
-            print('Failed to read disc id from SYSTEM.CNF')
+        except Exception as exc:
+            print('Failed to read disc id from SYSTEM.CNF:', exc)
+
+    if not rid:
+        # Some image layouts cannot be mounted by pycdlib. Scan the initial
+        # data-track sectors where SYSTEM.CNF is normally stored.
+        try:
+            for track in bc.tracks.values():
+                if track['MODE'] == 'AUDIO':
+                    continue
+                index = track['INDEX'].get(1) or next(iter(track['INDEX'].values()))
+                sector_size = 2048 if track['MODE'] == 'MODE1/2048' else 2352
+                with open(track['FILE'], 'rb') as image:
+                    image.seek(index['STARTSECT'] * sector_size)
+                    data = image.read(sector_size * 512)
+                rid = known_serial(data)
+                if rid:
+                    print('Found disc ID in data track:', rid)
+                    break
+        except Exception as exc:
+            print('Failed to scan data track for disc ID:', exc)
 
     if not rid:
         print("DISC NOT IN DATABASE", md5)
