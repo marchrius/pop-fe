@@ -26,6 +26,7 @@
   "PSP Root Folder": "Root PSP",
   "Title": "Titolo",
   "Game ID": "Game ID",
+  "Enter the disc ID manually if automatic detection shows UNKN00000.": "Inserisci manualmente l'ID del disco se il rilevamento mostra UNKN00000.",
   "Disable Asset Downloads": "Disabilita download assets",
   "Disable LibCrypt Patching": "Disabilita libcrypt",
   "Use CDDA": "Usa CDDA",

@@ -315,6 +315,7 @@ class PSPGtk(Adw.Application):
         form.attach(self._browse_button(self._choose_psp), 2, 0, 1, 1)
         self.title_entry = self._entry_row(form, 1, _("Title"))
         self.id_entry = self._entry_row(form, 2, _("Game ID"))
+        self.id_entry.set_tooltip_text(_("Enter the disc ID manually if automatic detection shows UNKN00000."))
         page.append(form)
 
         options = Gtk.FlowBox(selection_mode=Gtk.SelectionMode.NONE,

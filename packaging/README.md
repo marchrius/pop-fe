@@ -4,7 +4,7 @@ Costruzione dal repository con `atracdenc/src/atracdenc` già compilato:
 
 ```sh
 python3 packaging/build_deb.py
-sudo apt install ./dist/pop-fe-psp_0.1.4_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.5_amd64.deb
 ```
 
 Il pacchetto è nativo per la distribuzione e l'architettura della macchina di

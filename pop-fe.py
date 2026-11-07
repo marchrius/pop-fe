@@ -3060,9 +3060,14 @@ def create_psp(dest, disc_ids, real_disc_ids, game_title, icon0, pic0, pic1, cue
         except:
             True
         disc_id = real_disc_ids[i]
-        if disc_id in games and 'pspconfig' in games[disc_id]:
-            print('Found an external config for', disc_id)
-            with open(games[disc_id]['pspconfig'], 'rb') as f:
+        config_disc_id = disc_id
+        # If automatic identification fails for a valid dump, honor the
+        # user-supplied Game ID when selecting a known POPS compatibility config.
+        if config_disc_id not in games and i < len(disc_ids) and disc_ids[i] in games:
+            config_disc_id = disc_ids[i]
+        if config_disc_id in games and 'pspconfig' in games[config_disc_id]:
+            print('Found an external config for', config_disc_id)
+            with open(games[config_disc_id]['pspconfig'], 'rb') as f:
                 configs[i] = f.read()
         if force_ntsc == 1:
             print('Force NTSC in config')
