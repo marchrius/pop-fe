@@ -11,7 +11,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 2. Parser di CUE semplice, lettura ISO9660, MD5/SYSTEM.CNF e database giochi:
    implementati per l'analisi iniziale.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, CUE e tracce AEA:
-   implementata, da verificare con PBP reali.
+   implementata. Le tracce ATRAC separate restano file AEA e non producono
+   indici CUE inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN.
+   La verifica con PBP reali è ancora necessaria.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
    di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE, CCD e CHD con tracce dati e audio.
    Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel

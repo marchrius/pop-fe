@@ -146,7 +146,7 @@ impl Pbp {
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000" {
-                let (image, cue) = self.extract_disc(
+                let (image, cue, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
                     output,
@@ -156,6 +156,7 @@ impl Pbp {
                 )?;
                 written.push(image);
                 written.push(cue);
+                written.extend(audio_tracks);
                 disc_index += 1;
                 let mut length = [0u8; 4];
                 source.seek(SeekFrom::Start(offset + 12))?;
@@ -245,7 +246,7 @@ impl Pbp {
         disc: usize,
         cancelled: &AtomicBool,
         reporter: &mut ProgressReporter<'_>,
-    ) -> Result<(PathBuf, PathBuf), PbpError> {
+    ) -> Result<(PathBuf, PathBuf, Vec<PathBuf>), PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
         source.read_exact(&mut image_size)?;
@@ -314,9 +315,11 @@ impl Pbp {
             reporter.add(sector.len() as u64);
             index_pos += 32;
         }
-        let actual_size = write_cue(&mut *source, base, &cue, &image, total)?;
+        let has_atrac_audio = psiso_has_atrac_tracks(source, base)?;
+        let actual_size = write_cue(&mut *source, base, &cue, &image, total, !has_atrac_audio)?;
         target.set_len(actual_size)?;
         let mut track = 2usize;
+        let mut audio_paths = Vec::new();
         loop {
             if cancelled.load(Ordering::Relaxed) {
                 return Err(PbpError::Cancelled);
@@ -341,7 +344,7 @@ impl Pbp {
                 return Err(PbpError::Invalid("audio track is out of bounds".into()));
             }
             let audio_path = output.join(format!("TRACK_{disc}_{track:02}.aea"));
-            let mut audio = File::create(audio_path)?;
+            let mut audio = File::create(&audio_path)?;
             let mut header = [0u8; 0x60];
             header[0..4].copy_from_slice(b"EA3\x01");
             header[5] = 0x60;
@@ -363,9 +366,10 @@ impl Pbp {
                 reporter.add(count as u64);
                 remaining -= count as u64;
             }
+            audio_paths.push(audio_path);
             track += 1;
         }
-        Ok((image, cue))
+        Ok((image, cue, audio_paths))
     }
 }
 
@@ -413,6 +417,7 @@ fn write_cue(
     cue: &Path,
     image: &Path,
     image_len: u64,
+    include_audio_tracks: bool,
 ) -> Result<u64, PbpError> {
     let mut toc = [0u8; 1020];
     source.seek(SeekFrom::Start(base + PSISO_HEADER_SIZE + 0x800))?;
@@ -427,7 +432,7 @@ fn write_cue(
         .map(|entry| bcd(entry[7]) as usize)
         .unwrap_or(1)
         .clamp(1, 99);
-    let actual_size = entries
+    let toc_size = entries
         .iter()
         .find(|entry| entry[2] == 0xa2)
         .map(|entry| {
@@ -441,7 +446,7 @@ fn write_cue(
         "FILE \"{}\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n",
         image.file_name().unwrap_or_default().to_string_lossy()
     );
-    for track in 2..=tracks {
+    for track in 2..=if include_audio_tracks { tracks } else { 1 } {
         let point = track as u8;
         if let Some(entry) = entries.iter().find(|entry| entry[2] == point) {
             let absolute =
@@ -466,7 +471,29 @@ fn write_cue(
         return Err(PbpError::Invalid("empty disc image".into()));
     }
     fs::write(cue, cue_text)?;
-    Ok(actual_size)
+    // ATRAC tracks are stored separately in PSISO, so the data BIN must not
+    // be extended with sparse zeroes to match the original CD's TOC length.
+    Ok(if include_audio_tracks {
+        toc_size
+    } else {
+        image_len
+    })
+}
+
+fn psiso_has_atrac_tracks(source: &mut File, base: u64) -> Result<bool, PbpError> {
+    for track in 0..98u64 {
+        let table = base + 0xc00 + track * 16;
+        let mut entry = [0u8; 8];
+        source.seek(SeekFrom::Start(table))?;
+        source.read_exact(&mut entry)?;
+        let offset = u32::from_le_bytes(entry[..4].try_into().unwrap());
+        let length = u32::from_le_bytes(entry[4..8].try_into().unwrap());
+        if offset == 0 || length == 0 {
+            return Ok(false);
+        }
+        return Ok(true);
+    }
+    Ok(false)
 }
 
 fn bcd(value: u8) -> u8 {
