@@ -41,7 +41,9 @@ pub fn create_psp_document(
     if Path::new(source).is_dir() {
         let pages = directory_pages(Path::new(source), &temporary.0, cancelled, &progress)?;
         if pages.is_empty() {
-            return Ok(None);
+            return Err(ManualError::Invalid(
+                "no readable pages were found in the manual folder".into(),
+            ));
         }
         progress(0.95);
         return create_document(game_id, &pages).map(Some);
@@ -51,7 +53,9 @@ pub fn create_psp_document(
         return Ok(Some(contents));
     }
     if contents.starts_with(b"\0PGD") {
-        return Ok(None);
+        return Err(ManualError::Invalid(
+            "encrypted PS3 manuals are not supported yet".into(),
+        ));
     }
     let mut pages = if contents.starts_with(b"Rar!") {
         let extracted = extract_rar(&contents, &temporary.0, cancelled, &progress)?;
@@ -64,7 +68,9 @@ pub fn create_psp_document(
         archive_pages(&contents, &temporary.0, cancelled, &progress)?
     };
     if pages.is_empty() {
-        return Ok(None);
+        return Err(ManualError::Invalid(
+            "no readable pages were found in the manual".into(),
+        ));
     }
     if pages.len() > MAX_MANUAL_PAGES {
         pages.truncate(MAX_MANUAL_PAGES);

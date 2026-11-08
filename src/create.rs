@@ -76,6 +76,15 @@ pub fn create_from_image_with_progress(
     cancelled: &AtomicBool,
     progress: impl Fn(f64) + Send + Sync,
 ) -> Result<(), CreateError> {
+    create_from_image_with_progress_and_warnings(config, cancelled, progress, |_| {})
+}
+
+pub fn create_from_image_with_progress_and_warnings(
+    config: &PbpCreateConfig,
+    cancelled: &AtomicBool,
+    progress: impl Fn(f64) + Send + Sync,
+    warning: impl Fn(String) + Send + Sync,
+) -> Result<(), CreateError> {
     if config.game_id.len() != 9 || !config.game_id.is_ascii() {
         return Err(CreateError::Invalid(
             "game ID must contain nine ASCII characters".into(),
@@ -94,13 +103,18 @@ pub fn create_from_image_with_progress(
         }) {
             Ok(document) => document,
             Err(crate::manual::ManualError::Cancelled) => return Err(CreateError::Cancelled),
-            Err(_) => None,
+            Err(error) => {
+                warning(error.to_string());
+                None
+            }
         }
     } else {
         None
     };
     #[cfg(not(feature = "gui"))]
     let manual_document: Option<Vec<u8>> = None;
+    #[cfg(not(feature = "gui"))]
+    let _ = warning;
     progress(0.02);
     let mut psiso_discs = Vec::with_capacity(config.images.len());
     for (index, image_path) in config.images.iter().enumerate() {

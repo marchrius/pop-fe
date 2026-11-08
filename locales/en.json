@@ -123,5 +123,7 @@
   "Manual / PDF / ZIP": "Manual / PDF / ZIP",
   "Override {name}": "Override {name}",
   "Select Asset File": "Select Asset File",
-  "Select Manual File": "Select Manual File"
+  "Select Manual File": "Select Manual File",
+  "Conversion warning: {error}": "Conversion warning: {error}",
+  "Manual could not be added: {error}": "Manual could not be added: {error}"
 }

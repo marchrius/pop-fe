@@ -15,6 +15,7 @@ use crate::paths::FolderHistory;
 
 enum TaskMessage<T> {
     Progress(f64),
+    Warning(String),
     Finished(T),
 }
 
@@ -519,6 +520,8 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let files_for_create = files.clone();
     let fields_for_create = fields.clone();
     let button_for_create = convert.clone();
+    let warning_state: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let warning_state_for_create = warning_state.clone();
     let progress = gtk::ProgressBar::new();
     progress.set_show_text(true);
     progress.set_text(Some(&tr("Ready")));
@@ -538,6 +541,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let cancel_for_create = cancel.clone();
     let state_for_create = cancel_state.clone();
     convert.connect_clicked(move |_| {
+        *warning_state_for_create.borrow_mut() = None;
         let selected = files_for_create.borrow().clone();
         if selected.is_empty() || selected.len() > 32 {
             fields_for_create
@@ -607,12 +611,16 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         *state_for_create.borrow_mut() = Some(cancellation.clone());
         let (sender, receiver) = mpsc::sync_channel(1);
         let progress_sender = sender.clone();
+        let warning_sender = sender.clone();
         thread::spawn(move || {
-            let result = crate::create::create_from_image_with_progress(
+            let result = crate::create::create_from_image_with_progress_and_warnings(
                 &config,
                 &cancellation,
                 |fraction| {
                     let _ = progress_sender.try_send(TaskMessage::Progress(fraction));
+                },
+                |warning| {
+                    let _ = warning_sender.send(TaskMessage::Warning(warning));
                 },
             )
             .map_err(|error| error.to_string())
@@ -624,6 +632,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let progress = progress_for_create.clone();
         let cancel_button = cancel_for_create.clone();
         let cancel_state = state_for_create.clone();
+        let warning_state = warning_state_for_create.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
@@ -631,12 +640,22 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
                     gtk::glib::ControlFlow::Continue
                 }
+                Ok(TaskMessage::Warning(warning)) => {
+                    fields
+                        .status
+                        .set_text(&tr("Conversion warning: {error}").replace("{error}", &warning));
+                    *warning_state.borrow_mut() = Some(warning);
+                    gtk::glib::ControlFlow::Continue
+                }
                 Ok(TaskMessage::Finished(Ok(path))) => {
-                    fields.status.set_text(&format!(
-                        "{}: {}",
-                        tr("Conversion complete"),
-                        path.display()
-                    ));
+                    let mut message = format!("{}: {}", tr("Conversion complete"), path.display());
+                    if let Some(warning) = warning_state.borrow().as_deref() {
+                        message.push('\n');
+                        message.push_str(
+                            &tr("Manual could not be added: {error}").replace("{error}", warning),
+                        );
+                    }
+                    fields.status.set_text(&message);
                     progress.set_fraction(1.0);
                     progress.set_text(Some(&tr("Completed")));
                     button.set_sensitive(true);
@@ -1203,6 +1222,10 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                 Ok(TaskMessage::Progress(fraction)) => {
                     progress.set_fraction(fraction);
                     progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
+                    gtk::glib::ControlFlow::Continue
+                }
+                Ok(TaskMessage::Warning(warning)) => {
+                    status.set_text(&warning);
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Finished(Ok(files))) => {
