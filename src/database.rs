@@ -32,6 +32,7 @@ pub struct GameRecord {
 #[derive(Clone, Debug, Deserialize)]
 pub struct LibCryptRecord {
     pub magic_word: u16,
+    pub ppf: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -148,6 +149,11 @@ impl Database {
             }
         }
         self.ppf_data.get(path?).and_then(|hex| decode_hex(hex))
+    }
+
+    pub fn libcrypt_patch(&self, id: &str) -> Option<Vec<u8>> {
+        let path = self.libcrypt.get(id)?.ppf.as_deref()?;
+        self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
     }
 
     pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<&'static [u8]> {

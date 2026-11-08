@@ -52,6 +52,7 @@ pub struct PbpCreateConfig {
     pub assets: PbpAssets,
     pub include_title_image: bool,
     pub use_cdda: bool,
+    pub disable_libcrypt_patching: bool,
     pub force_ntsc: bool,
     pub allow_disc_swapping: bool,
     pub watermark: bool,
@@ -157,14 +158,28 @@ pub fn create_from_image_with_progress(
             .then_some(source_md5.as_deref())
             .flatten()
             .and_then(|md5| crate::database::Database::embedded().psp_xdelta(&disc_id, md5));
-        let patched = if let Some(patch) = patch {
+        let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
+            None
+        } else {
+            crate::database::Database::embedded().libcrypt_patch(&disc_id)
+        };
+        let patched = if patch.is_some() || libcrypt_patch.is_some() {
             let temp = TempFile::new("patched-disc")?;
             let mut source = disc.try_clone()?;
             source.seek(SeekFrom::Start(0))?;
             io::copy(&mut source, &mut temp.file.try_clone()?)?;
-            crate::ppf::apply(&temp.file, &patch).map_err(|error| {
-                CreateError::Invalid(format!("automatic PPF compatibility patch failed: {error}"))
-            })?;
+            if let Some(patch) = patch {
+                crate::ppf::apply(&temp.file, &patch).map_err(|error| {
+                    CreateError::Invalid(format!(
+                        "automatic PPF compatibility patch failed: {error}"
+                    ))
+                })?;
+            }
+            if let Some(patch) = libcrypt_patch {
+                crate::ppf::apply(&temp.file, &patch).map_err(|error| {
+                    CreateError::Invalid(format!("automatic LibCrypt patch failed: {error}"))
+                })?;
+            }
             Some(temp)
         } else {
             None

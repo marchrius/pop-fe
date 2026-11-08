@@ -24,6 +24,7 @@ struct DiscFields {
     title: gtk::Entry,
     psp_root: gtk::Entry,
     cdda: gtk::CheckButton,
+    disable_libcrypt_patching: gtk::CheckButton,
     force_ntsc: gtk::CheckButton,
     allow_disc_swapping: gtk::CheckButton,
     disable_title_image: gtk::CheckButton,
@@ -150,6 +151,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         title,
         psp_root,
         cdda: gtk::CheckButton::with_label(&tr("Use CDDA")),
+        disable_libcrypt_patching: gtk::CheckButton::with_label(&tr("Disable LibCrypt Patching")),
         force_ntsc: gtk::CheckButton::with_label(&tr("Force NTSC")),
         allow_disc_swapping: gtk::CheckButton::with_label(&tr("Allow Disc Swapping")),
         disable_title_image: gtk::CheckButton::with_label(&tr("Disable PSTITLEIMG")),
@@ -263,6 +265,12 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     "Store CD audio as raw CDDA tracks instead of ATRAC3",
                 )));
                 option_body.append(&fields.cdda);
+            }
+            "Disable LibCrypt Patching" => {
+                fields.disable_libcrypt_patching.set_tooltip_text(Some(&tr(
+                    "Skip the automatic LibCrypt sector patch when one is available",
+                )));
+                option_body.append(&fields.disable_libcrypt_patching);
             }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
             "Force NTSC" => option_body.append(&fields.force_ntsc),
@@ -432,6 +440,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             assets,
             include_title_image: !fields_for_create.disable_title_image.is_active(),
             use_cdda: fields_for_create.cdda.is_active(),
+            disable_libcrypt_patching: fields_for_create.disable_libcrypt_patching.is_active(),
             force_ntsc: fields_for_create.force_ntsc.is_active(),
             allow_disc_swapping: fields_for_create.allow_disc_swapping.is_active(),
             watermark: fields_for_create.watermark.is_active(),

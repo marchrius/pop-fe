@@ -27,6 +27,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    con le dimensioni PSP; non replicano esattamente i filtri OpenCV originali.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
+   Sono incluse anche le patch PPF LibCrypt presenti in `libcrypt/`, applicate
+   automaticamente per i giochi nel cui record è indicato un file PPF; la
+   casella «Disable LibCrypt Patching» ne consente la disattivazione.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
    fornito dai pacchetti Debian e Flatpak). Restano gli altri romhack Xdelta e
    ulteriori opzioni audio. GUI e backend accettano CHD
@@ -41,10 +44,13 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CDDA senza ricodifica e tutti
-gli altri romhack Xdelta o il patcher LibCrypt `lcp`; non va usata come
-sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
-validato. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
+La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
+esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
+gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
+LibCrypt `lcp`. Perciò la copertura LibCrypt è limitata alle patch PPF archiviate
+nel repository. Non usare ancora il port come sostituto per generare EBOOT
+destinati alla PSP finché non sarà validato su immagini e hardware reali. I
+filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4 e libadwaita, oltre a Rust/Cargo.
