@@ -422,6 +422,8 @@ fn convert_page(
     manual_row.append(&fields.manual_entry);
     let manual_browse = gtk::Button::with_label(&tr("Browse…"));
     manual_row.append(&manual_browse);
+    let manual_folder_browse = gtk::Button::with_label(&tr("Select Folder…"));
+    manual_row.append(&manual_folder_browse);
     artwork_body.append(&manual_row);
     let parent_for_manual = parent.clone();
     let manual_entry = fields.manual_entry.clone();
@@ -443,6 +445,31 @@ fn convert_page(
                     && let Some(path) = file.path()
                 {
                     history.borrow_mut().remember_file(&path);
+                    entry.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
+    let parent_for_manual_folder = parent.clone();
+    let manual_entry = fields.manual_entry.clone();
+    let history_for_manual_folder = folder_history.clone();
+    manual_folder_browse.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select Manual Folder"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(
+            history_for_manual_folder.borrow().current(),
+        )));
+        let entry = manual_entry.clone();
+        let history = history_for_manual_folder.clone();
+        dialog.select_folder(
+            Some(&parent_for_manual_folder),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_directory(&path);
                     entry.set_text(&path.to_string_lossy());
                 }
             },

@@ -125,6 +125,8 @@
   "Override {name}": "Override {name}",
   "Select Asset File": "Select Asset File",
   "Select Manual File": "Select Manual File",
+  "Select Manual Folder": "Select Manual Folder",
+  "Select Folder…": "Select Folder…",
   "Conversion warning: {error}": "Conversion warning: {error}",
   "Manual could not be added: {error}": "Manual could not be added: {error}"
 }

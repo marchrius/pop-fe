@@ -125,6 +125,8 @@
   "Select Asset File": "Seleziona il file dell’asset",
   "Manual / PDF / ZIP": "Manuale / PDF / ZIP",
   "Select Manual File": "Seleziona il file del manuale",
+  "Select Manual Folder": "Seleziona la cartella del manuale",
+  "Select Folder…": "Seleziona cartella…",
   "Game ID": "ID gioco",
   "Conversion warning: {error}": "Avviso durante la conversione: {error}",
   "Manual could not be added: {error}": "Impossibile aggiungere il manuale: {error}"
