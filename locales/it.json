@@ -50,7 +50,7 @@
   "Cancel": "Annulla",
   "Create EBOOT.PBP": "Crea EBOOT.PBP",
   "Extract EBOOT.PBP Contents": "Estrai contenuti da EBOOT.PBP",
-  "Export disc images, CUE files and audio tracks stored in the PBP.": "Esporta immagini disco, CUE e tracce audio presenti nel PBP.",
+  "Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP.": "Esporta immagini ISO e BIN/CUE raw, oltre alle tracce audio presenti nel PBP.",
   "PBP File": "File PBP",
   "Output Folder": "Cartella output",
   "Extract Contents": "Estrai contenuti",

@@ -852,7 +852,7 @@ fn set_picture(picture: &gtk::Picture, path: Option<&std::path::Path>) {
 fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
-        &tr("Export disc images, CUE files and audio tracks stored in the PBP."),
+        &tr("Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP."),
     );
     let (inputs, input_body) = section(&tr("Extraction"));
     let pbp_path = append_entry(&input_body, &tr("PBP File"), "");

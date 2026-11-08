@@ -8,6 +8,8 @@ use flate2::Decompress;
 use flate2::FlushDecompress;
 use thiserror::Error;
 
+use crate::disc::CueSheet;
+
 const PBP_HEADER_SIZE: usize = 0x28;
 const PSISO_HEADER_SIZE: u64 = 0x100000;
 const SECTOR_SIZE: usize = 0x9300;
@@ -146,7 +148,7 @@ impl Pbp {
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000" {
-                let (image, cue, audio_tracks) = self.extract_disc(
+                let (image, cue, iso, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
                     output,
@@ -156,6 +158,7 @@ impl Pbp {
                 )?;
                 written.push(image);
                 written.push(cue);
+                written.extend(iso);
                 written.extend(audio_tracks);
                 disc_index += 1;
                 let mut length = [0u8; 4];
@@ -214,6 +217,7 @@ impl Pbp {
                         break;
                     }
                     work = work.saturating_add(SECTOR_SIZE as u64);
+                    work = work.saturating_add(SECTOR_SIZE as u64);
                     index_pos += 32;
                     scanned_sectors += 1;
                 }
@@ -246,7 +250,7 @@ impl Pbp {
         disc: usize,
         cancelled: &AtomicBool,
         reporter: &mut ProgressReporter<'_>,
-    ) -> Result<(PathBuf, PathBuf, Vec<PathBuf>), PbpError> {
+    ) -> Result<(PathBuf, PathBuf, Option<PathBuf>, Vec<PathBuf>), PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
         source.read_exact(&mut image_size)?;
@@ -324,6 +328,8 @@ impl Pbp {
         let has_atrac_audio = psiso_has_atrac_tracks(source, base)?;
         let actual_size = write_cue(&mut *source, base, &cue, &image, total, !has_atrac_audio)?;
         target.set_len(actual_size)?;
+        let iso = output.join(format!("PSISO{disc}.iso"));
+        let iso = extract_iso(&image, &cue, &iso, cancelled, reporter)?.then_some(iso);
         let mut track = 2usize;
         let mut audio_paths = Vec::new();
         loop {
@@ -375,7 +381,7 @@ impl Pbp {
             audio_paths.push(audio_path);
             track += 1;
         }
-        Ok((image, cue, audio_paths))
+        Ok((image, cue, iso, audio_paths))
     }
 }
 
@@ -500,6 +506,67 @@ fn psiso_has_atrac_tracks(source: &mut File, base: u64) -> Result<bool, PbpError
         return Ok(true);
     }
     Ok(false)
+}
+
+fn extract_iso(
+    image: &Path,
+    cue: &Path,
+    iso: &Path,
+    cancelled: &AtomicBool,
+    reporter: &mut ProgressReporter<'_>,
+) -> Result<bool, PbpError> {
+    let sheet = CueSheet::parse(cue).map_err(|error| PbpError::Invalid(error.to_string()))?;
+    let track = sheet
+        .data_track()
+        .ok_or_else(|| PbpError::Invalid("disc has no data track for ISO export".into()))?;
+    if track.path != image {
+        return Err(PbpError::Invalid(
+            "CUE data track does not refer to the extracted image".into(),
+        ));
+    }
+    let sector_size = 2352u64;
+    let file_sectors = fs::metadata(image)?.len() / sector_size;
+    let end_sector = sheet
+        .tracks
+        .iter()
+        .skip_while(|next| next.number != track.number)
+        .skip(1)
+        .find(|next| next.path == track.path)
+        .map(|next| next.index00.unwrap_or(next.index01))
+        .unwrap_or(file_sectors);
+    if end_sector < track.index01 || end_sector > file_sectors {
+        return Err(PbpError::Invalid(
+            "data track bounds exceed the extracted disc image".into(),
+        ));
+    }
+
+    let mut source = File::open(image)?;
+    source.seek(SeekFrom::Start(track.index01 * sector_size))?;
+    let mut destination = File::create(iso)?;
+    let mut sector = vec![0u8; sector_size as usize];
+    for _ in track.index01..end_sector {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PbpError::Cancelled);
+        }
+        source.read_exact(&mut sector)?;
+        let sync =
+            sector[0] == 0 && sector[1..11].iter().all(|byte| *byte == 0xff) && sector[11] == 0;
+        let payload: &[u8] = match sector[15] {
+            1 if sync => &sector[16..16 + 2048],
+            2 if sync && sector[18] & 0x20 == 0 && sector[16..20] == sector[20..24] => {
+                &sector[24..24 + 2048]
+            }
+            _ => {
+                drop(destination);
+                let _ = fs::remove_file(iso);
+                return Ok(false);
+            }
+        };
+        destination.write_all(payload)?;
+        reporter.add(sector_size);
+    }
+    destination.sync_all()?;
+    Ok(true)
 }
 
 fn bcd(value: u8) -> u8 {
