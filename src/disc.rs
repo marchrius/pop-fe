@@ -76,12 +76,16 @@ pub struct CueSheet {
 
 impl CueSheet {
     pub fn open_image(path: &Path) -> Result<Self, DiscError> {
-        if path
+        match path
             .extension()
             .and_then(|ext| ext.to_str())
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("chd"))
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str()
         {
-            return Self::parse(&materialize_chd(path)?);
+            "chd" => return Self::parse(&materialize_chd(path)?),
+            "ccd" => return Self::parse_ccd(path),
+            _ => {}
         }
         if path
             .extension()
@@ -208,6 +212,111 @@ impl CueSheet {
         Ok(Self { tracks })
     }
 
+    fn parse_ccd(path: &Path) -> Result<Self, DiscError> {
+        let source = std::fs::read_to_string(path)?;
+        let image = ccd_image_path(path)?;
+        let mut section: Option<u8> = None;
+        let mut parsed: std::collections::BTreeMap<u8, Track> = std::collections::BTreeMap::new();
+        let mut modes = std::collections::BTreeSet::new();
+        let mut indexes01 = std::collections::BTreeSet::new();
+        for (line_number, raw) in source.lines().enumerate() {
+            let line = raw.trim();
+            if line.is_empty() || line.starts_with(';') || line.starts_with('#') {
+                continue;
+            }
+            if line.starts_with('[') && line.ends_with(']') {
+                let name = &line[1..line.len() - 1];
+                section = if let Some(number) = name.to_ascii_uppercase().strip_prefix("TRACK ") {
+                    let number = number.parse::<u8>().map_err(|_| {
+                        DiscError::Cue(format!(
+                            "invalid CCD track section at line {}",
+                            line_number + 1
+                        ))
+                    })?;
+                    parsed.insert(
+                        number,
+                        Track {
+                            number,
+                            path: image.clone(),
+                            mode: TrackMode::Audio,
+                            index01: 0,
+                            index00: None,
+                        },
+                    );
+                    Some(number)
+                } else {
+                    None
+                };
+                continue;
+            }
+            let Some((key, value)) = line.split_once('=') else {
+                continue;
+            };
+            let Some(number) = section else { continue };
+            let track = parsed.get_mut(&number).expect("track section was inserted");
+            let key = key.trim();
+            let value = value.trim();
+            if key.eq_ignore_ascii_case("MODE") {
+                let mode = parse_ccd_integer(value).ok_or_else(|| {
+                    DiscError::Cue(format!("invalid CCD MODE at line {}", line_number + 1))
+                })?;
+                track.mode = match mode {
+                    0 => TrackMode::Audio,
+                    1 => TrackMode::Mode1_2352,
+                    2 => TrackMode::Mode2_2352,
+                    other => {
+                        return Err(DiscError::Cue(format!(
+                            "unsupported CCD track mode {other}"
+                        )));
+                    }
+                };
+                modes.insert(number);
+                section = Some(number);
+            } else if let Some(index) = key.to_ascii_uppercase().strip_prefix("INDEX ") {
+                let sector = parse_ccd_integer(value).ok_or_else(|| {
+                    DiscError::Cue(format!("invalid CCD index at line {}", line_number + 1))
+                })?;
+                match index.trim().parse::<u8>().ok() {
+                    Some(0) => track.index00 = Some(sector),
+                    Some(1) => track.index01 = sector,
+                    _ => {}
+                }
+                if index.trim() == "1" {
+                    indexes01.insert(number);
+                }
+            }
+        }
+        let tracks: Vec<Track> = parsed.into_values().collect();
+        if tracks.is_empty() {
+            return Err(DiscError::Cue("CCD contains no tracks".into()));
+        }
+        if tracks
+            .iter()
+            .any(|track| !modes.contains(&track.number) || !indexes01.contains(&track.number))
+        {
+            return Err(DiscError::Cue(
+                "each CCD track must define MODE and INDEX 1".into(),
+            ));
+        }
+        let image_size = image.metadata()?.len();
+        if image_size == 0 || image_size % 2352 != 0 {
+            return Err(DiscError::Cue(
+                "CCD IMG size is not a whole number of 2352-byte sectors".into(),
+            ));
+        }
+        if tracks.iter().any(|track| {
+            track.index01 >= image_size / 2352
+                || track
+                    .index00
+                    .is_some_and(|index| index >= image_size / 2352)
+        }) {
+            return Err(DiscError::Cue(
+                "CCD track index lies beyond the IMG data".into(),
+            ));
+        }
+        Ok(Self { tracks })
+    }
+
     pub fn data_track(&self) -> Option<&Track> {
         self.tracks
             .iter()
@@ -284,6 +393,45 @@ impl CueSheet {
             "SYSTEM.CNF not found in ISO9660 root".into(),
         ))
     }
+}
+
+fn parse_ccd_integer(value: &str) -> Option<u64> {
+    if let Some(hex) = value
+        .strip_prefix("0x")
+        .or_else(|| value.strip_prefix("0X"))
+    {
+        u64::from_str_radix(hex, 16).ok()
+    } else {
+        value.parse().ok()
+    }
+}
+
+fn ccd_image_path(ccd: &Path) -> Result<PathBuf, DiscError> {
+    let candidate = ccd.with_extension("img");
+    if candidate.is_file() {
+        return Ok(candidate);
+    }
+    let stem = ccd.file_stem().unwrap_or_default().to_string_lossy();
+    let directory = ccd.parent().unwrap_or_else(|| Path::new("."));
+    for entry in std::fs::read_dir(directory)? {
+        let entry = entry?;
+        if entry
+            .path()
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("img"))
+            && entry
+                .path()
+                .file_stem()
+                .is_some_and(|name| name.to_string_lossy().eq_ignore_ascii_case(&stem))
+        {
+            return Ok(entry.path());
+        }
+    }
+    Err(DiscError::Cue(format!(
+        "CCD companion IMG file not found for {}",
+        ccd.display()
+    )))
 }
 
 fn materialize_chd(path: &Path) -> Result<PathBuf, DiscError> {
