@@ -11,6 +11,7 @@ use std::thread;
 use std::time::Duration;
 
 use gdk_pixbuf::{InterpType, Pixbuf};
+use md5::{Digest, Md5};
 use thiserror::Error;
 use zip::ZipArchive;
 
@@ -393,31 +394,41 @@ fn read_source(
     cancelled: &AtomicBool,
     progress: &dyn Fn(f64),
 ) -> Result<Vec<u8>, ManualError> {
-    let mut reader: Box<dyn Read> =
-        if source.starts_with("https://") || source.starts_with("http://") {
-            let client = reqwest::blocking::Client::builder()
-                .connect_timeout(Duration::from_secs(10))
-                .timeout(Duration::from_secs(90))
-                .user_agent(concat!("POP-FE-PSP/", env!("CARGO_PKG_VERSION")))
-                .build()
-                .map_err(|error| ManualError::Invalid(error.to_string()))?;
-            let response = client
-                .get(source)
-                .send()
-                .and_then(reqwest::blocking::Response::error_for_status)
-                .map_err(|error| ManualError::Invalid(error.to_string()))?;
-            if response
-                .content_length()
-                .is_some_and(|length| length > MAX_MANUAL_BYTES as u64)
-            {
-                return Err(ManualError::Invalid(
-                    "manual download exceeds size limit".into(),
-                ));
-            }
-            Box::new(response)
-        } else {
-            Box::new(fs::File::open(source)?)
-        };
+    let remote = source.starts_with("https://") || source.starts_with("http://");
+    let cache = remote.then(|| manual_cache_path(source));
+    if let Some(path) = cache.as_ref()
+        && let Ok(metadata) = fs::metadata(path)
+        && metadata.is_file()
+        && metadata.len() <= MAX_MANUAL_BYTES as u64
+    {
+        let contents = fs::read(path)?;
+        progress(0.9);
+        return Ok(contents);
+    }
+    let mut reader: Box<dyn Read> = if remote {
+        let client = reqwest::blocking::Client::builder()
+            .connect_timeout(Duration::from_secs(10))
+            .timeout(Duration::from_secs(90))
+            .user_agent(concat!("POP-FE-PSP/", env!("CARGO_PKG_VERSION")))
+            .build()
+            .map_err(|error| ManualError::Invalid(error.to_string()))?;
+        let response = client
+            .get(source)
+            .send()
+            .and_then(reqwest::blocking::Response::error_for_status)
+            .map_err(|error| ManualError::Invalid(error.to_string()))?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_MANUAL_BYTES as u64)
+        {
+            return Err(ManualError::Invalid(
+                "manual download exceeds size limit".into(),
+            ));
+        }
+        Box::new(response)
+    } else {
+        Box::new(fs::File::open(source)?)
+    };
     let mut contents = Vec::new();
     let mut buffer = [0u8; 128 * 1024];
     loop {
@@ -434,7 +445,41 @@ fn read_source(
         }
         progress((contents.len() as f64 / MAX_MANUAL_BYTES as f64).min(0.35));
     }
+    if let Some(path) = cache {
+        if let Some(directory) = path.parent()
+            && fs::create_dir_all(directory).is_ok()
+        {
+            let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+            if fs::write(&temporary, &contents).is_ok() {
+                if fs::rename(&temporary, &path).is_err() {
+                    let _ = fs::remove_file(temporary);
+                }
+            }
+        }
+    }
     Ok(contents)
+}
+
+fn manual_cache_path(url: &str) -> PathBuf {
+    let cache_root = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .filter(|path| path.is_absolute())
+                .map(|path| path.join(".cache"))
+        })
+        .unwrap_or_else(std::env::temp_dir);
+    let digest = Md5::digest(url.as_bytes());
+    let digest = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    cache_root
+        .join("org.popfe.PSPManager")
+        .join("manuals")
+        .join(format!("{digest}.cache"))
 }
 
 fn archive_pages(
