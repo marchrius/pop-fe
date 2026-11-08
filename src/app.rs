@@ -88,14 +88,63 @@ pub fn activate(application: &adw::Application) {
         &tr("Extract"),
     );
 
+    let open = gio::SimpleAction::new("open", None);
+    let stack_for_open = stack.clone();
+    let window_for_open = window.clone();
+    open.connect_activate(move |_, _| {
+        let action_name = if stack_for_open.visible_child_name().as_deref() == Some("extract") {
+            "open-pbp"
+        } else {
+            "open-images"
+        };
+        if let Some(action) = window_for_open.lookup_action(action_name) {
+            action.activate(None);
+        }
+    });
+    window.add_action(&open);
+
+    let convert = gio::SimpleAction::new("convert", None);
+    let stack_for_convert = stack.clone();
+    convert.connect_activate(move |_, _| stack_for_convert.set_visible_child_name("convert"));
+    window.add_action(&convert);
+
+    let extract = gio::SimpleAction::new("extract", None);
+    let stack_for_extract = stack.clone();
+    extract.connect_activate(move |_, _| stack_for_extract.set_visible_child_name("extract"));
+    window.add_action(&extract);
+
+    let help = gio::SimpleAction::new("help", None);
+    let window_for_help = window.clone();
+    help.connect_activate(move |_, _| {
+        let dialog = adw::AlertDialog::new(
+            Some(&tr("POP-FE Help")),
+            Some(&tr("Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\nExtract: select the PBP and an output folder.\n\nCtrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit")),
+        );
+        dialog.add_response("close", &tr("Close"));
+        dialog.set_default_response(Some("close"));
+        dialog.set_close_response("close");
+        dialog.present(Some(&window_for_help));
+    });
+    window.add_action(&help);
+
     let switcher = gtk::StackSwitcher::builder()
         .stack(&stack)
         .halign(gtk::Align::Center)
         .build();
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
     let menu = gio::Menu::new();
-    menu.append(Some(&tr("About POP-FE")), Some("win.about"));
-    menu.append(Some(&tr("Quit")), Some("win.quit"));
+    let main_section = gio::Menu::new();
+    main_section.append(Some(&tr("Open Images or PBP…")), Some("win.open"));
+    main_section.append(Some(&tr("Convert")), Some("win.convert"));
+    main_section.append(Some(&tr("Extract")), Some("win.extract"));
+    menu.append_section(None, &main_section);
+    let help_section = gio::Menu::new();
+    help_section.append(Some(&tr("Help and Shortcuts")), Some("win.help"));
+    help_section.append(Some(&tr("About POP-FE")), Some("win.about"));
+    menu.append_section(None, &help_section);
+    let quit_section = gio::Menu::new();
+    quit_section.append(Some(&tr("Quit")), Some("win.quit"));
+    menu.append_section(None, &quit_section);
     let menu_button = gtk::MenuButton::builder()
         .icon_name("open-menu-symbolic")
         .tooltip_text(tr("Main Menu"))
@@ -126,6 +175,12 @@ pub fn activate(application: &adw::Application) {
     let quit_window = window.clone();
     quit.connect_activate(move |_, _| quit_window.close());
     window.add_action(&quit);
+
+    application.set_accels_for_action("win.open", &["<Primary>o"]);
+    application.set_accels_for_action("win.convert", &["<Alt>1"]);
+    application.set_accels_for_action("win.extract", &["<Alt>2"]);
+    application.set_accels_for_action("win.help", &["F1"]);
+    application.set_accels_for_action("win.quit", &["<Primary>q"]);
 
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
@@ -330,6 +385,10 @@ fn convert_page(
     add.set_hexpand(true);
     let clear = gtk::Button::with_label(&tr("Clear Images"));
     clear.set_sensitive(false);
+    let open_images = gio::SimpleAction::new("open-images", None);
+    let add_for_action = add.clone();
+    open_images.connect_activate(move |_, _| add_for_action.emit_clicked());
+    parent.add_action(&open_images);
     let parent_for_dialog = parent.clone();
     let files_for_dialog = files.clone();
     let list_for_dialog = list.clone();
@@ -1505,6 +1564,10 @@ fn extract_page(
             },
         );
     });
+    let open_pbp = gio::SimpleAction::new("open-pbp", None);
+    let choose_pbp_for_action = choose_pbp.clone();
+    open_pbp.connect_activate(move |_, _| choose_pbp_for_action.emit_clicked());
+    parent.add_action(&open_pbp);
     let choose_output = gtk::Button::with_label(&tr("Browse…"));
     let parent_for_output = parent.clone();
     let entry_for_output = output_path.clone();
