@@ -2,7 +2,7 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use flate2::Decompress;
 use flate2::FlushDecompress;
@@ -16,6 +16,7 @@ const SECTOR_SIZE: usize = 0x9300;
 const RAW_SECTOR_SIZE: u64 = 2352;
 const INDEX_OFFSET: u64 = 0x4000;
 const MAX_DISC_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+static EXTRACTION_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Error)]
 pub enum PbpError {
@@ -95,6 +96,8 @@ impl Pbp {
         };
         progress(0.0);
         fs::create_dir_all(output)?;
+        let staging = ExtractionStage::new(output)?;
+        let staging_dir = staging.path.as_path();
         let mut source = File::open(&self.path)?;
         let names = [
             "PARAM.SFO",
@@ -112,7 +115,7 @@ impl Pbp {
             if end <= start {
                 continue;
             }
-            let path = output.join(name);
+            let path = staging_dir.join(name);
             copy_range(
                 &mut source,
                 start,
@@ -125,7 +128,12 @@ impl Pbp {
         }
         let psar = self.sections[7] as u64;
         if psar >= self.file_size {
-            return Ok(written);
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(PbpError::Cancelled);
+            }
+            let output_files = staging.publish(written)?;
+            progress(1.0);
+            return Ok(output_files);
         }
         source.seek(SeekFrom::Start(psar))?;
         let mut marker = [0; 16];
@@ -152,7 +160,7 @@ impl Pbp {
                 let (image, cue, iso, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
-                    output,
+                    staging_dir,
                     disc_index,
                     cancelled,
                     &mut reporter,
@@ -176,8 +184,12 @@ impl Pbp {
                 offset = offset.saturating_add(16);
             }
         }
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PbpError::Cancelled);
+        }
+        let output_files = staging.publish(written)?;
         progress(1.0);
-        Ok(written)
+        Ok(output_files)
     }
 
     fn estimate_work(&self, cancelled: &AtomicBool) -> Result<u64, PbpError> {
@@ -384,6 +396,49 @@ impl Pbp {
             track += 1;
         }
         Ok((image, cue, iso, audio_paths))
+    }
+}
+
+struct ExtractionStage {
+    path: PathBuf,
+    output: PathBuf,
+}
+
+impl ExtractionStage {
+    fn new(output: &Path) -> Result<Self, PbpError> {
+        loop {
+            let sequence = EXTRACTION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = output.join(format!(".pop-fe-extract-{}-{sequence}", std::process::id()));
+            match fs::create_dir(&path) {
+                Ok(()) => {
+                    return Ok(Self {
+                        path,
+                        output: output.to_path_buf(),
+                    });
+                }
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        }
+    }
+
+    fn publish(&self, staged_files: Vec<PathBuf>) -> Result<Vec<PathBuf>, PbpError> {
+        let mut output_files = Vec::with_capacity(staged_files.len());
+        for staged in staged_files {
+            let name = staged
+                .file_name()
+                .ok_or_else(|| PbpError::Invalid("staged filename is missing".into()))?;
+            let destination = self.output.join(name);
+            fs::rename(staged, &destination)?;
+            output_files.push(destination);
+        }
+        Ok(output_files)
+    }
+}
+
+impl Drop for ExtractionStage {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
     }
 }
 
