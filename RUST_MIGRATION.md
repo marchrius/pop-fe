@@ -25,8 +25,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 6. Restano CCD/CHD, CDDA senza ricodifica, Xdelta e ulteriori opzioni audio.
    PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
-7. Progress percentuale, packaging `.deb`/Flatpak Rust e
-   rimozione del backend Python dal pacchetto.
+7. Conversione ed estrazione espongono percentuali determinate e cancellazione.
+   Il `.deb` Rust è generato da `packaging/build_deb.py`; il manifest Flatpak è
+   presente ma la build Flatpak completa e l'installazione non sono ancora
+   state verificate.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:

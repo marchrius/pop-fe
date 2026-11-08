@@ -61,6 +61,14 @@ pub fn create_from_image_cancellable(
     config: &PbpCreateConfig,
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
+    create_from_image_with_progress(config, cancelled, |_| {})
+}
+
+pub fn create_from_image_with_progress(
+    config: &PbpCreateConfig,
+    cancelled: &AtomicBool,
+    progress: impl Fn(f64) + Send + Sync,
+) -> Result<(), CreateError> {
     if config.game_id.len() != 9 || !config.game_id.is_ascii() {
         return Err(CreateError::Invalid(
             "game ID must contain nine ASCII characters".into(),
@@ -71,11 +79,13 @@ pub fn create_from_image_cancellable(
             "select between one and 32 disc images".into(),
         ));
     }
+    progress(0.0);
     let mut psiso_discs = Vec::with_capacity(config.images.len());
     for (index, image_path) in config.images.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
             return Err(CreateError::Cancelled);
         }
+        progress(0.02 + 0.10 * index as f64 / config.images.len() as f64);
         let extension = image_path
             .extension()
             .and_then(|value| value.to_str())
@@ -162,6 +172,9 @@ pub fn create_from_image_cancellable(
             magic_word,
             cue_sheet.as_ref(),
             &audio_tracks,
+            index,
+            config.images.len(),
+            &progress,
             cancelled,
         )?;
         let psiso_len = psiso.file.metadata()?.len();
@@ -234,6 +247,12 @@ pub fn create_from_image_cancellable(
     }
     let mut psiso_offsets = Vec::with_capacity(psiso_discs.len());
     let mut buffer = vec![0u8; 1024 * 1024];
+    let total_psiso_bytes = psiso_discs
+        .iter()
+        .map(|(_, size)| *size)
+        .sum::<u64>()
+        .max(1);
+    let mut copied_psiso_bytes = 0u64;
     for (psiso, psiso_len) in &psiso_discs {
         if cancelled.load(Ordering::Relaxed) {
             return Err(CreateError::Cancelled);
@@ -255,6 +274,8 @@ pub fn create_from_image_cancellable(
             }
             output.write_all(&buffer[..count])?;
             remaining -= count as u64;
+            copied_psiso_bytes += count as u64;
+            progress(0.80 + 0.19 * copied_psiso_bytes as f64 / total_psiso_bytes as f64);
         }
         let current = output.stream_position()?;
         output.seek(SeekFrom::Start(align_up(current, 16)))?;
@@ -284,6 +305,7 @@ pub fn create_from_image_cancellable(
     output.sync_all()?;
     drop(output);
     fs::rename(&staged_output.path, &config.output)?;
+    progress(1.0);
     Ok(())
 }
 
@@ -673,6 +695,9 @@ fn write_psiso(
     magic_word: Option<u16>,
     cue_sheet: Option<&CueSheet>,
     audio_tracks: &[EncodedAudioTrack],
+    disc_index: usize,
+    disc_count: usize,
+    progress: &dyn Fn(f64),
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
     let sector_count = disc_len.div_ceil(SECTOR_SIZE as u64);
@@ -728,7 +753,7 @@ fn write_psiso(
     let mut indexes = Vec::with_capacity(index_bytes as usize);
     let mut data_offset = 0u32;
     let mut remaining = disc_len;
-    for _ in 0..sector_count {
+    for sector_index in 0..sector_count {
         if cancelled.load(Ordering::Relaxed) {
             return Err(CreateError::Cancelled);
         }
@@ -754,6 +779,10 @@ fn write_psiso(
             .checked_add(payload.len() as u32)
             .ok_or_else(|| CreateError::Invalid("compressed image is too large".into()))?;
         indexes.extend_from_slice(&index);
+        if sector_index % 64 == 0 || sector_index + 1 == sector_count {
+            let disc_fraction = (sector_index + 1) as f64 / sector_count.max(1) as f64;
+            progress(0.12 + 0.66 * (disc_index as f64 + disc_fraction) / disc_count as f64);
+        }
     }
     if audio_tracks.len() > 98 {
         return Err(CreateError::Invalid(

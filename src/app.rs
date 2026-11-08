@@ -13,6 +13,11 @@ use gtk::gio;
 use crate::i18n::tr;
 use crate::paths::FolderHistory;
 
+enum TaskMessage<T> {
+    Progress(f64),
+    Finished(T),
+}
+
 #[derive(Clone)]
 struct DiscFields {
     id: gtk::Entry,
@@ -407,18 +412,24 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         };
         fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
         progress_for_create.set_text(Some(&tr("Conversion in progress")));
-        progress_for_create.pulse();
+        progress_for_create.set_fraction(0.0);
         button_for_create.set_sensitive(false);
         cancel_for_create.set_sensitive(true);
         let cancellation = Arc::new(AtomicBool::new(false));
         *state_for_create.borrow_mut() = Some(cancellation.clone());
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let progress_sender = sender.clone();
         thread::spawn(move || {
-            let _ = sender.send(
-                crate::create::create_from_image_cancellable(&config, &cancellation)
-                    .map_err(|error| error.to_string())
-                    .map(|()| output),
-            );
+            let result = crate::create::create_from_image_with_progress(
+                &config,
+                &cancellation,
+                |fraction| {
+                    let _ = progress_sender.try_send(TaskMessage::Progress(fraction));
+                },
+            )
+            .map_err(|error| error.to_string())
+            .map(|()| output);
+            let _ = sender.send(TaskMessage::Finished(result));
         });
         let fields = fields_for_create.clone();
         let button = button_for_create.clone();
@@ -427,7 +438,12 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let cancel_state = state_for_create.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
-                Ok(Ok(path)) => {
+                Ok(TaskMessage::Progress(fraction)) => {
+                    progress.set_fraction(fraction);
+                    progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
+                    gtk::glib::ControlFlow::Continue
+                }
+                Ok(TaskMessage::Finished(Ok(path))) => {
                     fields.status.set_text(&format!(
                         "{}: {}",
                         tr("Conversion complete"),
@@ -440,7 +456,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Ok(Err(error)) => {
+                Ok(TaskMessage::Finished(Err(error))) => {
                     if error == "operation cancelled" {
                         fields.status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
@@ -455,10 +471,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Err(mpsc::TryRecvError::Empty) => {
-                    progress.pulse();
-                    gtk::glib::ControlFlow::Continue
-                }
+                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => {
                     fields.status.set_text(&tr("Conversion failed"));
                     button.set_sensitive(true);
@@ -914,17 +927,22 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         }
         status_for_extract.set_text(&tr("Extraction in progress"));
         progress_for_extract.set_text(Some(&tr("Extraction in progress")));
-        progress_for_extract.pulse();
+        progress_for_extract.set_fraction(0.0);
         extract_for_extract.set_sensitive(false);
         cancel_button_for_extract.set_sensitive(true);
         let cancellation = Arc::new(AtomicBool::new(false));
         *state_for_extract.borrow_mut() = Some(cancellation.clone());
-        let (sender, receiver) = mpsc::channel();
+        let (sender, receiver) = mpsc::sync_channel(1);
+        let progress_sender = sender.clone();
         thread::spawn(move || {
             let result = crate::pbp::Pbp::open(&pbp)
-                .and_then(|container| container.extract_cancellable(&output, &cancellation))
+                .and_then(|container| {
+                    container.extract_with_progress(&output, &cancellation, |fraction| {
+                        let _ = progress_sender.try_send(TaskMessage::Progress(fraction));
+                    })
+                })
                 .map_err(|error| error.to_string());
-            let _ = sender.send(result);
+            let _ = sender.send(TaskMessage::Finished(result));
         });
         let status = status_for_extract.clone();
         let button = extract_for_extract.clone();
@@ -933,7 +951,12 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let cancel_state = state_for_extract.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
-                Ok(Ok(files)) => {
+                Ok(TaskMessage::Progress(fraction)) => {
+                    progress.set_fraction(fraction);
+                    progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
+                    gtk::glib::ControlFlow::Continue
+                }
+                Ok(TaskMessage::Finished(Ok(files))) => {
                     status.set_text(
                         &tr("Extraction complete: {count} files")
                             .replace("{count}", &files.len().to_string()),
@@ -945,7 +968,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Ok(Err(error)) => {
+                Ok(TaskMessage::Finished(Err(error))) => {
                     if error == "operation cancelled" {
                         status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
@@ -959,10 +982,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Err(mpsc::TryRecvError::Empty) => {
-                    progress.pulse();
-                    gtk::glib::ControlFlow::Continue
-                }
+                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => {
                     status.set_text(&tr("Extraction failed"));
                     progress.set_text(Some(&tr("Error")));

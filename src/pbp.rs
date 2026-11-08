@@ -75,6 +75,22 @@ impl Pbp {
         output: &Path,
         cancelled: &AtomicBool,
     ) -> Result<Vec<PathBuf>, PbpError> {
+        self.extract_with_progress(output, cancelled, |_| {})
+    }
+
+    pub fn extract_with_progress(
+        &self,
+        output: &Path,
+        cancelled: &AtomicBool,
+        progress: impl Fn(f64),
+    ) -> Result<Vec<PathBuf>, PbpError> {
+        let total_work = self.estimate_work(cancelled)?.max(1);
+        let mut reporter = ProgressReporter {
+            done: 0,
+            total: total_work,
+            callback: &progress,
+        };
+        progress(0.0);
         fs::create_dir_all(output)?;
         let mut source = File::open(&self.path)?;
         let names = [
@@ -94,7 +110,14 @@ impl Pbp {
                 continue;
             }
             let path = output.join(name);
-            copy_range(&mut source, start, end - start, &path)?;
+            copy_range(
+                &mut source,
+                start,
+                end - start,
+                &path,
+                cancelled,
+                &mut reporter,
+            )?;
             written.push(path);
         }
         let psar = self.sections[7] as u64;
@@ -110,6 +133,7 @@ impl Pbp {
             source.read_exact(&mut title)?;
             let file = output.join("PSTITLEIMG.DAT");
             fs::write(&file, title)?;
+            reporter.add(1024);
             written.push(file);
         }
         let mut offset = psar;
@@ -122,8 +146,14 @@ impl Pbp {
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000" {
-                let (image, cue) =
-                    self.extract_disc(&mut source, offset, output, disc_index, cancelled)?;
+                let (image, cue) = self.extract_disc(
+                    &mut source,
+                    offset,
+                    output,
+                    disc_index,
+                    cancelled,
+                    &mut reporter,
+                )?;
                 written.push(image);
                 written.push(cue);
                 disc_index += 1;
@@ -141,7 +171,70 @@ impl Pbp {
                 offset = offset.saturating_add(16);
             }
         }
+        progress(1.0);
         Ok(written)
+    }
+
+    fn estimate_work(&self, cancelled: &AtomicBool) -> Result<u64, PbpError> {
+        let mut work = self
+            .sections
+            .windows(2)
+            .map(|pair| pair[1].saturating_sub(pair[0]) as u64)
+            .sum::<u64>();
+        let mut source = File::open(&self.path)?;
+        let mut offset = self.sections[7] as u64;
+        while offset + 16 <= self.file_size {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(PbpError::Cancelled);
+            }
+            source.seek(SeekFrom::Start(offset))?;
+            let mut magic = [0u8; 16];
+            source.read_exact(&mut magic)?;
+            if &magic[..12] == b"PSISOIMG0000" {
+                let extent = u32::from_le_bytes(magic[12..16].try_into().unwrap()) as u64;
+                if extent < PSISO_HEADER_SIZE
+                    || offset
+                        .checked_add(extent)
+                        .is_none_or(|end| end > self.file_size)
+                {
+                    break;
+                }
+                let mut index_pos = offset + INDEX_OFFSET;
+                let mut scanned_sectors = 0usize;
+                while index_pos + 32 <= offset + extent {
+                    if scanned_sectors % 512 == 0 && cancelled.load(Ordering::Relaxed) {
+                        return Err(PbpError::Cancelled);
+                    }
+                    source.seek(SeekFrom::Start(index_pos))?;
+                    let mut entry = [0u8; 32];
+                    source.read_exact(&mut entry)?;
+                    let length = u16::from_le_bytes(entry[4..6].try_into().unwrap());
+                    if length == 0 {
+                        break;
+                    }
+                    work = work.saturating_add(SECTOR_SIZE as u64);
+                    index_pos += 32;
+                    scanned_sectors += 1;
+                }
+                for track in 0..98u64 {
+                    let table = offset + 0xc00 + track * 16;
+                    source.seek(SeekFrom::Start(table))?;
+                    let mut entry = [0u8; 16];
+                    source.read_exact(&mut entry)?;
+                    let length = u32::from_le_bytes(entry[4..8].try_into().unwrap()) as u64;
+                    if length == 0 {
+                        break;
+                    }
+                    work = work.saturating_add(length);
+                }
+                offset = (offset + extent + 15) & !15;
+            } else if &magic[..8] == b"STARTDAT" {
+                break;
+            } else {
+                offset += 16;
+            }
+        }
+        Ok(work)
     }
 
     fn extract_disc(
@@ -151,6 +244,7 @@ impl Pbp {
         output: &Path,
         disc: usize,
         cancelled: &AtomicBool,
+        reporter: &mut ProgressReporter<'_>,
     ) -> Result<(PathBuf, PathBuf), PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
@@ -217,6 +311,7 @@ impl Pbp {
             }
             target.write_all(&sector)?;
             total += sector.len() as u64;
+            reporter.add(sector.len() as u64);
             index_pos += 32;
         }
         let actual_size = write_cue(&mut *source, base, &cue, &image, total)?;
@@ -256,17 +351,59 @@ impl Pbp {
             header[35] = 0x30;
             audio.write_all(&header)?;
             source.seek(SeekFrom::Start(start))?;
-            io::copy(&mut source.take(audio_length), &mut audio)?;
+            let mut remaining = audio_length;
+            let mut buffer = [0u8; 64 * 1024];
+            while remaining > 0 {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(PbpError::Cancelled);
+                }
+                let count = remaining.min(buffer.len() as u64) as usize;
+                source.read_exact(&mut buffer[..count])?;
+                audio.write_all(&buffer[..count])?;
+                reporter.add(count as u64);
+                remaining -= count as u64;
+            }
             track += 1;
         }
         Ok((image, cue))
     }
 }
 
-fn copy_range(source: &mut File, start: u64, length: u64, output: &Path) -> Result<(), PbpError> {
+struct ProgressReporter<'a> {
+    done: u64,
+    total: u64,
+    callback: &'a dyn Fn(f64),
+}
+
+impl ProgressReporter<'_> {
+    fn add(&mut self, amount: u64) {
+        self.done = self.done.saturating_add(amount).min(self.total);
+        (self.callback)(self.done as f64 / self.total as f64);
+    }
+}
+
+fn copy_range(
+    source: &mut File,
+    start: u64,
+    length: u64,
+    output: &Path,
+    cancelled: &AtomicBool,
+    reporter: &mut ProgressReporter<'_>,
+) -> Result<(), PbpError> {
     let mut target = File::create(output)?;
     source.seek(SeekFrom::Start(start))?;
-    io::copy(&mut source.take(length), &mut target)?;
+    let mut remaining = length;
+    let mut buffer = [0u8; 1024 * 1024];
+    while remaining > 0 {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PbpError::Cancelled);
+        }
+        let count = remaining.min(buffer.len() as u64) as usize;
+        source.read_exact(&mut buffer[..count])?;
+        target.write_all(&buffer[..count])?;
+        reporter.add(count as u64);
+        remaining -= count as u64;
+    }
     Ok(())
 }
 
