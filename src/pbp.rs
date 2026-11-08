@@ -302,9 +302,15 @@ impl Pbp {
             } else {
                 let mut decoded = vec![0u8; SECTOR_SIZE];
                 let mut inflater = Decompress::new(false);
-                inflater
+                let status = inflater
                     .decompress(&encoded, &mut decoded, FlushDecompress::Finish)
                     .map_err(|_| PbpError::Compression)?;
+                if status != flate2::Status::StreamEnd
+                    || inflater.total_in() != encoded.len() as u64
+                    || inflater.total_out() != SECTOR_SIZE as u64
+                {
+                    return Err(PbpError::Compression);
+                }
                 decoded
             };
             if sector.len() != SECTOR_SIZE {
