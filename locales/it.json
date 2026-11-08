@@ -87,5 +87,12 @@
   "Preparing manual": "Preparazione manuale",
   "Compressing and writing EBOOT.PBP": "Compressione e scrittura EBOOT.PBP",
   "Unrecognized format: {path}": "Formato non riconosciuto: {path}",
-  "Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\nExtract: select the PBP and an output folder.\n\nCtrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit": "Converti: aggiungi le immagini del gioco, verifica dati e anteprime, scegli la destinazione e crea EBOOT.PBP.\n\nEstrai: seleziona il PBP e una cartella di destinazione.\n\nCtrl+O — Apri immagini o PBP\nAlt+1 — Converti\nAlt+2 — Estrai\nF1 — Guida\nCtrl+Q — Esci"
+  "Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\nExtract: select the PBP and an output folder.\n\nCtrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit": "Converti: aggiungi le immagini del gioco, verifica dati e anteprime, scegli la destinazione e crea EBOOT.PBP.\n\nEstrai: seleziona il PBP e una cartella di destinazione.\n\nCtrl+O — Apri immagini o PBP\nAlt+1 — Converti\nAlt+2 — Estrai\nF1 — Guida\nCtrl+Q — Esci",
+  "Select PBP File": "Seleziona file PBP",
+  "Select Output Folder": "Seleziona cartella di output",
+  "Select the PBP file and output folder": "Seleziona il file PBP e la cartella di output",
+  "Extraction in progress": "Estrazione in corso",
+  "Extraction complete: {count} files": "Estrazione completata: {count} file",
+  "Extraction failed: {error}": "Estrazione non riuscita: {error}",
+  "Extraction failed": "Estrazione non riuscita"
 }

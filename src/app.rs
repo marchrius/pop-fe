@@ -33,7 +33,7 @@ pub fn activate(application: &adw::Application) {
         .vexpand(true)
         .build();
     stack.add_titled(&convert_page(&window), Some("convert"), &tr("Convert"));
-    stack.add_titled(&extract_page(), Some("extract"), &tr("Extract"));
+    stack.add_titled(&extract_page(&window), Some("extract"), &tr("Extract"));
 
     let switcher = gtk::StackSwitcher::builder()
         .stack(&stack)
@@ -315,19 +315,133 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.status.set_text(&tr("Ready"));
 }
 
-fn extract_page() -> gtk::ScrolledWindow {
+fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
         &tr("Export disc images, CUE files and audio tracks stored in the PBP."),
     );
     let (inputs, input_body) = section(&tr("Extraction"));
-    append_entry(&input_body, &tr("PBP File"), "");
-    append_entry(&input_body, &tr("Output Folder"), "");
+    let pbp_path = append_entry(&input_body, &tr("PBP File"), "");
+    let output_path = append_entry(&input_body, &tr("Output Folder"), "");
+    let history = Rc::new(RefCell::new(FolderHistory::load()));
+    let choose_pbp = gtk::Button::with_label(&tr("Browse…"));
+    let parent_for_pbp = parent.clone();
+    let entry_for_pbp = pbp_path.clone();
+    let history_for_pbp = history.clone();
+    choose_pbp.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select PBP File"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(
+            history_for_pbp.borrow().current(),
+        )));
+        let entry = entry_for_pbp.clone();
+        let history = history_for_pbp.clone();
+        dialog.open(
+            Some(&parent_for_pbp),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_file(&path);
+                    entry.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
+    let choose_output = gtk::Button::with_label(&tr("Browse…"));
+    let parent_for_output = parent.clone();
+    let entry_for_output = output_path.clone();
+    let history_for_output = history.clone();
+    choose_output.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select Output Folder"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(
+            history_for_output.borrow().current(),
+        )));
+        let entry = entry_for_output.clone();
+        let history = history_for_output.clone();
+        dialog.select_folder(
+            Some(&parent_for_output),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_directory(&path);
+                    entry.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
+    if let Some(row) = pbp_path
+        .parent()
+        .and_then(|widget| widget.downcast::<gtk::Box>().ok())
+    {
+        row.append(&choose_pbp);
+    }
+    if let Some(row) = output_path
+        .parent()
+        .and_then(|widget| widget.downcast::<gtk::Box>().ok())
+    {
+        row.append(&choose_output);
+    }
     content.append(&inputs);
     let extract = gtk::Button::with_label(&tr("Extract Contents"));
     extract.add_css_class("suggested-action");
     extract.set_halign(gtk::Align::End);
-    extract.set_sensitive(false);
+    let status = gtk::Label::new(Some(&tr("Ready")));
+    status.set_xalign(0.0);
+    status.add_css_class("dim-label");
+    content.append(&status);
+    let pbp_for_extract = pbp_path.clone();
+    let output_for_extract = output_path.clone();
+    let status_for_extract = status.clone();
+    let extract_for_extract = extract.clone();
+    extract.connect_clicked(move |_| {
+        let pbp = PathBuf::from(pbp_for_extract.text().as_str());
+        let output = PathBuf::from(output_for_extract.text().as_str());
+        if !pbp.is_file() || output.as_os_str().is_empty() {
+            status_for_extract.set_text(&tr("Select the PBP file and output folder"));
+            return;
+        }
+        status_for_extract.set_text(&tr("Extraction in progress"));
+        extract_for_extract.set_sensitive(false);
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let result = crate::pbp::Pbp::open(&pbp)
+                .and_then(|container| container.extract(&output))
+                .map_err(|error| error.to_string());
+            let _ = sender.send(result);
+        });
+        let status = status_for_extract.clone();
+        let button = extract_for_extract.clone();
+        gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+            match receiver.try_recv() {
+                Ok(Ok(files)) => {
+                    status.set_text(
+                        &tr("Extraction complete: {count} files")
+                            .replace("{count}", &files.len().to_string()),
+                    );
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    status.set_text(&tr("Extraction failed: {error}").replace("{error}", &error));
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    status.set_text(&tr("Extraction failed"));
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+            }
+        });
+    });
     content.append(&extract);
     scroll
 }
