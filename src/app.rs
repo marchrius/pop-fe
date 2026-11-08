@@ -19,7 +19,12 @@ struct DiscFields {
     title: gtk::Entry,
     psp_root: gtk::Entry,
     cdda: gtk::CheckButton,
+    disable_asset_downloads: gtk::CheckButton,
     status: gtk::Label,
+    assets: Rc<RefCell<crate::create::PbpAssets>>,
+    icon_preview: gtk::Picture,
+    pic0_preview: gtk::Picture,
+    pic1_preview: gtk::Picture,
 }
 
 pub fn activate(application: &adw::Application) {
@@ -109,12 +114,20 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let psp_root = append_entry(&settings_body, &tr("PSP Root Folder"), "");
     let title = append_entry(&settings_body, &tr("Title"), "");
     let id = append_entry(&settings_body, &tr("Game ID"), "");
+    let icon_preview = asset_preview(64, 64);
+    let pic0_preview = asset_preview(132, 76);
+    let pic1_preview = asset_preview(160, 90);
     let fields = DiscFields {
         id,
         title,
         psp_root,
         cdda: gtk::CheckButton::with_label(&tr("Use CDDA")),
+        disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         status: gtk::Label::new(Some(&tr("Ready"))),
+        assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
+        icon_preview,
+        pic0_preview,
+        pic1_preview,
     };
     let (frame, body) = section(&tr("Disc Images"));
     let list = gtk::ListBox::builder()
@@ -205,13 +218,37 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         "Force NTSC",
         "Allow Disc Swapping",
     ] {
-        if label == "Use CDDA" {
-            option_body.append(&fields.cdda);
-        } else {
-            option_body.append(&gtk::CheckButton::with_label(&tr(label)));
+        match label {
+            "Use CDDA" => option_body.append(&fields.cdda),
+            "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
+            _ => option_body.append(&gtk::CheckButton::with_label(&tr(label))),
         }
     }
     content.append(&options);
+    let (artwork, artwork_body) = section(&tr("Game Artwork"));
+    let artwork_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(12)
+        .halign(gtk::Align::Center)
+        .build();
+    for (label, picture) in [
+        ("ICON0", &fields.icon_preview),
+        ("PIC0", &fields.pic0_preview),
+        ("PIC1", &fields.pic1_preview),
+    ] {
+        let column = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(6)
+            .halign(gtk::Align::Center)
+            .build();
+        let caption = gtk::Label::new(Some(label));
+        caption.add_css_class("dim-label");
+        column.append(&caption);
+        column.append(picture);
+        artwork_row.append(&column);
+    }
+    artwork_body.append(&artwork_row);
+    content.append(&artwork);
     fields.status.set_xalign(0.0);
     fields.status.add_css_class("dim-label");
     content.append(&fields.status);
@@ -306,7 +343,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             output: output.clone(),
             game_id: id,
             title,
-            assets: crate::create::PbpAssets::default(),
+            assets: fields_for_create.assets.borrow().clone(),
             include_title_image: true,
         };
         fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
@@ -440,23 +477,45 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields
         .status
         .set_text(&tr("Analyzing disc and loading assets"));
+    *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
+    set_picture(&fields.icon_preview, None);
+    set_picture(&fields.pic0_preview, None);
+    set_picture(&fields.pic1_preview, None);
+    let download_assets = !fields.disable_asset_downloads.is_active();
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let result = crate::database::Database::embedded().analyze_image(&path);
+        let result = crate::database::Database::embedded()
+            .analyze_image(&path)
+            .map(|metadata| {
+                let assets = if download_assets {
+                    crate::assets::load_game_assets(&metadata.id)
+                } else {
+                    crate::create::PbpAssets::default()
+                };
+                (metadata, assets)
+            });
         let _ = sender.send(result.map_err(|error| error.to_string()));
     });
     let fields = fields.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(80), move || {
         match receiver.try_recv() {
-            Ok(Ok(metadata)) => {
+            Ok(Ok((metadata, assets))) => {
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
+                *fields.assets.borrow_mut() = assets;
+                set_picture(
+                    &fields.icon_preview,
+                    fields.assets.borrow().icon0.as_deref(),
+                );
+                set_picture(&fields.pic0_preview, fields.assets.borrow().pic0.as_deref());
+                set_picture(&fields.pic1_preview, fields.assets.borrow().pic1.as_deref());
                 fields.status.set_text(&tr("Automatic data loaded"));
                 gtk::glib::ControlFlow::Break
             }
             Ok(Err(_error)) => {
                 fields.id.set_text("UNKN00000");
+                *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
                 fields
                     .status
                     .set_text(&tr("Analysis failed: check the log"));
@@ -478,6 +537,27 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.title.set_text("");
     fields.cdda.set_active(false);
     fields.status.set_text(&tr("Ready"));
+    *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
+    set_picture(&fields.icon_preview, None);
+    set_picture(&fields.pic0_preview, None);
+    set_picture(&fields.pic1_preview, None);
+}
+
+fn asset_preview(width: i32, height: i32) -> gtk::Picture {
+    gtk::Picture::builder()
+        .width_request(width)
+        .height_request(height)
+        .can_shrink(true)
+        .build()
+}
+
+fn set_picture(picture: &gtk::Picture, path: Option<&std::path::Path>) {
+    if let Some(path) = path {
+        let filename = path.to_string_lossy();
+        picture.set_filename(Some(filename.as_ref()));
+    } else {
+        picture.set_filename(None::<&std::path::Path>);
+    }
 }
 
 fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {

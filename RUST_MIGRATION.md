@@ -15,6 +15,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per una sola
    immagine per conversione; accetta BIN/IMG raw, ISO 2048 e CUE a traccia
    singola.
+   Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
+   PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
+   nella pagina Converti.
 5. Supporto completo a CUE multi-traccia, CCD/CHD, multi-disco, audio,
    patch, LibCrypt, acquisizione automatica di asset/temi e anteprima XMB.
 6. Progress dettagliato/cancellazione, packaging `.deb`/Flatpak Rust e
@@ -22,8 +25,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CUE multi-traccia, più dischi o le
-patch di compatibilità, e non va usata come sostituto per
+la conversione Rust non supporta ancora CUE multi-traccia, più dischi, selezione
+dei temi e anteprima XMB, o le patch di compatibilità; non va usata come
+sostituto per
 generare EBOOT destinati alla PSP finché il porting non sarà validato.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo

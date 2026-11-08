@@ -1,5 +1,7 @@
 #[cfg(feature = "gui")]
 pub mod app;
+#[cfg(feature = "gui")]
+pub mod assets;
 pub mod create;
 pub mod database;
 pub mod disc;
