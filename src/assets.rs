@@ -237,7 +237,7 @@ pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -
 }
 
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    let directory = cache_directory().join("themes").join("generated-v1");
+    let directory = cache_directory().join("themes").join("generated-v2");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
     }
@@ -350,42 +350,57 @@ fn render_theme_pic1(
     if theme == "ASCIIART" {
         let shades = ["W", "#", "%", "?", "*", "+", ";", ":", ",", ".", " "];
         context.select_font_face("monospace", FontSlant::Normal, FontWeight::Normal);
-        context.set_font_size(5.2);
+        context.set_font_size(3.0);
         context.set_source_rgb(0.75, 0.75, 0.75);
         for y in 0..120usize {
             for x in 0..120usize {
                 let p = pixel(pixels, stride, channels, x, y);
                 let gray = (p[0] as u16 * 30 + p[1] as u16 * 59 + p[2] as u16 * 11) / 100;
                 let shade = 10 - (gray as usize / 26).min(10);
-                context.move_to(105.0 + x as f64 * 3.15, 5.0 + y as f64 * 2.15);
+                context.move_to(52.5 + x as f64 * 2.25, y as f64 * 2.25);
                 context.show_text(shades[shade])?;
             }
         }
+    } else if theme == "DOTPAINTING" {
+        for y in 0..120usize {
+            for x in 0..120usize {
+                let p = pixel(pixels, stride, channels, x, y);
+                context.set_source_rgb(
+                    p[0] as f64 / 255.0,
+                    p[1] as f64 / 255.0,
+                    p[2] as f64 / 255.0,
+                );
+                context.arc(
+                    0.125 + x as f64 * 2.25,
+                    0.125 + y as f64 * 2.25,
+                    0.875,
+                    0.0,
+                    std::f64::consts::TAU,
+                );
+                context.fill()?;
+            }
+        }
     } else {
-        let dots =
-            theme == "DOTPAINTING" || matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
+        let painterly = matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
+        let pixel_size = 250.0 / 120.0;
         for y in 0..120usize {
             for x in 0..120usize {
                 let mut p = pixel(pixels, stride, channels, x, y);
-                if matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH") {
+                if painterly {
                     p = painterly_pixel(pixels, stride, channels, x, y, theme);
                 }
-                if dots {
-                    context.set_source_rgb(
-                        p[0] as f64 / 255.0,
-                        p[1] as f64 / 255.0,
-                        p[2] as f64 / 255.0,
-                    );
-                    let diameter = if theme == "DOTPAINTING" { 3.1 } else { 2.0 };
-                    context.arc(
-                        90.0 + x as f64 * 2.4,
-                        10.0 + y as f64 * 2.1,
-                        diameter / 2.0,
-                        0.0,
-                        std::f64::consts::TAU,
-                    );
-                    context.fill()?;
-                }
+                context.set_source_rgb(
+                    p[0] as f64 / 255.0,
+                    p[1] as f64 / 255.0,
+                    p[2] as f64 / 255.0,
+                );
+                context.rectangle(
+                    25.0 + x as f64 * pixel_size,
+                    y as f64 * pixel_size,
+                    pixel_size,
+                    pixel_size,
+                );
+                context.fill()?;
             }
         }
     }
