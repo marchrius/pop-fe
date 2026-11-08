@@ -58,6 +58,7 @@
   "Browse…": "Scegli…",
   "Analyzing disc and loading assets": "Analisi disco e caricamento assets",
   "Operation stopped": "Operazione interrotta",
+  "Another operation is in progress": "È già in corso un'altra operazione",
   "Analysis failed: check the log": "Analisi fallita: controlla il log",
   "Automatic data loaded": "Dati automatici caricati",
   "Show the selected theme with the game's actual images": "Mostra il tema selezionato con le immagini reali del gioco",

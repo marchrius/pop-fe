@@ -59,6 +59,7 @@ const THEME_NAMES: [&str; 7] = [
 ];
 
 pub fn activate(application: &adw::Application) {
+    let operation_busy = Rc::new(Cell::new(false));
     let window = adw::ApplicationWindow::builder()
         .application(application)
         .title("POP-FE PSP Manager")
@@ -71,8 +72,16 @@ pub fn activate(application: &adw::Application) {
         .hexpand(true)
         .vexpand(true)
         .build();
-    stack.add_titled(&convert_page(&window), Some("convert"), &tr("Convert"));
-    stack.add_titled(&extract_page(&window), Some("extract"), &tr("Extract"));
+    stack.add_titled(
+        &convert_page(&window, operation_busy.clone()),
+        Some("convert"),
+        &tr("Convert"),
+    );
+    stack.add_titled(
+        &extract_page(&window, operation_busy.clone()),
+        Some("extract"),
+        &tr("Extract"),
+    );
 
     let switcher = gtk::StackSwitcher::builder()
         .stack(&stack)
@@ -167,7 +176,10 @@ fn section(title: &str) -> (gtk::Frame, gtk::Box) {
     (frame, body)
 }
 
-fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
+fn convert_page(
+    parent: &adw::ApplicationWindow,
+    operation_busy: Rc<Cell<bool>>,
+) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Convert PSX Images to EBOOT.PBP"),
         &tr("Automatic assets, themes and previews are used during conversion."),
@@ -470,7 +482,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let preview_button = gtk::Button::with_label(&tr("XMB Preview"));
     let preview_parent = parent.clone();
     let preview_fields = fields.clone();
-    preview_button.connect_clicked(move |_| show_xmb_preview(&preview_parent, &preview_fields));
+    let preview_busy = operation_busy.clone();
+    preview_button.connect_clicked(move |_| {
+        show_xmb_preview(&preview_parent, &preview_fields, &preview_busy)
+    });
     theme_row.append(&preview_button);
     artwork_body.append(&theme_row);
     content.append(&artwork);
@@ -522,6 +537,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let button_for_create = convert.clone();
     let warning_state: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
     let warning_state_for_create = warning_state.clone();
+    let operation_busy_for_create = operation_busy.clone();
     let progress = gtk::ProgressBar::new();
     progress.set_show_text(true);
     progress.set_text(Some(&tr("Ready")));
@@ -541,6 +557,12 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let cancel_for_create = cancel.clone();
     let state_for_create = cancel_state.clone();
     convert.connect_clicked(move |_| {
+        if operation_busy_for_create.get() {
+            fields_for_create
+                .status
+                .set_text(&tr("Another operation is in progress"));
+            return;
+        }
         *warning_state_for_create.borrow_mut() = None;
         let selected = files_for_create.borrow().clone();
         if selected.is_empty() || selected.len() > 32 {
@@ -609,6 +631,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         cancel_for_create.set_sensitive(true);
         let cancellation = Arc::new(AtomicBool::new(false));
         *state_for_create.borrow_mut() = Some(cancellation.clone());
+        operation_busy_for_create.set(true);
         let (sender, receiver) = mpsc::sync_channel(1);
         let progress_sender = sender.clone();
         let warning_sender = sender.clone();
@@ -633,6 +656,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let cancel_button = cancel_for_create.clone();
         let cancel_state = state_for_create.clone();
         let warning_state = warning_state_for_create.clone();
+        let operation_busy = operation_busy_for_create.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
@@ -648,6 +672,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Finished(Ok(path))) => {
+                    operation_busy.set(false);
                     let mut message = format!("{}: {}", tr("Conversion complete"), path.display());
                     if let Some(warning) = warning_state.borrow().as_deref() {
                         message.push('\n');
@@ -664,6 +689,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     gtk::glib::ControlFlow::Break
                 }
                 Ok(TaskMessage::Finished(Err(error))) => {
+                    operation_busy.set(false);
                     if error == "operation cancelled" {
                         fields.status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
@@ -680,6 +706,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                 }
                 Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => {
+                    operation_busy.set(false);
                     fields.status.set_text(&tr("Conversion failed"));
                     button.set_sensitive(true);
                     cancel_button.set_sensitive(false);
@@ -961,7 +988,17 @@ fn refresh_asset_previews(fields: &DiscFields) {
     set_picture(&fields.pic1_preview, assets.pic1.as_deref());
 }
 
-fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
+fn show_xmb_preview(
+    parent: &adw::ApplicationWindow,
+    fields: &DiscFields,
+    operation_busy: &Rc<Cell<bool>>,
+) {
+    if operation_busy.get() {
+        fields
+            .status
+            .set_text(&tr("Another operation is in progress"));
+        return;
+    }
     let game_id = fields.id.text().to_string();
     if game_id.is_empty() {
         fields
@@ -1032,6 +1069,7 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
     window.set_child(Some(&content));
     window.present();
     if fields.theme.selected() > 0 {
+        operation_busy.set(true);
         let base = fields.base_assets.borrow().clone();
         let id = game_id.clone();
         let selected_theme = theme_name.to_string();
@@ -1050,6 +1088,7 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
         let background = background.clone();
         let icon = icon.clone();
         let detail = detail.clone();
+        let operation_busy = operation_busy.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(assets) => {
@@ -1057,10 +1096,14 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
                     set_picture(&icon, assets.icon0.as_deref());
                     set_picture(&detail, assets.pic0.as_deref());
                     detail.set_visible(assets.pic0.is_some());
+                    operation_busy.set(false);
                     gtk::glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
-                Err(mpsc::TryRecvError::Disconnected) => gtk::glib::ControlFlow::Break,
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    operation_busy.set(false);
+                    gtk::glib::ControlFlow::Break
+                }
             }
         });
     }
@@ -1083,7 +1126,10 @@ fn set_picture(picture: &gtk::Picture, path: Option<&std::path::Path>) {
     }
 }
 
-fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
+fn extract_page(
+    parent: &adw::ApplicationWindow,
+    operation_busy: Rc<Cell<bool>>,
+) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
         &tr("Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP."),
@@ -1186,7 +1232,12 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     });
     let cancel_button_for_extract = extract_cancel.clone();
     let state_for_extract = extract_cancel_state.clone();
+    let operation_busy_for_extract = operation_busy.clone();
     extract.connect_clicked(move |_| {
+        if operation_busy_for_extract.get() {
+            status_for_extract.set_text(&tr("Another operation is in progress"));
+            return;
+        }
         let pbp = PathBuf::from(pbp_for_extract.text().as_str());
         let output = PathBuf::from(output_for_extract.text().as_str());
         if !pbp.is_file() || output.as_os_str().is_empty() {
@@ -1200,6 +1251,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         cancel_button_for_extract.set_sensitive(true);
         let cancellation = Arc::new(AtomicBool::new(false));
         *state_for_extract.borrow_mut() = Some(cancellation.clone());
+        operation_busy_for_extract.set(true);
         let (sender, receiver) = mpsc::sync_channel(1);
         let progress_sender = sender.clone();
         thread::spawn(move || {
@@ -1217,6 +1269,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let progress = progress_for_extract.clone();
         let cancel_button = cancel_button_for_extract.clone();
         let cancel_state = state_for_extract.clone();
+        let operation_busy = operation_busy_for_extract.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
@@ -1229,6 +1282,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Finished(Ok(files))) => {
+                    operation_busy.set(false);
                     status.set_text(
                         &tr("Extraction complete: {count} files")
                             .replace("{count}", &files.len().to_string()),
@@ -1241,6 +1295,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     gtk::glib::ControlFlow::Break
                 }
                 Ok(TaskMessage::Finished(Err(error))) => {
+                    operation_busy.set(false);
                     if error == "operation cancelled" {
                         status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
@@ -1256,6 +1311,7 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                 }
                 Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => {
+                    operation_busy.set(false);
                     status.set_text(&tr("Extraction failed"));
                     progress.set_text(Some(&tr("Error")));
                     button.set_sensitive(true);
