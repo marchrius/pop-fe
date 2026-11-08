@@ -60,6 +60,11 @@ impl Pbp {
                 )));
             }
         }
+        if sections[0] < PBP_HEADER_SIZE as u32 {
+            return Err(PbpError::Invalid(
+                "first section overlaps the PBP header".into(),
+            ));
+        }
         if sections.windows(2).any(|pair| pair[0] > pair[1]) {
             return Err(PbpError::Invalid("section offsets are not ordered".into()));
         }
