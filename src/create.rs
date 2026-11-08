@@ -517,6 +517,14 @@ fn atracdenc_path() -> Option<PathBuf> {
     {
         return Some(path);
     }
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let sibling = directory.join("atracdenc");
+        if sibling.is_file() {
+            return Some(sibling);
+        }
+    }
     let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("atracdenc/src/atracdenc");
     bundled.is_file().then_some(bundled)
 }

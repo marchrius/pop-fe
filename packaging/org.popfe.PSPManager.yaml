@@ -1,0 +1,34 @@
+app-id: org.popfe.PSPManager
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: pop-fe-psp
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=dri
+  - --share=network
+  - --talk-name=org.freedesktop.portal.Desktop
+modules:
+  - name: pop-fe-psp
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      build-args:
+        - --share=network
+      env:
+        CARGO_HOME: /run/build/pop-fe-psp/cargo
+    build-commands:
+      - cargo build --release --locked
+      - cmake -S atracdenc/src -B build-atracdenc -DCMAKE_BUILD_TYPE=Release
+      - cmake --build build-atracdenc --parallel
+      - install -D target/release/pop-fe-psp /app/bin/pop-fe-psp
+      - install -D build-atracdenc/atracdenc /app/bin/atracdenc
+      - install -D packaging/org.popfe.PSPManager.desktop /app/share/applications/org.popfe.PSPManager.desktop
+      - install -D packaging/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg /app/share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg
+    sources:
+      - type: dir
+        path: ..
