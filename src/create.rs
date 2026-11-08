@@ -1,4 +1,4 @@
-//! Native PBP and PSISOIMG writer for raw 2352-byte PlayStation images.
+//! Native PBP and PSISOIMG writer for normalized PlayStation disc images.
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
@@ -43,7 +43,7 @@ pub struct PbpAssets {
 
 #[derive(Clone, Debug)]
 pub struct PbpCreateConfig {
-    pub image: PathBuf,
+    pub images: Vec<PathBuf>,
     pub output: PathBuf,
     pub game_id: String,
     pub title: String,
@@ -64,37 +64,56 @@ pub fn create_from_image_cancellable(
             "game ID must contain nine ASCII characters".into(),
         ));
     }
-    let extension = config
-        .image
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    let normalized = if extension == "cue" || extension == "iso" {
-        let image = TempFile::new("raw-disc")?;
-        normalize_image(&config.image, &image.file, cancelled)?;
-        Some(image)
-    } else {
-        None
-    };
-    let disc = match &normalized {
-        Some(temp) => temp.file.try_clone()?,
-        None => File::open(&config.image)?,
-    };
-    let disc_len = disc.metadata()?.len();
-    if disc_len == 0 {
-        return Err(CreateError::Invalid("disc image is empty".into()));
+    if config.images.is_empty() || config.images.len() > 32 {
+        return Err(CreateError::Invalid(
+            "select between one and 32 disc images".into(),
+        ));
     }
-    let psiso = TempFile::new("psiso")?;
-    write_psiso(
-        &disc,
-        disc_len,
-        &psiso.file,
-        &config.game_id,
-        &config.title,
-        cancelled,
-    )?;
-    let psiso_len = psiso.file.metadata()?.len();
+    let mut psiso_discs = Vec::with_capacity(config.images.len());
+    for (index, image_path) in config.images.iter().enumerate() {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let extension = image_path
+            .extension()
+            .and_then(|value| value.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        let normalized = if extension == "cue" || extension == "iso" {
+            let image = TempFile::new("raw-disc")?;
+            normalize_image(image_path, &image.file, cancelled)?;
+            Some(image)
+        } else {
+            None
+        };
+        let disc = match &normalized {
+            Some(temp) => temp.file.try_clone()?,
+            None => File::open(image_path)?,
+        };
+        let disc_len = disc.metadata()?.len();
+        if disc_len == 0 {
+            return Err(CreateError::Invalid("disc image is empty".into()));
+        }
+        let disc_id = if index == 0 {
+            config.game_id.clone()
+        } else {
+            crate::database::Database::embedded()
+                .analyze_image(image_path)
+                .map(|metadata| metadata.id)
+                .unwrap_or_else(|_| "UNKN00000".into())
+        };
+        let psiso = TempFile::new("psiso")?;
+        write_psiso(
+            &disc,
+            disc_len,
+            &psiso.file,
+            &disc_id,
+            &config.title,
+            cancelled,
+        )?;
+        let psiso_len = psiso.file.metadata()?.len();
+        psiso_discs.push((psiso, psiso_len));
+    }
 
     let mut assets = Vec::new();
     for path in [
@@ -150,7 +169,7 @@ pub fn create_from_image_cancellable(
     if config.include_title_image {
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
-        let first_psiso_relative = 0x8000u32;
+        let first_psiso_relative = (align_up(psar + 0x400, 0x8000) - psar) as u32;
         put_u32(&mut title_image, 0x200, first_psiso_relative);
         let game_id = format!("_{}_{}", &config.game_id[..4], &config.game_id[4..]);
         title_image[0x264..0x26f].copy_from_slice(game_id.as_bytes());
@@ -160,22 +179,32 @@ pub fn create_from_image_cancellable(
     } else {
         output.seek(SeekFrom::Start(align_up(psar, 0x10000)))?;
     }
-    let psiso_start = output.stream_position()?;
-    let mut psiso_reader = psiso.file.try_clone()?;
-    psiso_reader.seek(SeekFrom::Start(0))?;
-    let mut remaining = psiso_len;
+    let mut psiso_offsets = Vec::with_capacity(psiso_discs.len());
     let mut buffer = vec![0u8; 1024 * 1024];
-    while remaining > 0 {
+    for (psiso, psiso_len) in &psiso_discs {
         if cancelled.load(Ordering::Relaxed) {
             return Err(CreateError::Cancelled);
         }
-        let read_len = buffer.len().min(remaining as usize);
-        let count = psiso_reader.read(&mut buffer[..read_len])?;
-        if count == 0 {
-            break;
+        let current = output.stream_position()?;
+        output.seek(SeekFrom::Start(align_up(current, 0x8000)))?;
+        psiso_offsets.push((output.stream_position()? - psar) as u32);
+        let mut psiso_reader = psiso.file.try_clone()?;
+        psiso_reader.seek(SeekFrom::Start(0))?;
+        let mut remaining = *psiso_len;
+        while remaining > 0 {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(CreateError::Cancelled);
+            }
+            let read_len = buffer.len().min(remaining as usize);
+            let count = psiso_reader.read(&mut buffer[..read_len])?;
+            if count == 0 {
+                break;
+            }
+            output.write_all(&buffer[..count])?;
+            remaining -= count as u64;
         }
-        output.write_all(&buffer[..count])?;
-        remaining -= count as u64;
+        let current = output.stream_position()?;
+        output.seek(SeekFrom::Start(align_up(current, 16)))?;
     }
     let startdat = align_up(output.stream_position()?, 16);
     output.seek(SeekFrom::Start(startdat))?;
@@ -188,6 +217,9 @@ pub fn create_from_image_cancellable(
     if config.include_title_image {
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
+        for (index, offset) in psiso_offsets.iter().enumerate() {
+            put_u32(&mut title_image, 0x200 + index * 4, *offset);
+        }
         put_u32(&mut title_image, 0x10, (startdat - psar) as u32);
         put_u32(&mut title_image, 0x284, (startdat - psar + 0x2d31) as u32);
         let game_id = format!("_{}_{}", &config.game_id[..4], &config.game_id[4..]);
@@ -196,7 +228,6 @@ pub fn create_from_image_cancellable(
         output.seek(SeekFrom::Start(psar))?;
         output.write_all(&title_image)?;
     }
-    let _ = psiso_start;
     output.sync_all()?;
     drop(output);
     fs::rename(&staged_output.path, &config.output)?;
@@ -248,6 +279,11 @@ fn normalize_image(
         ));
     }
     let track = &sheet.tracks[0];
+    if track.mode == TrackMode::Audio {
+        return Err(CreateError::Invalid(
+            "audio-only CUE tracks cannot be converted as a PSX data disc".into(),
+        ));
+    }
     let mut source = File::open(&track.path)?;
     let sector_size = track.mode.sector_size();
     let start = track.index01.saturating_mul(sector_size);

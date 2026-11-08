@@ -114,5 +114,9 @@
   "PSP XMB simulation · actual artwork from the selected game and theme.": "Simulazione XMB PSP · immagini reali del gioco e del tema selezionato.",
   "Loading theme artwork": "Caricamento immagini del tema",
   "Wait for theme artwork to finish loading": "Attendi il caricamento delle immagini del tema",
-  "This procedural theme is not ported yet": "Questo tema generativo non è ancora stato portato"
+  "This procedural theme is not ported yet": "Questo tema generativo non è ancora stato portato",
+  "Select between one and 32 disc images": "Seleziona da una a 32 immagini disco",
+  "Select CUE, ISO or raw BIN/IMG images": "Seleziona immagini CUE, ISO o BIN/IMG raw",
+  "CDDA conversion is not ported yet": "La conversione CDDA non è ancora stata portata",
+  "This option is not ported yet": "Questa opzione non è ancora stata portata"
 }

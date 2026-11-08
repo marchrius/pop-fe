@@ -12,8 +12,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    implementati per l'analisi iniziale.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, CUE e tracce AEA:
    implementata, da verificare con PBP reali.
-4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per una sola
-   immagine per conversione; accetta BIN/IMG raw, ISO 2048 e CUE a traccia
+4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
+   di 32 dischi; ogni disco accetta BIN/IMG raw, ISO 2048 o CUE a traccia
    singola.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
@@ -27,8 +27,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CUE multi-traccia, più dischi, tracce
-CDDA, patch di compatibilità o i filtri dei temi generativi; non va usata come
+la conversione Rust non supporta ancora CUE multi-traccia, tracce CDDA, patch
+di compatibilità o i filtri dei temi generativi; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato.
 

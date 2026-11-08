@@ -240,9 +240,20 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         "Allow Disc Swapping",
     ] {
         match label {
-            "Use CDDA" => option_body.append(&fields.cdda),
+            "Use CDDA" => {
+                fields.cdda.set_sensitive(false);
+                fields
+                    .cdda
+                    .set_tooltip_text(Some(&tr("CDDA conversion is not ported yet")));
+                option_body.append(&fields.cdda);
+            }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
-            _ => option_body.append(&gtk::CheckButton::with_label(&tr(label))),
+            _ => {
+                let option = gtk::CheckButton::with_label(&tr(label));
+                option.set_sensitive(false);
+                option.set_tooltip_text(Some(&tr("This option is not ported yet")));
+                option_body.append(&option);
+            }
         }
     }
     content.append(&options);
@@ -351,22 +362,24 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let state_for_create = cancel_state.clone();
     convert.connect_clicked(move |_| {
         let selected = files_for_create.borrow().clone();
-        if selected.len() != 1 {
-            fields_for_create.status.set_text(&tr(
-                "Select one disc image; multiple discs are not supported yet",
-            ));
-            return;
-        }
-        let extension = selected[0]
-            .extension()
-            .and_then(|ext| ext.to_str())
-            .unwrap_or_default()
-            .to_ascii_lowercase();
-        if !["bin", "img", "iso", "cue"].contains(&extension.as_str()) {
+        if selected.is_empty() || selected.len() > 32 {
             fields_for_create
                 .status
-                .set_text(&tr("Select a CUE, ISO or raw BIN/IMG image"));
+                .set_text(&tr("Select between one and 32 disc images"));
             return;
+        }
+        for image in &selected {
+            let extension = image
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            if !["bin", "img", "iso", "cue"].contains(&extension.as_str()) {
+                fields_for_create
+                    .status
+                    .set_text(&tr("Select CUE, ISO or raw BIN/IMG images"));
+                return;
+            }
         }
         let id = fields_for_create.id.text().to_string();
         if fields_for_create.theme_loading.get() {
@@ -385,7 +398,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let psp = PathBuf::from(fields_for_create.psp_root.text().as_str());
         let output = psp.join("PSP/GAME").join(&id).join("EBOOT.PBP");
         let config = crate::create::PbpCreateConfig {
-            image: selected[0].clone(),
+            images: selected,
             output: output.clone(),
             game_id: id,
             title,
