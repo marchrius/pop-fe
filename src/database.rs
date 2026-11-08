@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::sync::OnceLock;
+use std::sync::atomic::AtomicBool;
 
 use serde::Deserialize;
 
@@ -94,7 +95,15 @@ impl Database {
     }
 
     pub fn identify(&self, cue: &CueSheet) -> Result<String, DiscError> {
-        let hash = cue.first_track_md5()?;
+        self.identify_cancellable(cue, &AtomicBool::new(false))
+    }
+
+    pub fn identify_cancellable(
+        &self,
+        cue: &CueSheet,
+        cancelled: &AtomicBool,
+    ) -> Result<String, DiscError> {
+        let hash = cue.first_track_md5_cancellable(cancelled)?;
         if let Some(record) = self.discs.get(&hash) {
             return Ok(record.id.clone());
         }
@@ -105,12 +114,23 @@ impl Database {
     }
 
     pub fn analyze_image(&self, path: &std::path::Path) -> Result<DiscMetadata, DiscError> {
-        let cue = CueSheet::open_image(path)?;
-        let id = match self.identify(&cue) {
+        self.analyze_image_cancellable(path, &AtomicBool::new(false))
+    }
+
+    pub fn analyze_image_cancellable(
+        &self,
+        path: &std::path::Path,
+        cancelled: &AtomicBool,
+    ) -> Result<DiscMetadata, DiscError> {
+        let cue = CueSheet::open_image_cancellable(path, cancelled)?;
+        let id = match self.identify_cancellable(&cue, cancelled) {
             Ok(id) => id,
             Err(DiscError::UnknownId) => "UNKN00000".to_string(),
             Err(error) => return Err(error),
         };
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(DiscError::Cancelled);
+        }
         let game = self.games.get(&id);
         let title = self
             .title(&id)

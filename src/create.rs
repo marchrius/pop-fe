@@ -128,7 +128,7 @@ pub fn create_from_image_with_progress_and_warnings(
             .unwrap_or_default()
             .to_ascii_lowercase();
         let cue_sheet = matches!(extension.as_str(), "cue" | "chd" | "ccd")
-            .then(|| CueSheet::open_image(image_path))
+            .then(|| CueSheet::open_image_cancellable(image_path, cancelled))
             .transpose()
             .map_err(|error| CreateError::Invalid(error.to_string()))?;
         let audio_tracks = if config.use_cdda {
@@ -169,8 +169,8 @@ pub fn create_from_image_with_progress_and_warnings(
                 .map(|metadata| metadata.id)
                 .unwrap_or_else(|_| "UNKN00000".into())
         };
-        let source_md5 = CueSheet::open_image(image_path)
-            .and_then(|sheet| sheet.first_track_md5())
+        let source_md5 = CueSheet::open_image_cancellable(image_path, cancelled)
+            .and_then(|sheet| sheet.first_track_md5_cancellable(cancelled))
             .ok();
         let ppf_compatible = matches!(extension.as_str(), "bin" | "img")
             || cue_sheet.as_ref().is_some_and(|sheet| {

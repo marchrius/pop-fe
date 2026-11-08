@@ -43,6 +43,7 @@ struct DiscFields {
     manual_entry: gtk::Entry,
     theme: gtk::DropDown,
     analysis_generation: Rc<Cell<u64>>,
+    analysis_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>>,
     theme_generation: Rc<Cell<u64>>,
     theme_loading: Rc<Cell<bool>>,
     icon_preview: gtk::Picture,
@@ -222,6 +223,7 @@ fn convert_page(
         manual_entry,
         theme,
         analysis_generation: Rc::new(Cell::new(0)),
+        analysis_cancel: Rc::new(RefCell::new(None)),
         theme_generation,
         theme_loading,
         icon_preview,
@@ -937,6 +939,11 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields
         .status
         .set_text(&tr("Analyzing disc and loading assets"));
+    if let Some(previous) = fields.analysis_cancel.borrow_mut().take() {
+        previous.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    let cancellation = Arc::new(AtomicBool::new(false));
+    *fields.analysis_cancel.borrow_mut() = Some(cancellation.clone());
     let generation = fields.analysis_generation.get().wrapping_add(1);
     fields.analysis_generation.set(generation);
     fields.id.set_text("");
@@ -954,9 +961,11 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let result = crate::database::Database::embedded()
-            .analyze_image(&path)
+            .analyze_image_cancellable(&path, &cancellation)
             .map(|metadata| {
-                let assets = if download_assets {
+                let assets = if download_assets
+                    && !cancellation.load(std::sync::atomic::Ordering::Relaxed)
+                {
                     crate::assets::load_game_assets(&metadata.id)
                 } else {
                     crate::create::PbpAssets::default()
@@ -972,6 +981,7 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
         }
         match receiver.try_recv() {
             Ok(Ok((metadata, assets))) => {
+                fields.analysis_cancel.borrow_mut().take();
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
@@ -986,6 +996,7 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 gtk::glib::ControlFlow::Break
             }
             Ok(Err(_error)) => {
+                fields.analysis_cancel.borrow_mut().take();
                 fields.id.set_text("UNKN00000");
                 *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
                 fields
@@ -1005,6 +1016,9 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
 }
 
 fn reset_disc_fields(fields: &DiscFields) {
+    if let Some(cancellation) = fields.analysis_cancel.borrow_mut().take() {
+        cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
     fields
         .analysis_generation
         .set(fields.analysis_generation.get().wrapping_add(1));

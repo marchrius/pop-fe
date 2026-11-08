@@ -4,8 +4,8 @@ use std::fs::File;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use md5::{Digest, Md5};
 use thiserror::Error;
@@ -18,6 +18,8 @@ pub enum DiscError {
     Cue(String),
     #[error("disc ID could not be determined")]
     UnknownId,
+    #[error("operation cancelled")]
+    Cancelled,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -76,6 +78,10 @@ pub struct CueSheet {
 
 impl CueSheet {
     pub fn open_image(path: &Path) -> Result<Self, DiscError> {
+        Self::open_image_cancellable(path, &AtomicBool::new(false))
+    }
+
+    pub fn open_image_cancellable(path: &Path, cancelled: &AtomicBool) -> Result<Self, DiscError> {
         match path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -83,7 +89,7 @@ impl CueSheet {
             .to_ascii_lowercase()
             .as_str()
         {
-            "chd" => return Self::parse(&materialize_chd(path)?),
+            "chd" => return Self::parse(&materialize_chd(path, cancelled)?),
             "ccd" => return Self::parse_ccd(path),
             _ => {}
         }
@@ -325,6 +331,10 @@ impl CueSheet {
 
     /// Match the upstream POP-FE first-track checksum format used by `db.py`.
     pub fn first_track_md5(&self) -> Result<String, DiscError> {
+        self.first_track_md5_cancellable(&AtomicBool::new(false))
+    }
+
+    pub fn first_track_md5_cancellable(&self, cancelled: &AtomicBool) -> Result<String, DiscError> {
         let track = self
             .tracks
             .first()
@@ -347,6 +357,9 @@ impl CueSheet {
         let mut buffer = [0u8; 1024 * 1024];
         let mut remaining = byte_count;
         while remaining > 0 {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(DiscError::Cancelled);
+            }
             let read_length = buffer.len().min(remaining as usize);
             let count = file.read(&mut buffer[..read_length])?;
             if count == 0 {
@@ -434,8 +447,11 @@ fn ccd_image_path(ccd: &Path) -> Result<PathBuf, DiscError> {
     )))
 }
 
-fn materialize_chd(path: &Path) -> Result<PathBuf, DiscError> {
+fn materialize_chd(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscError> {
     static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(DiscError::Cancelled);
+    }
     let metadata = std::fs::metadata(path)?;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     path.canonicalize()?.hash(&mut hasher);
@@ -488,25 +504,25 @@ fn materialize_chd(path: &Path) -> Result<PathBuf, DiscError> {
             command.env("LD_LIBRARY_PATH", library_path);
         }
     }
-    let extraction = command
+    command
         .args(["extractcd", "-f", "-i"])
         .arg(path)
         .arg("-ob")
         .arg(&image)
         .arg("-o")
         .arg(&cue)
-        .output();
-    let result = match extraction {
-        Ok(output) if output.status.success() && image.is_file() && cue.is_file() => Ok(()),
-        Ok(output) => Err(DiscError::Cue(format!(
-            "chdman could not extract {}: {}",
-            path.display(),
-            String::from_utf8_lossy(&output.stderr).trim()
-        ))),
-        Err(error) => Err(DiscError::Cue(format!(
-            "CHD input requires chdman (MAME tools): {error}"
-        ))),
-    };
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let result = run_chdman_cancellable(&mut command, cancelled).and_then(|()| {
+        if image.is_file() && cue.is_file() {
+            Ok(())
+        } else {
+            Err(DiscError::Cue(format!(
+                "chdman did not create the extracted files for {}",
+                path.display()
+            )))
+        }
+    });
     if let Err(error) = result {
         let _ = std::fs::remove_dir_all(&temporary);
         return Err(error);
@@ -521,6 +537,27 @@ fn materialize_chd(path: &Path) -> Result<PathBuf, DiscError> {
             let _ = std::fs::remove_dir_all(&temporary);
             Err(DiscError::Io(error))
         }
+    }
+}
+
+fn run_chdman_cancellable(command: &mut Command, cancelled: &AtomicBool) -> Result<(), DiscError> {
+    let mut child = command.spawn().map_err(|error| {
+        DiscError::Cue(format!("CHD input requires chdman (MAME tools): {error}"))
+    })?;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(DiscError::Cancelled);
+        }
+        if let Some(status) = child.try_wait()? {
+            return if status.success() {
+                Ok(())
+            } else {
+                Err(DiscError::Cue(format!("chdman exited with {status}")))
+            };
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 

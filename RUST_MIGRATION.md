@@ -9,7 +9,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 1. Struttura GTK4/libadwaita, localizzazione italiana/inglese e dialoghi con
    cronologia cartelle: avviati.
 2. Parser di CUE semplice, lettura ISO9660, MD5/SYSTEM.CNF e database giochi:
-   implementati per l'analisi iniziale.
+   implementati per l'analisi iniziale. La materializzazione CHD con `chdman`
+   e il calcolo MD5 rispondono alla cancellazione quando si sostituisce o
+   rimuove l'immagine in analisi.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, ISO, CUE e tracce AEA:
    implementata. L'ISO viene ricostruito dai settori dati Mode 1/Mode 2 Form 1.
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
