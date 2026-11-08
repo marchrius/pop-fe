@@ -188,12 +188,32 @@ pub fn create_from_image_with_progress_and_warnings(
             .then_some(source_md5.as_deref())
             .flatten()
             .and_then(|md5| crate::database::Database::embedded().psp_xdelta(&disc_id, md5));
+        let database = crate::database::Database::embedded();
         let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
             None
         } else {
-            crate::database::Database::embedded().libcrypt_patch(&disc_id)
+            database.libcrypt_patch(&disc_id)
         };
-        let patched = if patch.is_some() || libcrypt_patch.is_some() {
+        let lcp = if config.disable_libcrypt_patching
+            || !ppf_compatible
+            || !database.libcrypt.contains_key(&disc_id)
+            || libcrypt_patch.is_some()
+        {
+            None
+        } else {
+            executable_path("POPFE_LCP", "lcp")
+        };
+        if !config.disable_libcrypt_patching
+            && ppf_compatible
+            && database.libcrypt.contains_key(&disc_id)
+            && libcrypt_patch.is_none()
+            && lcp.is_none()
+        {
+            warning(format!(
+                "LibCrypt patch unavailable for {disc_id}; install lcp to patch this game"
+            ));
+        }
+        let patched = if patch.is_some() || libcrypt_patch.is_some() || lcp.is_some() {
             let temp = TempFile::new("patched-disc")?;
             let mut source = disc.try_clone()?;
             source.seek(SeekFrom::Start(0))?;
@@ -209,6 +229,11 @@ pub fn create_from_image_with_progress_and_warnings(
                 crate::ppf::apply(&temp.file, &patch).map_err(|error| {
                     CreateError::Invalid(format!("automatic LibCrypt patch failed: {error}"))
                 })?;
+            }
+            if let Some(lcp) = lcp {
+                let mut command = Command::new(lcp);
+                command.arg(&temp.path);
+                run_cancellable(&mut command, cancelled, "LibCrypt patcher")?;
             }
             Some(temp)
         } else {
