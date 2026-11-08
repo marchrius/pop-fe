@@ -18,6 +18,10 @@ pub struct GameRecord {
     pub title: Option<String>,
     pub icon0: Option<String>,
     pub pic0: Option<String>,
+    #[serde(rename = "pic0-scaling")]
+    pub pic0_scaling: Option<f64>,
+    #[serde(rename = "pic0-offset")]
+    pub pic0_offset: Option<(f64, f64)>,
     pub pic1: Option<String>,
     pub snd0: Option<String>,
     pub manual: Option<String>,

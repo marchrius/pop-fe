@@ -21,10 +21,11 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
    imposta i flag POPS corrispondenti.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
-   PIC1 e ICON0 quando gli URL sono disponibili. Per SND0 usa il cache upstream
-   dei file ATRAC3 già pronti, limitati ai vincoli PSP; le anteprime artwork
-   vengono mostrate nella pagina Converti. I config POPS specifici per gioco e
-   i dati LibCrypt vengono inclusi automaticamente nel PSISO.
+   PIC1 e ICON0 quando gli URL sono disponibili; PIC0 rispetta anche scala e
+   offset definiti per gioco nel database. Per SND0 usa il cache upstream dei
+   file ATRAC3 già pronti, limitati ai vincoli PSP; le anteprime artwork vengono
+   mostrate nella pagina Converti. I config POPS specifici per gioco e i dati
+   LibCrypt vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE e
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili

@@ -79,7 +79,7 @@ pub fn load_game_assets(game_id: &str) -> PbpAssets {
     let pic0 = game
         .pic0
         .as_deref()
-        .and_then(|url| cached_image(&client, url, &directory, game_id, "pic0", (310, 180)));
+        .and_then(|url| cached_pic0(&client, url, &directory, game_id, game));
     let icon_url = game.icon0.as_deref();
     let icon0 = icon_url
         .and_then(|url| cached_image(&client, url, &directory, game_id, "icon0", (80, 80)))
@@ -400,6 +400,70 @@ fn cached_image(
         return None;
     }
     save_scaled(&pixbuf, &path, size).ok()?;
+    Some(path)
+}
+
+fn cached_pic0(
+    client: &Client,
+    url: &str,
+    directory: &Path,
+    game_id: &str,
+    game: &crate::database::GameRecord,
+) -> Option<PathBuf> {
+    let path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
+    if path.is_file() {
+        return Some(path);
+    }
+    let response = client.get(url).send().ok()?.error_for_status().ok()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    response
+        .take((MAX_IMAGE_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
+        return None;
+    }
+    let source = Pixbuf::from_read(Cursor::new(bytes))
+        .ok()?
+        .apply_embedded_orientation()?;
+    let (width, height) = (source.width(), source.height());
+    if width <= 0
+        || height <= 0
+        || width > 8000
+        || height > 8000
+        || width as i64 * height as i64 > 50_000_000
+    {
+        return None;
+    }
+    let fit_scale = (560.0 / height as f64).min(1000.0 / width as f64);
+    let scale = fit_scale * game.pic0_scaling.unwrap_or(0.9).clamp(0.1, 3.0);
+    let offset = game.pic0_offset.unwrap_or((0.1, 0.1));
+    let canvas = Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 1000, 560)?;
+    canvas.fill(0);
+    source.composite(
+        &canvas,
+        0,
+        0,
+        1000,
+        560,
+        offset.0.clamp(-1.0, 2.0) * 1000.0,
+        offset.1.clamp(-1.0, 2.0) * 560.0,
+        scale,
+        scale,
+        InterpType::Hyper,
+        255,
+    );
+    let resized = canvas.scale_simple(310, 180, InterpType::Hyper)?;
+    let encoded = resized.save_to_bufferv("png", &[]).ok()?;
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary, encoded).ok()?;
+    fs::rename(temporary, &path).ok()?;
     Some(path)
 }
 
