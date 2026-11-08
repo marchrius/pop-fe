@@ -377,6 +377,104 @@ fn convert_page(
             .and_then(|widget| widget.downcast::<gtk::Box>().ok())
         {
             row.append(&browse);
+            if key == "snd0" {
+                let search = gtk::Button::with_label(&tr("Search YouTube…"));
+                row.append(&search);
+                let entry_for_search = entry.clone();
+                let title_for_search = fields.title.clone();
+                let status_for_search = fields.status.clone();
+                let busy_for_search = operation_busy.clone();
+                search.connect_clicked(move |button| {
+                    if busy_for_search.get() {
+                        status_for_search.set_text(&tr("Another operation is in progress"));
+                        return;
+                    }
+                    let title = title_for_search.text().to_string();
+                    if title.is_empty() {
+                        status_for_search.set_text(&tr("Load a disc before searching for audio"));
+                        return;
+                    }
+                    status_for_search.set_text(&tr("Searching YouTube for game audio"));
+                    button.set_sensitive(false);
+                    busy_for_search.set(true);
+                    let (sender, receiver) = mpsc::channel();
+                    thread::spawn(move || {
+                        let executable =
+                            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+                                .map(|directory| directory.join("yt-dlp"))
+                                .find(|path| path.is_file());
+                        let result = if let Some(executable) = executable {
+                            std::process::Command::new(executable)
+                                .args([
+                                    "--quiet",
+                                    "--no-warnings",
+                                    "--flat-playlist",
+                                    "--print",
+                                    "id",
+                                ])
+                                .arg(format!("ytsearch1:{title} ps1 ost"))
+                                .output()
+                                .map_err(|error| error.to_string())
+                                .and_then(|output| {
+                                    if !output.status.success() {
+                                        return Err(String::from_utf8_lossy(&output.stderr)
+                                            .trim()
+                                            .to_string());
+                                    }
+                                    let id = String::from_utf8_lossy(&output.stdout)
+                                        .lines()
+                                        .next()
+                                        .unwrap_or_default()
+                                        .trim()
+                                        .to_string();
+                                    if id.is_empty() {
+                                        Err(tr("No YouTube audio result was found"))
+                                    } else {
+                                        Ok(format!("https://www.youtube.com/watch?v={id}"))
+                                    }
+                                })
+                        } else {
+                            Err(tr("yt-dlp is required to search YouTube"))
+                        };
+                        let _ = sender.send(result);
+                    });
+                    let entry = entry_for_search.clone();
+                    let status = status_for_search.clone();
+                    let busy = busy_for_search.clone();
+                    let button = button.clone();
+                    gtk::glib::timeout_add_local(
+                        Duration::from_millis(100),
+                        move || match receiver.try_recv() {
+                            Ok(Ok(url)) => {
+                                entry.set_text(&url);
+                                status.set_text(&tr("YouTube audio selected"));
+                                button.set_sensitive(true);
+                                busy.set(false);
+                                gtk::glib::ControlFlow::Break
+                            }
+                            Ok(Err(error)) => {
+                                status.set_text(
+                                    &tr("YouTube search failed: {error}")
+                                        .replace("{error}", &error),
+                                );
+                                button.set_sensitive(true);
+                                busy.set(false);
+                                gtk::glib::ControlFlow::Break
+                            }
+                            Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                status.set_text(
+                                    &tr("YouTube search failed: {error}")
+                                        .replace("{error}", "worker stopped"),
+                                );
+                                button.set_sensitive(true);
+                                busy.set(false);
+                                gtk::glib::ControlFlow::Break
+                            }
+                        },
+                    );
+                });
+            }
         }
         let fields_for_change = fields.clone();
         let key_for_change = key.to_string();

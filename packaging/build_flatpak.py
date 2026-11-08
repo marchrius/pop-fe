@@ -5,6 +5,7 @@ import argparse
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -180,6 +181,13 @@ def main():
     sevenzip_module = Path('/usr/lib/7zip/7z.so')
     if not sevenzip.is_file() or not sevenzip_module.is_file():
         raise RuntimeError('7zip is required to package automatic RAR/CBR manual support')
+    yt_dlp = shutil.which('yt-dlp')
+    if not yt_dlp:
+        raise RuntimeError('yt-dlp is required to package YouTube audio search and download')
+    yt_dlp_module = Path(subprocess.check_output(
+        [sys.executable, '-c', 'import pathlib, yt_dlp; print(pathlib.Path(yt_dlp.__file__).parent)'],
+        text=True,
+    ).strip())
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
@@ -215,6 +223,16 @@ def main():
         wrapper = app / 'bin/7z'
         wrapper.write_text('#!/bin/sh\nexec /app/lib/7zip/7z "$@"\n', encoding='utf-8')
         wrapper.chmod(0o755)
+
+        shutil.copytree(yt_dlp_module, app_lib / 'python3/dist-packages/yt_dlp')
+        yt_dlp_wrapper = app / 'bin/yt-dlp'
+        yt_dlp_wrapper.write_text(
+            '#!/bin/sh\n'
+            'export PYTHONPATH="/app/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"\n'
+            'exec /usr/bin/python3 -m yt_dlp "$@"\n',
+            encoding='utf-8',
+        )
+        yt_dlp_wrapper.chmod(0o755)
 
         bundled_tools = [chdman, pdftoppm, ffmpeg, sevenzip_target, sevenzip_module_target]
         for name, source in missing_runtime_dependency_closure(bundled_tools, runtime_location).items():

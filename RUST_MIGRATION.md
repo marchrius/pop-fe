@@ -41,7 +41,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    tramite `chdman` e CCD tramite parsing nativo; i pacchetti includono il
    decoder CHD.
 7. Conversione espone CDDA, Force NTSC, Disc Swapping, watermark, PSX-undither,
-   disattivazione PSTITLEIMG e PIC1 come logo. Conversione ed estrazione
+   disattivazione SND0 e PSTITLEIMG e PIC1 come logo. SND0 personalizzato si
+   converte in ATRAC3, si limita ai vincoli PSP e può essere cercato/scaricato
+   da YouTube tramite yt-dlp. Conversione ed estrazione
    espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
@@ -55,9 +57,8 @@ gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
 LibCrypt `lcp`. Perciò la copertura LibCrypt è limitata alle patch PPF archiviate
 nel repository. Non usare ancora il port come sostituto per generare EBOOT
 destinati alla PSP finché non sarà validato su immagini e hardware reali. Non è
-ancora portato il fallback di ricerca/download audio YouTube né il download e
-la conversione automatica dei manuali in DOCUMENT.DAT. I filtri pittorici Rust
-sono approssimazioni dei filtri OpenCV.
+ancora portato il download e la conversione automatica dei manuali in
+DOCUMENT.DAT. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4 e libadwaita, oltre a Rust/Cargo.

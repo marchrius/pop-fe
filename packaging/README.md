@@ -15,7 +15,7 @@ Rimuovi `--offline` se Cargo deve scaricare dipendenze. Lo script compila `atrac
 
 ## Flatpak
 
-La build compila Rust e `atracdenc` sull'host e assembla un bundle con il runtime GNOME 51. Servono gli strumenti e le librerie di sviluppo della build Debian, Flatpak, `poppler-utils`, `ffmpeg`, `7zip` e il runtime `org.gnome.Platform//51`.
+La build compila Rust e `atracdenc` sull'host e assembla un bundle con il runtime GNOME 51. Servono gli strumenti e le librerie di sviluppo della build Debian, Flatpak, `poppler-utils`, `ffmpeg`, `7zip`, `yt-dlp` (incluso nel bundle con il suo modulo Python) e il runtime `org.gnome.Platform//51`.
 
 ```sh
 python3 packaging/build_flatpak.py --offline

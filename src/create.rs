@@ -2,7 +2,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -328,13 +328,17 @@ pub fn create_from_image_with_progress_and_warnings(
         config.assets.icon1.as_ref(),
         config.assets.pic0.as_ref(),
         config.assets.pic1.as_ref(),
-        config.assets.snd0.as_ref(),
     ] {
         assets.push(match path {
             Some(path) => fs::read(path)?,
             None => Vec::new(),
         });
     }
+    let snd0 = match config.assets.snd0.as_deref() {
+        Some(path) => prepare_snd0(path, cancelled, |fraction| progress(0.74 + 0.06 * fraction))?,
+        None => Vec::new(),
+    };
+    assets.push(snd0);
     #[cfg(feature = "gui")]
     if config.watermark && !assets[3].is_empty() {
         assets[3] = crate::assets::watermark_pic1_png(&assets[3], &config.title, &config.game_id)
@@ -926,6 +930,181 @@ fn atracdenc_path() -> Option<PathBuf> {
     }
     let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("atracdenc/src/atracdenc");
     bundled.is_file().then_some(bundled)
+}
+
+fn prepare_snd0(
+    source: &std::path::Path,
+    cancelled: &AtomicBool,
+    progress: impl Fn(f64),
+) -> Result<Vec<u8>, CreateError> {
+    const MAX_BYTES: usize = 500_000;
+    const MAX_DURATION: f64 = 59.0;
+    let mut _download = None;
+    progress(0.0);
+    let source = if source.to_str().is_some_and(|value| {
+        value.starts_with("https://www.youtube.com/") || value.starts_with("https://youtu.be/")
+    }) {
+        let target = TempFile::new_ext("snd0-download", "wav")?;
+        fs::remove_file(&target.path)?;
+        let output = target.path.with_extension("");
+        let yt_dlp = executable_path("POPFE_YT_DLP", "yt-dlp")
+            .ok_or_else(|| CreateError::Invalid("YouTube SND0 download needs yt-dlp".into()))?;
+        let mut command = Command::new(yt_dlp);
+        command
+            .args([
+                "--no-playlist",
+                "--no-progress",
+                "--quiet",
+                "-f",
+                "bestaudio",
+                "-x",
+                "--audio-format",
+                "wav",
+                "-o",
+            ])
+            .arg(output)
+            .arg(source);
+        run_cancellable(&mut command, cancelled, "YouTube SND0 download")?;
+        progress(0.25);
+        if !target.path.is_file() {
+            return Err(CreateError::Invalid(
+                "yt-dlp did not produce a WAV file".into(),
+            ));
+        }
+        let path = target.path.clone();
+        _download = Some(target);
+        path
+    } else {
+        source.to_path_buf()
+    };
+    let input = fs::read(&source)?;
+    if input.len() >= 20
+        && &input[..4] == b"RIFF"
+        && &input[8..12] == b"WAVE"
+        && (u16::from_le_bytes([input[20], input[21]]) == 0x0270
+            || u16::from_le_bytes([input[20], input[21]]) == 0xfffe)
+    {
+        if input.len() > MAX_BYTES {
+            return Err(CreateError::Invalid(
+                "ATRAC3 SND0 exceeds the PSP 500 KB limit".into(),
+            ));
+        }
+        progress(1.0);
+        return Ok(input);
+    }
+    let ffmpeg = executable_path("POPFE_FFMPEG", "ffmpeg")
+        .ok_or_else(|| CreateError::Invalid("SND0 conversion needs ffmpeg".into()))?;
+    let encoder = atracdenc_path()
+        .ok_or_else(|| CreateError::Invalid("SND0 conversion needs atracdenc".into()))?;
+    let mut duration = MAX_DURATION;
+    let mut attempts = 0usize;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let wav = TempFile::new_ext("snd0", "wav")?;
+        let mut command = Command::new(&ffmpeg);
+        command
+            .args(["-nostdin", "-v", "error", "-y", "-i"])
+            .arg(&source)
+            .args(["-t"])
+            .arg(format!("{duration:.3}"))
+            .args(["-ar", "44100", "-ac", "2"])
+            .arg(&wav.path);
+        run_cancellable(&mut command, cancelled, "ffmpeg SND0 conversion")?;
+        progress(0.35 + 0.2 * (attempts.min(2) as f64 / 3.0));
+        let ea3 = TempFile::new_ext("snd0", "ea3")?;
+        let mut command = Command::new(&encoder);
+        command
+            .args(["--encode=atrac3", "-i"])
+            .arg(&wav.path)
+            .arg("-o")
+            .arg(&ea3.path);
+        run_cancellable(&mut command, cancelled, "ATRAC3 SND0 encoding")?;
+        progress(0.65 + 0.1 * (attempts.min(2) as f64 / 3.0));
+        let encoded = fs::read(&ea3.path)?;
+        if encoded.len() < 96 || &encoded[..4] != b"EA3\x01" {
+            return Err(CreateError::Invalid(
+                "atracdenc produced an invalid SND0 stream".into(),
+            ));
+        }
+        let output = wrap_at3(&encoded[96..]);
+        if output.len() <= MAX_BYTES {
+            progress(1.0);
+            return Ok(output);
+        }
+        let next_duration = duration * (MAX_BYTES as f64 / output.len() as f64) * 0.94;
+        if next_duration < 1.0 {
+            return Err(CreateError::Invalid(
+                "SND0 audio cannot be reduced below the PSP 500 KB limit".into(),
+            ));
+        }
+        duration = next_duration;
+        attempts += 1;
+    }
+}
+
+fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os(variable).map(PathBuf::from)
+        && path.is_file()
+    {
+        return Some(path);
+    }
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|directory| directory.join(name))
+        .find(|path| path.is_file())
+}
+
+fn run_cancellable(
+    command: &mut Command,
+    cancelled: &AtomicBool,
+    operation: &str,
+) -> Result<(), CreateError> {
+    command.stdout(Stdio::null()).stderr(Stdio::null());
+    let mut child = command.spawn()?;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(CreateError::Cancelled);
+        }
+        if let Some(status) = child.try_wait()? {
+            if status.success() {
+                return Ok(());
+            }
+            return Err(CreateError::Invalid(format!(
+                "{operation} failed with {status}"
+            )));
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+fn wrap_at3(data: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(data.len() + 150);
+    output.extend_from_slice(b"RIFF\0\0\0\0WAVE");
+    output.extend_from_slice(b"fmt \x20\0\0\0\x70\x02\x02\0\x44\xac\0\0\x99\x40\0\0\x80\x01\0\0\x0e\0\x01\0\0\x10\0\0\0\0\0\0\x01\0\0\0");
+    let samples = ((data.len() as u64 / 0xc0) * 0x201) as u32;
+    output.extend_from_slice(b"fact\x08\0\0\0");
+    output.extend_from_slice(&((samples & !0xfff).saturating_sub(0x2000)).to_le_bytes());
+    output.extend_from_slice(&0x800u32.to_le_bytes());
+    output.extend_from_slice(b"smpl\x3c\0\0\0");
+    output.extend_from_slice(&[0; 28]);
+    output.extend_from_slice(&1u32.to_le_bytes());
+    output.extend_from_slice(&24u32.to_le_bytes());
+    output.extend_from_slice(&0u32.to_le_bytes());
+    output.extend_from_slice(&0u32.to_le_bytes());
+    output.extend_from_slice(&0x800u32.to_le_bytes());
+    output.extend_from_slice(&((samples & !0xfff).saturating_sub(0x2000 + 0x2801)).to_le_bytes());
+    output.extend_from_slice(&0u32.to_le_bytes());
+    output.extend_from_slice(&0u32.to_le_bytes());
+    output.extend_from_slice(b"data");
+    output.extend_from_slice(&(data.len() as u32).to_le_bytes());
+    output.extend_from_slice(data);
+    output.extend_from_slice(b"LIST\x16\0\0\0INFOISFT\x0a\0\0\0ATRACDENC\0");
+    let riff_size = (output.len() - 8) as u32;
+    output[4..8].copy_from_slice(&riff_size.to_le_bytes());
+    output
 }
 
 fn write_wav_header(file: &mut File, data_len: u32) -> io::Result<()> {
