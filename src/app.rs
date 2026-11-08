@@ -966,7 +966,7 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 let assets = if download_assets
                     && !cancellation.load(std::sync::atomic::Ordering::Relaxed)
                 {
-                    crate::assets::load_game_assets(&metadata.id)
+                    crate::assets::load_game_assets_cancellable(&metadata.id, &cancellation)
                 } else {
                     crate::create::PbpAssets::default()
                 };

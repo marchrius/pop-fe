@@ -2,6 +2,7 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
@@ -105,6 +106,13 @@ pub fn watermark_pic1_png(
 }
 
 pub fn load_game_assets(game_id: &str) -> PbpAssets {
+    load_game_assets_cancellable(game_id, &AtomicBool::new(false))
+}
+
+pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> PbpAssets {
+    if cancelled.load(Ordering::Relaxed) {
+        return PbpAssets::default();
+    }
     let Some(game) = Database::embedded().games.get(game_id) else {
         return PbpAssets::default();
     };
@@ -121,17 +129,40 @@ pub fn load_game_assets(game_id: &str) -> PbpAssets {
         Ok(client) => client,
         Err(_) => return PbpAssets::default(),
     };
-    let pic1 = game
-        .pic1
-        .as_deref()
-        .and_then(|url| cached_image(&client, url, &directory, game_id, "pic1", (480, 272)));
+    let pic1 = game.pic1.as_deref().and_then(|url| {
+        cached_image(
+            &client,
+            url,
+            &directory,
+            game_id,
+            "pic1",
+            (480, 272),
+            Some(cancelled),
+        )
+    });
+    if cancelled.load(Ordering::Relaxed) {
+        return PbpAssets::default();
+    }
     let pic0 = game
         .pic0
         .as_deref()
-        .and_then(|url| cached_pic0(&client, url, &directory, game_id, game));
+        .and_then(|url| cached_pic0(&client, url, &directory, game_id, game, Some(cancelled)));
+    if cancelled.load(Ordering::Relaxed) {
+        return PbpAssets::default();
+    }
     let icon_url = game.icon0.as_deref();
     let icon0 = icon_url
-        .and_then(|url| cached_image(&client, url, &directory, game_id, "icon0", (80, 80)))
+        .and_then(|url| {
+            cached_image(
+                &client,
+                url,
+                &directory,
+                game_id,
+                "icon0",
+                (80, 80),
+                Some(cancelled),
+            )
+        })
         .or_else(|| {
             let source = pic1.as_ref()?;
             let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
@@ -140,7 +171,7 @@ pub fn load_game_assets(game_id: &str) -> PbpAssets {
     let snd0 = game
         .snd0
         .as_deref()
-        .and_then(|link| cached_snd0(&client, link, &directory, game_id));
+        .and_then(|link| cached_snd0(&client, link, &directory, game_id, Some(cancelled)));
     PbpAssets {
         icon0,
         pic0,
@@ -188,6 +219,7 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
             &format!("{game_id}-{theme}"),
             key,
             size,
+            None,
         ) {
             match key {
                 "pic0" => result.pic0 = Some(path),
@@ -421,7 +453,11 @@ fn cached_image(
     game_id: &str,
     name: &str,
     size: (i32, i32),
+    cancelled: Option<&AtomicBool>,
 ) -> Option<PathBuf> {
+    if is_cancelled(cancelled) {
+        return None;
+    }
     let path = directory.join(format!("{}-{name}.png", safe_id(game_id)));
     if path.is_file() {
         return Some(path);
@@ -434,10 +470,7 @@ fn cached_image(
         return None;
     }
     let mut bytes = Vec::new();
-    response
-        .take((MAX_IMAGE_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .ok()?;
+    read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes)?;
     if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
         return None;
     }
@@ -458,7 +491,11 @@ fn cached_pic0(
     directory: &Path,
     game_id: &str,
     game: &crate::database::GameRecord,
+    cancelled: Option<&AtomicBool>,
 ) -> Option<PathBuf> {
+    if is_cancelled(cancelled) {
+        return None;
+    }
     let path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
     if path.is_file() {
         return Some(path);
@@ -471,10 +508,7 @@ fn cached_pic0(
         return None;
     }
     let mut bytes = Vec::new();
-    response
-        .take((MAX_IMAGE_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .ok()?;
+    read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes)?;
     if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
         return None;
     }
@@ -521,7 +555,11 @@ fn cached_snd0(
     source_url: &str,
     directory: &Path,
     game_id: &str,
+    cancelled: Option<&AtomicBool>,
 ) -> Option<PathBuf> {
+    if is_cancelled(cancelled) {
+        return None;
+    }
     let hash = Md5::digest(source_url.as_bytes())
         .iter()
         .map(|byte| format!("{byte:02x}"))
@@ -542,10 +580,7 @@ fn cached_snd0(
         return None;
     }
     let mut bytes = Vec::new();
-    response
-        .take((MAX_SND0_BYTES + 1) as u64)
-        .read_to_end(&mut bytes)
-        .ok()?;
+    read_response(response, MAX_SND0_BYTES, cancelled, &mut bytes)?;
     if !valid_snd0(&bytes) {
         return None;
     }
@@ -553,6 +588,33 @@ fn cached_snd0(
     fs::write(&temporary, bytes).ok()?;
     fs::rename(&temporary, &path).ok()?;
     Some(path)
+}
+
+fn is_cancelled(cancelled: Option<&AtomicBool>) -> bool {
+    cancelled.is_some_and(|flag| flag.load(Ordering::Relaxed))
+}
+
+fn read_response(
+    response: reqwest::blocking::Response,
+    max_bytes: usize,
+    cancelled: Option<&AtomicBool>,
+    bytes: &mut Vec<u8>,
+) -> Option<()> {
+    let mut response = response.take((max_bytes + 1) as u64);
+    let mut buffer = [0u8; 64 * 1024];
+    loop {
+        if is_cancelled(cancelled) {
+            return None;
+        }
+        let count = response.read(&mut buffer).ok()?;
+        if count == 0 {
+            return Some(());
+        }
+        bytes.extend_from_slice(&buffer[..count]);
+        if bytes.len() > max_bytes {
+            return Some(());
+        }
+    }
 }
 
 fn valid_snd0(bytes: &[u8]) -> bool {
