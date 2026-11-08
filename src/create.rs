@@ -95,6 +95,9 @@ pub fn create_from_image_with_progress_and_warnings(
             "select between one and 32 disc images".into(),
         ));
     }
+    // POP-FE always keeps PSTITLEIMG for multi-disc EBOOTs so POPS can expose
+    // the disc-switching UI, even when the single-disc option is disabled.
+    let include_title_image = config.include_title_image || config.images.len() > 1;
     progress(0.0);
     #[cfg(feature = "gui")]
     let manual_document = if let Some(source) = config.manual_source.as_deref() {
@@ -421,7 +424,7 @@ pub fn create_from_image_with_progress_and_warnings(
     output.write_all(PSP_BODY)?;
     output.seek(SeekFrom::Start(psar))?;
 
-    if config.include_title_image {
+    if include_title_image {
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
         let first_psiso_relative = (align_up(psar + 0x400, 0x8000) - psar) as u32;
@@ -477,7 +480,7 @@ pub fn create_from_image_with_progress_and_warnings(
     output.write_all(&logo)?;
     output.write_all(STARTDAT_FOOTER)?;
 
-    if config.include_title_image {
+    if include_title_image {
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
         for (index, offset) in psiso_offsets.iter().enumerate() {

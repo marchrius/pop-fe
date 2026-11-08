@@ -25,6 +25,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    BIN/IMG e ISO usano una CUE sintetica per calcolare la TOC in settori CD,
    mantenendo corretto il lead-out PSISO anche per input senza CUE fornita;
    gli indirizzi traccia e il frame di lead-out seguono la convenzione POP-FE.
+   PSTITLEIMG resta incluso per gli EBOOT multi-disco, come richiesto dal flusso
+   POPS di cambio disco.
    Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel
    PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
    imposta i flag POPS corrispondenti.
