@@ -21,9 +21,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
    imposta i flag POPS corrispondenti.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
-   PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
-   nella pagina Converti. I config POPS specifici per gioco e i dati LibCrypt
-   vengono inclusi automaticamente nel PSISO.
+   PIC1 e ICON0 quando gli URL sono disponibili. Per SND0 usa il cache upstream
+   dei file ATRAC3 già pronti, limitati ai vincoli PSP; le anteprime artwork
+   vengono mostrate nella pagina Converti. I config POPS specifici per gioco e
+   i dati LibCrypt vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE e
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili
@@ -52,8 +53,10 @@ esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
 gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
 LibCrypt `lcp`. Perciò la copertura LibCrypt è limitata alle patch PPF archiviate
 nel repository. Non usare ancora il port come sostituto per generare EBOOT
-destinati alla PSP finché non sarà validato su immagini e hardware reali. I
-filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
+destinati alla PSP finché non sarà validato su immagini e hardware reali. Non è
+ancora portato il fallback di ricerca/download audio YouTube né il download e
+la conversione automatica dei manuali in DOCUMENT.DAT. I filtri pittorici Rust
+sono approssimazioni dei filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4 e libadwaita, oltre a Rust/Cargo.

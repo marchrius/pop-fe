@@ -6,12 +6,14 @@ use std::time::Duration;
 
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
 use gdk_pixbuf::{InterpType, Pixbuf};
+use md5::{Digest, Md5};
 use reqwest::blocking::Client;
 
 use crate::create::PbpAssets;
 use crate::database::Database;
 
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
+const MAX_SND0_BYTES: usize = 500_000;
 
 pub fn watermark_pic1_png(
     png: &[u8],
@@ -86,10 +88,15 @@ pub fn load_game_assets(game_id: &str) -> PbpAssets {
             let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
             normalize_cached(source, &destination, (80, 80)).then_some(destination)
         });
+    let snd0 = game
+        .snd0
+        .as_deref()
+        .and_then(|link| cached_snd0(&client, link, &directory, game_id));
     PbpAssets {
         icon0,
         pic0,
         pic1,
+        snd0,
         ..PbpAssets::default()
     }
 }
@@ -394,6 +401,108 @@ fn cached_image(
     }
     save_scaled(&pixbuf, &path, size).ok()?;
     Some(path)
+}
+
+fn cached_snd0(
+    client: &Client,
+    source_url: &str,
+    directory: &Path,
+    game_id: &str,
+) -> Option<PathBuf> {
+    let hash = Md5::digest(source_url.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let path = directory.join(format!("{}-snd0.at3", safe_id(game_id)));
+    if path.is_file() {
+        if fs::read(&path).ok().is_some_and(|bytes| valid_snd0(&bytes)) {
+            return Some(path);
+        }
+        let _ = fs::remove_file(&path);
+    }
+    let url = format!("https://github.com/sahlberg/pop-fe-assets/raw/master/snd0/{hash}");
+    let response = client.get(url).send().ok()?.error_for_status().ok()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_SND0_BYTES as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    response
+        .take((MAX_SND0_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .ok()?;
+    if !valid_snd0(&bytes) {
+        return None;
+    }
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary, bytes).ok()?;
+    fs::rename(&temporary, &path).ok()?;
+    Some(path)
+}
+
+fn valid_snd0(bytes: &[u8]) -> bool {
+    if bytes.len() > MAX_SND0_BYTES
+        || bytes.len() < 12
+        || &bytes[..4] != b"RIFF"
+        || &bytes[8..12] != b"WAVE"
+    {
+        return false;
+    }
+    let Ok(header_size) = <[u8; 4]>::try_from(&bytes[4..8]) else {
+        return false;
+    };
+    let declared_size = u32::from_le_bytes(header_size) as usize;
+    if declared_size
+        .checked_add(8)
+        .is_none_or(|end| end > bytes.len())
+    {
+        return false;
+    }
+    let mut format = None;
+    let mut data_length = None;
+    let mut average_bytes_per_second = None;
+    let mut offset = 12usize;
+    while offset + 8 <= declared_size + 8 {
+        let name = &bytes[offset..offset + 4];
+        let Ok(length_bytes) = <[u8; 4]>::try_from(&bytes[offset + 4..offset + 8]) else {
+            return false;
+        };
+        let length = u32::from_le_bytes(length_bytes) as usize;
+        let Some(start) = offset.checked_add(8) else {
+            return false;
+        };
+        let Some(end) = start.checked_add(length) else {
+            return false;
+        };
+        if end > declared_size + 8 {
+            return false;
+        }
+        if name == b"fmt " && length >= 16 {
+            format = Some(u16::from_le_bytes([bytes[start], bytes[start + 1]]));
+            average_bytes_per_second = Some(u32::from_le_bytes([
+                bytes[start + 8],
+                bytes[start + 9],
+                bytes[start + 10],
+                bytes[start + 11],
+            ]));
+        } else if name == b"data" {
+            data_length = Some(length);
+        }
+        let Some(next) = end.checked_add(length & 1) else {
+            return false;
+        };
+        offset = next;
+    }
+    let (Some(format), Some(data_length), Some(byte_rate)) =
+        (format, data_length, average_bytes_per_second)
+    else {
+        return false;
+    };
+    let byte_rate = byte_rate as usize;
+    let duration_is_valid = byte_rate > 0 && data_length <= byte_rate.saturating_mul(59);
+    matches!(format, 0x0270 | 0xfffe) && data_length > 0 && duration_is_valid
 }
 
 fn normalize_cached(source: &Path, destination: &Path, size: (i32, i32)) -> bool {
