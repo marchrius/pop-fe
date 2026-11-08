@@ -106,7 +106,11 @@ impl Database {
 
     pub fn analyze_image(&self, path: &std::path::Path) -> Result<DiscMetadata, DiscError> {
         let cue = CueSheet::open_image(path)?;
-        let id = self.identify(&cue)?;
+        let id = match self.identify(&cue) {
+            Ok(id) => id,
+            Err(DiscError::UnknownId) => "UNKN00000".to_string(),
+            Err(error) => return Err(error),
+        };
         let game = self.games.get(&id);
         let title = self
             .title(&id)
@@ -115,7 +119,8 @@ impl Database {
         Ok(DiscMetadata {
             id,
             title,
-            manual: game.and_then(|record| record.manual.clone()),
+            manual: local_manual_for_image(path)
+                .or_else(|| game.and_then(|record| record.manual.clone())),
             use_cdda: game.and_then(|record| record.psp_use_cdda).unwrap_or(false),
         })
     }
@@ -177,6 +182,27 @@ impl Database {
             _ => None,
         }
     }
+}
+
+fn local_manual_for_image(image: &std::path::Path) -> Option<String> {
+    let stem = image.file_stem()?;
+    let mut base = image.to_path_buf();
+    base.set_file_name(stem);
+    for suffix in [
+        ".manual.zip",
+        ".manual.cbz",
+        ".manual.cbr",
+        ".manual.rar",
+        ".manual.pdf",
+        ".manual.dat",
+        ".manual",
+    ] {
+        let candidate = base.with_file_name(format!("{}{}", stem.to_string_lossy(), suffix));
+        if candidate.exists() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
 }
 
 fn decode_hex(input: &str) -> Option<Vec<u8>> {

@@ -38,6 +38,14 @@ pub fn create_psp_document(
         return Ok(None);
     }
     let temporary = TemporaryDirectory::create()?;
+    if Path::new(source).is_dir() {
+        let pages = directory_pages(Path::new(source), &temporary.0, cancelled, &progress)?;
+        if pages.is_empty() {
+            return Ok(None);
+        }
+        progress(0.95);
+        return create_document(game_id, &pages).map(Some);
+    }
     let contents = read_source(source, cancelled, &progress)?;
     if contents.starts_with(b"DOC ") {
         return Ok(Some(contents));
@@ -162,6 +170,60 @@ fn archive_pages(
         }
         progress(0.35 + 0.55 * (position + 1) as f64 / count);
     }
+    Ok(pages)
+}
+
+fn directory_pages(
+    root: &Path,
+    temporary: &Path,
+    cancelled: &AtomicBool,
+    progress: &dyn Fn(f64),
+) -> Result<Vec<Vec<u8>>, ManualError> {
+    let mut pending = vec![(root.to_path_buf(), 0usize)];
+    let mut files = Vec::new();
+    while let Some((directory, depth)) = pending.pop() {
+        check_cancelled(cancelled)?;
+        if depth > 32 {
+            continue;
+        }
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let name = entry.file_name();
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            let file_type = entry.file_type()?;
+            if file_type.is_dir() {
+                pending.push((entry.path(), depth + 1));
+            } else if file_type.is_file() {
+                let metadata = entry.metadata()?;
+                if metadata.len() > 0 && metadata.len() <= MAX_PAGE_BYTES as u64 {
+                    files.push(entry.path());
+                    if files.len() >= MAX_ARCHIVE_ENTRIES {
+                        break;
+                    }
+                }
+            }
+        }
+        if files.len() >= MAX_ARCHIVE_ENTRIES {
+            break;
+        }
+    }
+    files.sort_by(|left, right| natural_cmp(&left.to_string_lossy(), &right.to_string_lossy()));
+    let count = files.len().max(1) as f64;
+    let mut pages = Vec::new();
+    for (index, path) in files.iter().enumerate() {
+        check_cancelled(cancelled)?;
+        let bytes = fs::read(path)?;
+        if let Some(pixbuf) = decode_image(&bytes, temporary, index, cancelled)? {
+            pages.extend(prepare_pages(&pixbuf)?);
+        }
+        progress(0.9 * (index + 1) as f64 / count);
+        if pages.len() >= MAX_MANUAL_PAGES {
+            break;
+        }
+    }
+    pages.truncate(MAX_MANUAL_PAGES);
     Ok(pages)
 }
 
