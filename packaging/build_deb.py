@@ -71,6 +71,7 @@ def main():
         control.parent.mkdir()
         depends = [
             'libc6', 'libstdc++6', 'libsndfile1', 'xdelta3', 'mame-tools',
+            'poppler-utils', 'ffmpeg',
             'libgtk-4-1 (>= 4.10.0)', 'libadwaita-1-0 (>= 1.5.0)',
             'libgdk-pixbuf-2.0-0',
         ]

@@ -6,6 +6,8 @@ pub mod create;
 pub mod database;
 pub mod disc;
 pub mod i18n;
+#[cfg(feature = "gui")]
+pub mod manual;
 pub mod paths;
 pub mod pbp;
 pub mod ppf;

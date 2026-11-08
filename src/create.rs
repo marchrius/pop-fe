@@ -49,6 +49,7 @@ pub struct PbpCreateConfig {
     pub output: PathBuf,
     pub game_id: String,
     pub title: String,
+    pub manual_source: Option<String>,
     pub assets: PbpAssets,
     pub include_title_image: bool,
     pub use_cdda: bool,
@@ -86,6 +87,21 @@ pub fn create_from_image_with_progress(
         ));
     }
     progress(0.0);
+    #[cfg(feature = "gui")]
+    let manual_document = if let Some(source) = config.manual_source.as_deref() {
+        match crate::manual::create_psp_document(source, &config.game_id, cancelled, |fraction| {
+            progress(0.02 * fraction);
+        }) {
+            Ok(document) => document,
+            Err(crate::manual::ManualError::Cancelled) => return Err(CreateError::Cancelled),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+    #[cfg(not(feature = "gui"))]
+    let manual_document: Option<Vec<u8>> = None;
+    progress(0.02);
     let mut psiso_discs = Vec::with_capacity(config.images.len());
     for (index, image_path) in config.images.iter().enumerate() {
         if cancelled.load(Ordering::Relaxed) {
@@ -423,6 +439,12 @@ pub fn create_from_image_with_progress(
     output.sync_all()?;
     drop(output);
     fs::rename(&staged_output.path, &config.output)?;
+    if let Some(document) = manual_document {
+        let document_path = output_dir.join("DOCUMENT.DAT");
+        let temporary = document_path.with_extension(format!("{}.tmp", std::process::id()));
+        fs::write(&temporary, document)?;
+        fs::rename(temporary, document_path)?;
+    }
     progress(1.0);
     Ok(())
 }

@@ -35,6 +35,7 @@ struct DiscFields {
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
+    manual_source: Rc<RefCell<Option<String>>>,
     theme: gtk::DropDown,
     analysis_generation: Rc<Cell<u64>>,
     theme_generation: Rc<Cell<u64>>,
@@ -163,6 +164,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
+        manual_source: Rc::new(RefCell::new(None)),
         theme,
         analysis_generation: Rc::new(Cell::new(0)),
         theme_generation,
@@ -435,6 +437,11 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             return;
         }
         let title = fields_for_create.title.text().to_string();
+        let manual_source = if fields_for_create.disable_asset_downloads.is_active() {
+            None
+        } else {
+            fields_for_create.manual_source.borrow().clone()
+        };
         let mut assets = fields_for_create.assets.borrow().clone();
         if fields_for_create.use_pic1_logo.is_active() {
             assets.logo = assets.pic1.clone();
@@ -446,6 +453,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             output: output.clone(),
             game_id: id,
             title,
+            manual_source,
             assets,
             include_title_image: !fields_for_create.disable_title_image.is_active(),
             use_cdda: fields_for_create.cdda.is_active(),
@@ -604,6 +612,7 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
+    *fields.manual_source.borrow_mut() = None;
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
@@ -632,6 +641,7 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
+                *fields.manual_source.borrow_mut() = metadata.manual.clone();
                 *fields.base_assets.borrow_mut() = assets;
                 refresh_theme_art(&fields);
                 fields.status.set_text(&tr("Automatic data loaded"));
@@ -670,6 +680,7 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
+    *fields.manual_source.borrow_mut() = None;
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);

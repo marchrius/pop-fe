@@ -103,9 +103,11 @@ def verify_runtime_libraries(binaries, runtime_location, arch, bundled_library_d
                 continue
             resolved = line.split('=>', 1)[1].strip().split(' (', 1)[0]
             resolved_path = Path(resolved).resolve() if resolved.startswith('/') else None
-            if resolved_path and not resolved_path.is_relative_to(runtime_root) and not any(
-                resolved_path.is_relative_to(directory.resolve()) for directory in bundled_library_dirs
-            ):
+            requested_name = Path(resolved).name if resolved.startswith('/') else ''
+            bundled_match = resolved_path and any(
+                (directory / requested_name).is_file() for directory in bundled_library_dirs
+            )
+            if resolved_path and not resolved_path.is_relative_to(runtime_root) and not bundled_match:
                 raise RuntimeError(
                     f'{binary.name} resolves {resolved} outside the Flatpak runtime'
                 )
@@ -118,10 +120,29 @@ def missing_runtime_dependencies(binary, runtime_location):
     for line in result.stdout.splitlines():
         if '=>' not in line:
             continue
-        resolved = line.split('=>', 1)[1].strip().split(' (', 1)[0]
+        name, target = line.split('=>', 1)
+        resolved = target.strip().split(' (', 1)[0]
         source = Path(resolved)
         if resolved.startswith('/') and source.is_file() and not source.resolve().is_relative_to(files):
-            missing[source.name] = source
+            missing[name.strip()] = source
+    return missing
+
+
+def missing_runtime_dependency_closure(binaries, runtime_location):
+    """Collect host libraries required by bundled command-line tools."""
+    files = (runtime_location / 'files').resolve()
+    pending = list(binaries)
+    seen = set()
+    missing = {}
+    while pending:
+        binary = pending.pop()
+        if binary in seen:
+            continue
+        seen.add(binary)
+        for name, source in missing_runtime_dependencies(binary, runtime_location).items():
+            if name not in missing:
+                missing[name] = source
+                pending.append(source)
     return missing
 
 
@@ -149,6 +170,12 @@ def main():
     if not chdman:
         raise RuntimeError('chdman (MAME tools) is required to package CHD support')
     chdman = Path(chdman)
+    pdftoppm = shutil.which('pdftoppm')
+    ffmpeg = shutil.which('ffmpeg')
+    if not pdftoppm or not ffmpeg:
+        raise RuntimeError('poppler-utils and ffmpeg are required to package automatic manual support')
+    pdftoppm = Path(pdftoppm)
+    ffmpeg = Path(ffmpeg)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
@@ -162,6 +189,8 @@ def main():
             (encoder, app / 'bin/atracdenc'),
             (xdelta, app / 'bin/xdelta3'),
             (chdman, app / 'bin/chdman'),
+            (pdftoppm, app / 'bin/pdftoppm'),
+            (ffmpeg, app / 'bin/ffmpeg'),
             (ROOT / 'packaging/org.popfe.PSPManager.desktop', app / 'share/applications/org.popfe.PSPManager.desktop'),
             (ROOT / 'packaging/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg',
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),
@@ -169,23 +198,27 @@ def main():
         for source, target in install_pairs:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman') else 0o644)
+            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg') else 0o644)
 
         app_lib = app / 'lib'
-        for name, source in missing_runtime_dependencies(chdman, runtime_location).items():
+        bundled_tools = [chdman, pdftoppm, ffmpeg]
+        for name, source in missing_runtime_dependency_closure(bundled_tools, runtime_location).items():
             target = app_lib / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             target.chmod(0o755)
         verify_runtime_libraries(
-            [binary, encoder, xdelta, app / 'bin/chdman'], runtime_location, arch,
+            [binary, encoder, xdelta, app / 'bin/chdman', app / 'bin/pdftoppm', app / 'bin/ffmpeg'], runtime_location, arch,
             bundled_library_dirs=[app_lib],
         )
+
+        shutil.copytree('/usr/share/poppler', app / 'share/poppler', dirs_exist_ok=True)
 
         run(
             'flatpak', 'build-finish', '--command=pop-fe-psp', '--share=ipc',
             '--socket=wayland', '--socket=fallback-x11', '--device=dri',
             '--share=network', '--talk-name=org.freedesktop.portal.Desktop', str(stage),
+            '--env=LD_LIBRARY_PATH=/app/lib',
         )
         run('flatpak', 'build-export', '--arch', arch, str(repo), str(stage), 'stable')
         run('flatpak', 'build-bundle', '--arch', arch, str(repo), str(args.output), APP_ID, 'stable')
