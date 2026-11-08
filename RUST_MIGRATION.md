@@ -26,9 +26,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
 7. Conversione ed estrazione espongono percentuali determinate e cancellazione.
-   Il `.deb` Rust è generato da `packaging/build_deb.py`; il manifest Flatpak è
-   presente ma la build Flatpak completa e l'installazione non sono ancora
-   state verificate.
+   Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
+   sandbox e su PSP resta da verificare.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
