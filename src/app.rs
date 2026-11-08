@@ -33,6 +33,7 @@ struct DiscFields {
     watermark: gtk::CheckButton,
     psx_undither: gtk::CheckButton,
     disable_asset_downloads: gtk::CheckButton,
+    disable_snd0: gtk::CheckButton,
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
@@ -210,6 +211,7 @@ fn convert_page(
         watermark: gtk::CheckButton::with_label(&tr("Watermark")),
         psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
+        disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -311,6 +313,7 @@ fn convert_page(
     let (options, option_body) = section(&tr("Options"));
     for label in [
         "Disable Asset Downloads",
+        "Disable SND0",
         "Disable LibCrypt Patching",
         "Use CDDA",
         "PSX-undither",
@@ -335,6 +338,7 @@ fn convert_page(
                 option_body.append(&fields.disable_libcrypt_patching);
             }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
+            "Disable SND0" => option_body.append(&fields.disable_snd0),
             "Force NTSC" => option_body.append(&fields.force_ntsc),
             "Allow Disc Swapping" => option_body.append(&fields.allow_disc_swapping),
             "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
@@ -631,6 +635,9 @@ fn convert_page(
             Some(fields_for_create.manual_entry.text().to_string())
         };
         let mut assets = fields_for_create.assets.borrow().clone();
+        if fields_for_create.disable_snd0.is_active() {
+            assets.snd0 = None;
+        }
         if fields_for_create.use_pic1_logo.is_active() {
             assets.logo = assets.pic1.clone();
         }

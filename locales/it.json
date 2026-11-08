@@ -32,6 +32,7 @@
   "Game ID": "Game ID",
   "Enter the disc ID manually if automatic detection shows UNKN00000.": "Inserisci manualmente l'ID del disco se il rilevamento mostra UNKN00000.",
   "Disable Asset Downloads": "Disabilita download assets",
+  "Disable SND0": "Disattiva SND0",
   "Disable LibCrypt Patching": "Disabilita libcrypt",
   "Use CDDA": "Usa CDDA",
   "Store CD audio as raw CDDA tracks instead of ATRAC3": "Mantieni l'audio CD in tracce CDDA raw invece di convertirlo in ATRAC3",
