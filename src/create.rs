@@ -273,6 +273,11 @@ pub fn create_from_image_with_progress_and_warnings(
                     }
                     error => error,
                 })?;
+                if fs::metadata(&output.path)?.len() == 0 {
+                    return Err(CreateError::Invalid(
+                        "automatic Xdelta compatibility patch produced no disc image".into(),
+                    ));
+                }
                 Some(output)
             } else {
                 None
