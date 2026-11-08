@@ -24,4 +24,4 @@ flatpak install --user --bundle dist/org.popfe.PSPManager.flatpak
 
 Installa prima il runtime se manca: `flatpak install flathub org.gnome.Platform//51`. Il bundle richiede il runtime sul sistema destinatario; il file `.flatpak` contiene l'app e l'encoder, non il runtime GNOME. Il manifest di `flatpak-builder` è in `packaging/org.popfe.PSPManager.yaml`.
 
-Avvio dal menu applicazioni oppure con `pop-fe-psp`. La lingua segue il sistema (italiano e inglese, inglese come fallback); le preferenze dei dialoghi sono salvate in `~/.config/org.popfe.PSPManager/dialogs.json`. Le immagini e i file temporanei usano `$XDG_CACHE_HOME/org.popfe.PSPManager`.
+Avvio dal menu applicazioni oppure con `pop-fe-psp`. La lingua segue il sistema (italiano e inglese, inglese come fallback); la cartella iniziale dei dialoghi è salvata in `~/.config/org.popfe.PSPManager/dialogs.json`, mentre le opzioni di conversione selezionate e la cartella PSP sono salvate in `~/.config/org.popfe.PSPManager/preferences.json`. Le immagini e i file temporanei usano `$XDG_CACHE_HOME/org.popfe.PSPManager`.

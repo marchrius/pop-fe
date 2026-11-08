@@ -3,6 +3,52 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ConversionPreferences {
+    pub cdda: bool,
+    pub disable_libcrypt_patching: bool,
+    pub force_ntsc: bool,
+    pub allow_disc_swapping: bool,
+    pub disable_title_image: bool,
+    pub use_pic1_logo: bool,
+    pub watermark: bool,
+    pub psx_undither: bool,
+    pub disable_asset_downloads: bool,
+    pub disable_snd0: bool,
+    pub ntsc_u_icon0: bool,
+    pub theme: u32,
+    pub psp_root: String,
+}
+
+impl ConversionPreferences {
+    pub fn load() -> Self {
+        fs::read(preferences_path())
+            .ok()
+            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save(&self) -> bool {
+        let settings = preferences_path();
+        let Some(parent) = settings.parent() else {
+            return false;
+        };
+        if fs::create_dir_all(parent).is_err() {
+            return false;
+        }
+        let temporary = settings.with_extension(format!("{}.tmp", std::process::id()));
+        if serde_json::to_vec(self).is_ok_and(|bytes| fs::write(&temporary, bytes).is_ok())
+            && fs::rename(&temporary, &settings).is_ok()
+        {
+            true
+        } else {
+            let _ = fs::remove_file(temporary);
+            false
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Preferences {
     last_directory: PathBuf,
@@ -21,13 +67,7 @@ impl FolderHistory {
             .map(PathBuf::from)
             .filter(|path| path.is_absolute())
             .unwrap_or_else(|| PathBuf::from("/"));
-        let config_root = std::env::var_os("XDG_CONFIG_HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .unwrap_or_else(|| home.join(".config"));
-        let settings = config_root
-            .join("org.popfe.PSPManager")
-            .join("dialogs.json");
+        let settings = app_config_dir(&home).join("dialogs.json");
         let saved = fs::read(&settings)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Preferences>(&bytes).ok())
@@ -84,4 +124,20 @@ impl FolderHistory {
     fn accessible(path: &Path) -> bool {
         path.is_dir() && fs::read_dir(path).is_ok()
     }
+}
+
+fn preferences_path() -> PathBuf {
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| PathBuf::from("/"));
+    app_config_dir(&home).join("preferences.json")
+}
+
+fn app_config_dir(home: &Path) -> PathBuf {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home.join(".config"))
+        .join("org.popfe.PSPManager")
 }

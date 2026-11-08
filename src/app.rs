@@ -189,8 +189,14 @@ fn convert_page(
     );
     let files: Rc<RefCell<Vec<PathBuf>>> = Rc::default();
     let folder_history = Rc::new(RefCell::new(FolderHistory::load()));
+    let conversion_preferences = Rc::new(RefCell::new(crate::paths::ConversionPreferences::load()));
+    let saved_preferences = conversion_preferences.borrow().clone();
     let (settings, settings_body) = section(&tr("Game Details"));
-    let psp_root = append_entry(&settings_body, &tr("PSP Root Folder"), "");
+    let psp_root = append_entry(
+        &settings_body,
+        &tr("PSP Root Folder"),
+        &saved_preferences.psp_root,
+    );
     let title = append_entry(&settings_body, &tr("Title"), "");
     let id = append_entry(&settings_body, &tr("Game ID"), "");
     let icon_preview = asset_preview(64, 64);
@@ -232,6 +238,60 @@ fn convert_page(
         pic0_preview,
         pic1_preview,
     };
+    fields.cdda.set_active(saved_preferences.cdda);
+    fields
+        .disable_libcrypt_patching
+        .set_active(saved_preferences.disable_libcrypt_patching);
+    fields.force_ntsc.set_active(saved_preferences.force_ntsc);
+    fields
+        .allow_disc_swapping
+        .set_active(saved_preferences.allow_disc_swapping);
+    fields
+        .disable_title_image
+        .set_active(saved_preferences.disable_title_image);
+    fields
+        .use_pic1_logo
+        .set_active(saved_preferences.use_pic1_logo);
+    fields.watermark.set_active(saved_preferences.watermark);
+    fields
+        .psx_undither
+        .set_active(saved_preferences.psx_undither);
+    fields
+        .disable_asset_downloads
+        .set_active(saved_preferences.disable_asset_downloads);
+    fields
+        .disable_snd0
+        .set_active(saved_preferences.disable_snd0);
+    fields
+        .ntsc_u_icon0
+        .set_active(saved_preferences.ntsc_u_icon0);
+    fields
+        .theme
+        .set_selected(saved_preferences.theme.min((THEME_NAMES.len() - 1) as u32));
+    for check in [
+        fields.cdda.clone(),
+        fields.disable_libcrypt_patching.clone(),
+        fields.force_ntsc.clone(),
+        fields.allow_disc_swapping.clone(),
+        fields.disable_title_image.clone(),
+        fields.use_pic1_logo.clone(),
+        fields.watermark.clone(),
+        fields.psx_undither.clone(),
+        fields.disable_asset_downloads.clone(),
+        fields.disable_snd0.clone(),
+        fields.ntsc_u_icon0.clone(),
+    ] {
+        let preferences = conversion_preferences.clone();
+        let fields = fields.clone();
+        check.connect_toggled(move |_| {
+            store_conversion_preferences(&preferences, &fields);
+        });
+    }
+    let preferences_for_root = conversion_preferences.clone();
+    let fields_for_root = fields.clone();
+    fields.psp_root.connect_changed(move |_| {
+        store_conversion_preferences(&preferences_for_root, &fields_for_root);
+    });
     let fields_for_download_toggle = fields.clone();
     let files_for_download_toggle = files.clone();
     fields.disable_asset_downloads.connect_toggled(move |_| {
@@ -631,9 +691,12 @@ fn convert_page(
     artwork_body.append(&theme_row);
     content.append(&artwork);
     let theme_fields = fields.clone();
-    fields
-        .theme
-        .connect_selected_notify(move |_| refresh_theme_art(&theme_fields));
+    let theme_fields_for_preferences = fields.clone();
+    let preferences_for_theme = conversion_preferences.clone();
+    fields.theme.connect_selected_notify(move |_| {
+        store_conversion_preferences(&preferences_for_theme, &theme_fields_for_preferences);
+        refresh_theme_art(&theme_fields);
+    });
     fields.status.set_xalign(0.0);
     fields.status.add_css_class("dim-label");
     content.append(&fields.status);
@@ -932,6 +995,27 @@ fn refresh_disc_list(
         list.append(&row);
     }
     clear.set_sensitive(!files.borrow().is_empty());
+}
+
+fn store_conversion_preferences(
+    preferences: &Rc<RefCell<crate::paths::ConversionPreferences>>,
+    fields: &DiscFields,
+) {
+    let mut preferences = preferences.borrow_mut();
+    preferences.cdda = fields.cdda.is_active();
+    preferences.disable_libcrypt_patching = fields.disable_libcrypt_patching.is_active();
+    preferences.force_ntsc = fields.force_ntsc.is_active();
+    preferences.allow_disc_swapping = fields.allow_disc_swapping.is_active();
+    preferences.disable_title_image = fields.disable_title_image.is_active();
+    preferences.use_pic1_logo = fields.use_pic1_logo.is_active();
+    preferences.watermark = fields.watermark.is_active();
+    preferences.psx_undither = fields.psx_undither.is_active();
+    preferences.disable_asset_downloads = fields.disable_asset_downloads.is_active();
+    preferences.disable_snd0 = fields.disable_snd0.is_active();
+    preferences.ntsc_u_icon0 = fields.ntsc_u_icon0.is_active();
+    preferences.theme = fields.theme.selected();
+    preferences.psp_root = fields.psp_root.text().to_string();
+    let _ = preferences.save();
 }
 
 fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
