@@ -185,7 +185,7 @@ impl Database {
         self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
     }
 
-    pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<&'static [u8]> {
+    pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<Vec<u8>> {
         let record = self.ppf_fixes.get(id)?;
         if record
             .tags
@@ -195,12 +195,7 @@ impl Database {
             return None;
         }
         let patch = record.hashes.as_ref()?.get(md5)?.get("xdelta")?;
-        match patch.as_str() {
-            "romhacks/Septentrion_videofix_pspvita.xdelta" => Some(include_bytes!(
-                "../romhacks/Septentrion_videofix_pspvita.xdelta"
-            )),
-            _ => None,
-        }
+        self.ppf_data.get(patch).and_then(|hex| decode_hex(hex))
     }
 }
 

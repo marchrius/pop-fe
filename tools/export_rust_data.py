@@ -52,7 +52,7 @@ def main():
     write("ppf_fixes", json_value(source["ppf_fixes"]))
     ppf_files = {
         str(path.relative_to(ROOT)): path.read_bytes().hex()
-        for folder in ("ppf", "libcrypt")
+        for folder in ("ppf", "libcrypt", "romhacks")
         for path in (ROOT / folder).glob("*")
         if path.is_file()
     }
