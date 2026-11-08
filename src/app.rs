@@ -246,10 +246,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     ] {
         match label {
             "Use CDDA" => {
-                fields.cdda.set_sensitive(false);
-                fields
-                    .cdda
-                    .set_tooltip_text(Some(&tr("CDDA conversion is not ported yet")));
+                fields.cdda.set_sensitive(true);
+                fields.cdda.set_tooltip_text(Some(&tr(
+                    "Store CD audio as raw CDDA tracks instead of ATRAC3",
+                )));
                 option_body.append(&fields.cdda);
             }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
@@ -409,6 +409,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             title,
             assets: fields_for_create.assets.borrow().clone(),
             include_title_image: true,
+            use_cdda: fields_for_create.cdda.is_active(),
         };
         fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
         progress_for_create.set_text(Some(&tr("Conversion in progress")));

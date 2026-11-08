@@ -51,6 +51,7 @@ pub struct PbpCreateConfig {
     pub title: String,
     pub assets: PbpAssets,
     pub include_title_image: bool,
+    pub use_cdda: bool,
 }
 
 pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
@@ -95,14 +96,24 @@ pub fn create_from_image_with_progress(
             .then(|| CueSheet::open_image(image_path))
             .transpose()
             .map_err(|error| CreateError::Invalid(error.to_string()))?;
-        let audio_tracks = if let Some(sheet) = &cue_sheet {
+        let audio_tracks = if config.use_cdda {
+            Vec::new()
+        } else if let Some(sheet) = &cue_sheet {
             prepare_audio_tracks(sheet, cancelled)?
         } else {
             Vec::new()
         };
         let normalized = if matches!(extension.as_str(), "cue" | "chd" | "ccd" | "iso") {
             let image = TempFile::new("raw-disc")?;
-            normalize_image(image_path, cue_sheet.as_ref(), &image.file, cancelled)?;
+            if config.use_cdda {
+                if let Some(sheet) = cue_sheet.as_ref() {
+                    normalize_cdda_image(sheet, &image.file, cancelled)?;
+                } else {
+                    normalize_image(image_path, cue_sheet.as_ref(), &image.file, cancelled)?;
+                }
+            } else {
+                normalize_image(image_path, cue_sheet.as_ref(), &image.file, cancelled)?;
+            }
             Some(image)
         } else {
             None
@@ -199,9 +210,17 @@ pub fn create_from_image_with_progress(
         };
         let disc_len = disc.metadata()?.len();
         let psiso = TempFile::new("psiso")?;
-        let psp_config = crate::database::Database::embedded()
+        let mut psp_config = crate::database::Database::embedded()
             .psp_config(&disc_id)
             .unwrap_or_else(|| EMPTY_PSP_CONFIG.to_vec());
+        if config.use_cdda {
+            if psp_config.len() > 0x09 {
+                psp_config[0x09] |= 0x20;
+            }
+            if psp_config.len() > 0x8d {
+                psp_config[0x8d] |= 0x20;
+            }
+        }
         let magic_word = crate::database::Database::embedded()
             .libcrypt
             .get(&disc_id)
@@ -455,6 +474,85 @@ fn normalize_image(
             io::copy(&mut source.take(length), &mut target)?;
         }
     }
+    Ok(())
+}
+
+fn normalize_cdda_image(
+    sheet: &CueSheet,
+    output: &File,
+    cancelled: &AtomicBool,
+) -> Result<(), CreateError> {
+    let mut target = output.try_clone()?;
+    target.set_len(0)?;
+    let mut seen = std::collections::HashSet::new();
+    for track in &sheet.tracks {
+        if !seen.insert(track.path.clone()) {
+            continue;
+        }
+        if sheet
+            .tracks
+            .iter()
+            .filter(|other| other.path == track.path)
+            .any(|other| other.mode.sector_size() != track.mode.sector_size())
+        {
+            return Err(CreateError::Invalid(format!(
+                "CDDA mode cannot merge mixed sector sizes in {}",
+                track.path.display()
+            )));
+        }
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let mut source = File::open(&track.path)?;
+        let sector_size = track.mode.sector_size() as usize;
+        let length = source.metadata()?.len();
+        if length == 0 || length % sector_size as u64 != 0 {
+            return Err(CreateError::Invalid(format!(
+                "CDDA image {} is not aligned to {}-byte sectors",
+                track.path.display(),
+                sector_size
+            )));
+        }
+        if sector_size == 2352 {
+            let mut buffer = [0u8; 1024 * 1024];
+            loop {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(CreateError::Cancelled);
+                }
+                let count = source.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                target.write_all(&buffer[..count])?;
+            }
+            continue;
+        }
+        let mut lba = 0u32;
+        while source.stream_position()? < length {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(CreateError::Cancelled);
+            }
+            match track.mode {
+                TrackMode::Mode1_2048 => {
+                    let mut payload = [0u8; 2048];
+                    source.read_exact(&mut payload)?;
+                    target.write_all(&mode1_sector(lba, payload))?;
+                }
+                TrackMode::Mode2_2336 => {
+                    let mut payload = [0u8; 2336];
+                    source.read_exact(&mut payload)?;
+                    let mut sector = sector_prefix(lba, 2);
+                    sector[16..].copy_from_slice(&payload);
+                    target.write_all(&sector)?;
+                }
+                _ => unreachable!("2352-byte sectors handled above"),
+            }
+            lba = lba
+                .checked_add(1)
+                .ok_or_else(|| CreateError::Invalid("CDDA disc has too many sectors".into()))?;
+        }
+    }
+    target.sync_all()?;
     Ok(())
 }
 

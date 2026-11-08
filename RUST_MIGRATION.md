@@ -15,7 +15,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
    di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE, CCD e CHD con tracce dati e audio.
    Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel
-   PSISO assieme alla TOC.
+   PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
+   imposta i flag POPS corrispondenti.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
    nella pagina Converti. I config POPS specifici per gioco e i dati LibCrypt
@@ -27,8 +28,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
-   fornito dai pacchetti Debian e Flatpak). Restano CDDA senza ricodifica, gli
-   altri romhack Xdelta e ulteriori opzioni audio. GUI e backend accettano CHD
+   fornito dai pacchetti Debian e Flatpak). Restano gli altri romhack Xdelta e
+   ulteriori opzioni audio. GUI e backend accettano CHD
    tramite `chdman` e CCD tramite parsing nativo; i pacchetti includono il
    decoder CHD.
 7. Conversione ed estrazione espongono percentuali determinate e cancellazione.

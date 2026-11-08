@@ -33,6 +33,7 @@
   "Disable Asset Downloads": "Disabilita download assets",
   "Disable LibCrypt Patching": "Disabilita libcrypt",
   "Use CDDA": "Usa CDDA",
+  "Store CD audio as raw CDDA tracks instead of ATRAC3": "Mantieni l'audio CD in tracce CDDA raw invece di convertirlo in ATRAC3",
   "PSX-undither": "PSX-undither",
   "Watermark": "Filigrana",
   "Disable PSTITLEIMG": "Disabilita PSTITLEIMG",
@@ -117,6 +118,5 @@
   "This procedural theme is not ported yet": "Questo tema generativo non è ancora stato portato",
   "Select between one and 32 disc images": "Seleziona da una a 32 immagini disco",
   "Select CUE, CCD, CHD, ISO or raw BIN/IMG images": "Seleziona immagini CUE, CCD, CHD, ISO o BIN/IMG raw",
-  "CDDA conversion is not ported yet": "La conversione CDDA non è ancora stata portata",
   "This option is not ported yet": "Questa opzione non è ancora stata portata"
 }
