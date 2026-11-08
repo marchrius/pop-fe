@@ -24,9 +24,11 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili
    con le dimensioni PSP; non replicano esattamente i filtri OpenCV originali.
-6. Restano CCD/CHD, CDDA senza ricodifica, Xdelta e ulteriori opzioni audio.
-   PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
+6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
+   È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
+   fornito dai pacchetti Debian e Flatpak). Restano CCD/CHD, CDDA senza
+   ricodifica, gli altri romhack Xdelta e ulteriori opzioni audio.
 7. Conversione ed estrazione espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
@@ -34,8 +36,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CCD/CHD, CDDA senza ricodifica,
-Xdelta o i filtri dei temi generativi; non va usata come
+la conversione Rust non supporta ancora CCD/CHD, CDDA senza ricodifica e tutti
+gli altri romhack Xdelta; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
 

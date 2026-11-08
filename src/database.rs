@@ -149,6 +149,24 @@ impl Database {
         }
         self.ppf_data.get(path?).and_then(|hex| decode_hex(hex))
     }
+
+    pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<&'static [u8]> {
+        let record = self.ppf_fixes.get(id)?;
+        if record
+            .tags
+            .as_ref()
+            .is_some_and(|tags| !tags.iter().any(|tag| tag == "psp"))
+        {
+            return None;
+        }
+        let patch = record.hashes.as_ref()?.get(md5)?.get("xdelta")?;
+        match patch.as_str() {
+            "romhacks/Septentrion_videofix_pspvita.xdelta" => Some(include_bytes!(
+                "../romhacks/Septentrion_videofix_pspvita.xdelta"
+            )),
+            _ => None,
+        }
+    }
 }
 
 fn decode_hex(input: &str) -> Option<Vec<u8>> {

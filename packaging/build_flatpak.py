@@ -120,11 +120,15 @@ def main():
     run(*cargo)
     binary = ROOT / 'target/release/pop-fe-psp'
     encoder = ensure_encoder()
+    xdelta = shutil.which('xdelta3')
+    if not xdelta:
+        raise RuntimeError('xdelta3 is required to package automatic Xdelta compatibility fixes')
+    xdelta = Path(xdelta)
     arch = host_architecture()
 
     runtime_ref = f'{RUNTIME}//{RUNTIME_VERSION}'
     runtime_location = find_runtime(runtime_ref)
-    verify_runtime_libraries([binary, encoder], runtime_location, arch)
+    verify_runtime_libraries([binary, encoder, xdelta], runtime_location, arch)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
@@ -136,6 +140,7 @@ def main():
         install_pairs = [
             (binary, app / 'bin/pop-fe-psp'),
             (encoder, app / 'bin/atracdenc'),
+            (xdelta, app / 'bin/xdelta3'),
             (ROOT / 'packaging/org.popfe.PSPManager.desktop', app / 'share/applications/org.popfe.PSPManager.desktop'),
             (ROOT / 'packaging/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg',
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),

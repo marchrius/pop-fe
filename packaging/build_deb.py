@@ -70,7 +70,7 @@ def main():
         control = stage / 'DEBIAN/control'
         control.parent.mkdir()
         depends = [
-            'libc6', 'libstdc++6', 'libsndfile1',
+            'libc6', 'libstdc++6', 'libsndfile1', 'xdelta3',
             'libgtk-4-1 (>= 4.10.0)', 'libadwaita-1-0 (>= 1.5.0)',
             'libgdk-pixbuf-2.0-0',
         ]

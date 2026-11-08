@@ -138,6 +138,10 @@ pub fn create_from_image_with_progress(
             .then_some(source_md5.as_deref())
             .flatten()
             .and_then(|md5| crate::database::Database::embedded().psp_patch(&disc_id, md5));
+        let xdelta = ppf_compatible
+            .then_some(source_md5.as_deref())
+            .flatten()
+            .and_then(|md5| crate::database::Database::embedded().psp_xdelta(&disc_id, md5));
         let patched = if let Some(patch) = patch {
             let temp = TempFile::new("patched-disc")?;
             let mut source = disc.try_clone()?;
@@ -154,6 +158,46 @@ pub fn create_from_image_with_progress(
             Some(temp) => temp.file.try_clone()?,
             None => disc,
         };
+        let xdelta_patched = if patched.is_none() {
+            if let Some(patch_data) = xdelta {
+                let source = TempFile::new("xdelta-source")?;
+                let mut input = disc.try_clone()?;
+                input.seek(SeekFrom::Start(0))?;
+                let mut target = source.file.try_clone()?;
+                io::copy(&mut input, &mut target)?;
+                let patch_file = TempFile::new("xdelta-patch")?;
+                fs::write(&patch_file.path, patch_data)?;
+                let output = TempFile::new("xdelta-output")?;
+                let result = Command::new("xdelta3")
+                    .arg("decode")
+                    .arg("-s")
+                    .arg(&source.path)
+                    .arg(&patch_file.path)
+                    .arg(&output.path)
+                    .output()
+                    .map_err(|error| {
+                        CreateError::Invalid(format!(
+                            "automatic Xdelta fix requires xdelta3: {error}"
+                        ))
+                    })?;
+                if !result.status.success() {
+                    return Err(CreateError::Invalid(format!(
+                        "automatic Xdelta compatibility patch failed: {}",
+                        String::from_utf8_lossy(&result.stderr).trim()
+                    )));
+                }
+                Some(output)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        let disc = match &xdelta_patched {
+            Some(temp) => temp.file.try_clone()?,
+            None => disc,
+        };
+        let disc_len = disc.metadata()?.len();
         let psiso = TempFile::new("psiso")?;
         let psp_config = crate::database::Database::embedded()
             .psp_config(&disc_id)
