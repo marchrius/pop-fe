@@ -2,6 +2,7 @@
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use flate2::Decompress;
 use flate2::FlushDecompress;
@@ -21,6 +22,8 @@ pub enum PbpError {
     Invalid(String),
     #[error("compressed PSISO sector is invalid")]
     Compression,
+    #[error("operation cancelled")]
+    Cancelled,
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +67,14 @@ impl Pbp {
     }
 
     pub fn extract(&self, output: &Path) -> Result<Vec<PathBuf>, PbpError> {
+        self.extract_cancellable(output, &AtomicBool::new(false))
+    }
+
+    pub fn extract_cancellable(
+        &self,
+        output: &Path,
+        cancelled: &AtomicBool,
+    ) -> Result<Vec<PathBuf>, PbpError> {
         fs::create_dir_all(output)?;
         let mut source = File::open(&self.path)?;
         let names = [
@@ -104,11 +115,15 @@ impl Pbp {
         let mut offset = psar;
         let mut disc_index = 0;
         while offset + 12 <= self.file_size {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(PbpError::Cancelled);
+            }
             source.seek(SeekFrom::Start(offset))?;
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000" {
-                let (image, cue) = self.extract_disc(&mut source, offset, output, disc_index)?;
+                let (image, cue) =
+                    self.extract_disc(&mut source, offset, output, disc_index, cancelled)?;
                 written.push(image);
                 written.push(cue);
                 disc_index += 1;
@@ -135,6 +150,7 @@ impl Pbp {
         base: u64,
         output: &Path,
         disc: usize,
+        cancelled: &AtomicBool,
     ) -> Result<(PathBuf, PathBuf), PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
@@ -155,6 +171,9 @@ impl Pbp {
         let payload = base + PSISO_HEADER_SIZE;
         let mut total = 0u64;
         loop {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(PbpError::Cancelled);
+            }
             if index_pos + 32 > base + image_size {
                 break;
             }
@@ -204,6 +223,9 @@ impl Pbp {
         target.set_len(actual_size)?;
         let mut track = 2usize;
         loop {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(PbpError::Cancelled);
+            }
             let table_offset = base + 0xc00 + ((track - 2) * 16) as u64;
             if table_offset + 8 > base + PSISO_HEADER_SIZE {
                 break;

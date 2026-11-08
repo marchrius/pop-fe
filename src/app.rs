@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -257,6 +259,19 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     progress.set_text(Some(&tr("Ready")));
     content.append(&progress);
     let progress_for_create = progress.clone();
+    let cancel = gtk::Button::with_label(&tr("Cancel"));
+    cancel.set_sensitive(false);
+    let cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
+    let state_for_cancel = cancel_state.clone();
+    let fields_for_cancel = fields.clone();
+    cancel.connect_clicked(move |_| {
+        if let Some(token) = state_for_cancel.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            fields_for_cancel.status.set_text(&tr("Stopping"));
+        }
+    });
+    let cancel_for_create = cancel.clone();
+    let state_for_create = cancel_state.clone();
     convert.connect_clicked(move |_| {
         let selected = files_for_create.borrow().clone();
         if selected.len() != 1 {
@@ -298,10 +313,13 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         progress_for_create.set_text(Some(&tr("Conversion in progress")));
         progress_for_create.pulse();
         button_for_create.set_sensitive(false);
+        cancel_for_create.set_sensitive(true);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        *state_for_create.borrow_mut() = Some(cancellation.clone());
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
             let _ = sender.send(
-                crate::create::create_from_image(&config)
+                crate::create::create_from_image_cancellable(&config, &cancellation)
                     .map_err(|error| error.to_string())
                     .map(|()| output),
             );
@@ -309,6 +327,8 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let fields = fields_for_create.clone();
         let button = button_for_create.clone();
         let progress = progress_for_create.clone();
+        let cancel_button = cancel_for_create.clone();
+        let cancel_state = state_for_create.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(Ok(path)) => {
@@ -320,14 +340,23 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                     progress.set_fraction(1.0);
                     progress.set_text(Some(&tr("Completed")));
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
                 Ok(Err(error)) => {
-                    fields
-                        .status
-                        .set_text(&tr("Conversion failed: {error}").replace("{error}", &error));
-                    progress.set_text(Some(&tr("Error")));
+                    if error == "operation cancelled" {
+                        fields.status.set_text(&tr("Operation stopped"));
+                        progress.set_text(Some(&tr("Operation stopped")));
+                    } else {
+                        fields
+                            .status
+                            .set_text(&tr("Conversion failed: {error}").replace("{error}", &error));
+                        progress.set_text(Some(&tr("Error")));
+                    }
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => {
@@ -337,12 +366,21 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     fields.status.set_text(&tr("Conversion failed"));
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
             }
         });
     });
-    content.append(&convert);
+    let conversion_actions = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .halign(gtk::Align::End)
+        .build();
+    conversion_actions.append(&cancel);
+    conversion_actions.append(&convert);
+    content.append(&conversion_actions);
     scroll
 }
 
@@ -523,10 +561,28 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     status.set_xalign(0.0);
     status.add_css_class("dim-label");
     content.append(&status);
+    let extract_progress = gtk::ProgressBar::new();
+    extract_progress.set_show_text(true);
+    extract_progress.set_text(Some(&tr("Ready")));
+    content.append(&extract_progress);
     let pbp_for_extract = pbp_path.clone();
     let output_for_extract = output_path.clone();
     let status_for_extract = status.clone();
     let extract_for_extract = extract.clone();
+    let progress_for_extract = extract_progress.clone();
+    let extract_cancel = gtk::Button::with_label(&tr("Cancel"));
+    extract_cancel.set_sensitive(false);
+    let extract_cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
+    let state_on_cancel = extract_cancel_state.clone();
+    let status_on_cancel = status.clone();
+    extract_cancel.connect_clicked(move |_| {
+        if let Some(token) = state_on_cancel.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            status_on_cancel.set_text(&tr("Stopping"));
+        }
+    });
+    let cancel_button_for_extract = extract_cancel.clone();
+    let state_for_extract = extract_cancel_state.clone();
     extract.connect_clicked(move |_| {
         let pbp = PathBuf::from(pbp_for_extract.text().as_str());
         let output = PathBuf::from(output_for_extract.text().as_str());
@@ -535,16 +591,24 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             return;
         }
         status_for_extract.set_text(&tr("Extraction in progress"));
+        progress_for_extract.set_text(Some(&tr("Extraction in progress")));
+        progress_for_extract.pulse();
         extract_for_extract.set_sensitive(false);
+        cancel_button_for_extract.set_sensitive(true);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        *state_for_extract.borrow_mut() = Some(cancellation.clone());
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
             let result = crate::pbp::Pbp::open(&pbp)
-                .and_then(|container| container.extract(&output))
+                .and_then(|container| container.extract_cancellable(&output, &cancellation))
                 .map_err(|error| error.to_string());
             let _ = sender.send(result);
         });
         let status = status_for_extract.clone();
         let button = extract_for_extract.clone();
+        let progress = progress_for_extract.clone();
+        let cancel_button = cancel_button_for_extract.clone();
+        let cancel_state = state_for_extract.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(Ok(files)) => {
@@ -552,24 +616,50 @@ fn extract_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                         &tr("Extraction complete: {count} files")
                             .replace("{count}", &files.len().to_string()),
                     );
+                    progress.set_fraction(1.0);
+                    progress.set_text(Some(&tr("Completed")));
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
                 Ok(Err(error)) => {
-                    status.set_text(&tr("Extraction failed: {error}").replace("{error}", &error));
+                    if error == "operation cancelled" {
+                        status.set_text(&tr("Operation stopped"));
+                        progress.set_text(Some(&tr("Operation stopped")));
+                    } else {
+                        status
+                            .set_text(&tr("Extraction failed: {error}").replace("{error}", &error));
+                        progress.set_text(Some(&tr("Error")));
+                    }
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Empty) => {
+                    progress.pulse();
+                    gtk::glib::ControlFlow::Continue
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     status.set_text(&tr("Extraction failed"));
+                    progress.set_text(Some(&tr("Error")));
                     button.set_sensitive(true);
+                    cancel_button.set_sensitive(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
             }
         });
     });
-    content.append(&extract);
+    let extraction_actions = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .halign(gtk::Align::End)
+        .build();
+    extraction_actions.append(&extract_cancel);
+    extraction_actions.append(&extract);
+    content.append(&extraction_actions);
     scroll
 }
 

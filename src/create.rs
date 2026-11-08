@@ -2,6 +2,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use flate2::Compression;
@@ -26,6 +27,8 @@ pub enum CreateError {
     Io(#[from] io::Error),
     #[error("invalid conversion input: {0}")]
     Invalid(String),
+    #[error("operation cancelled")]
+    Cancelled,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -49,6 +52,13 @@ pub struct PbpCreateConfig {
 }
 
 pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
+    create_from_image_cancellable(config, &AtomicBool::new(false))
+}
+
+pub fn create_from_image_cancellable(
+    config: &PbpCreateConfig,
+    cancelled: &AtomicBool,
+) -> Result<(), CreateError> {
     if config.game_id.len() != 9 || !config.game_id.is_ascii() {
         return Err(CreateError::Invalid(
             "game ID must contain nine ASCII characters".into(),
@@ -62,7 +72,7 @@ pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
         .to_ascii_lowercase();
     let normalized = if extension == "cue" || extension == "iso" {
         let image = TempFile::new("raw-disc")?;
-        normalize_image(&config.image, &image.file)?;
+        normalize_image(&config.image, &image.file, cancelled)?;
         Some(image)
     } else {
         None
@@ -76,7 +86,14 @@ pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
         return Err(CreateError::Invalid("disc image is empty".into()));
     }
     let psiso = TempFile::new("psiso")?;
-    write_psiso(&disc, disc_len, &psiso.file, &config.game_id, &config.title)?;
+    write_psiso(
+        &disc,
+        disc_len,
+        &psiso.file,
+        &config.game_id,
+        &config.title,
+        cancelled,
+    )?;
     let psiso_len = psiso.file.metadata()?.len();
 
     let mut assets = Vec::new();
@@ -143,7 +160,20 @@ pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
     let psiso_start = output.stream_position()?;
     let mut psiso_reader = psiso.file.try_clone()?;
     psiso_reader.seek(SeekFrom::Start(0))?;
-    io::copy(&mut psiso_reader.take(psiso_len), &mut output)?;
+    let mut remaining = psiso_len;
+    let mut buffer = vec![0u8; 1024 * 1024];
+    while remaining > 0 {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let read_len = buffer.len().min(remaining as usize);
+        let count = psiso_reader.read(&mut buffer[..read_len])?;
+        if count == 0 {
+            break;
+        }
+        output.write_all(&buffer[..count])?;
+        remaining -= count as u64;
+    }
     let startdat = align_up(output.stream_position()?, 16);
     output.seek(SeekFrom::Start(startdat))?;
     let mut start_header = STARTDAT_HEADER.to_vec();
@@ -168,7 +198,11 @@ pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
     Ok(())
 }
 
-fn normalize_image(path: &PathBuf, output: &File) -> Result<(), CreateError> {
+fn normalize_image(
+    path: &PathBuf,
+    output: &File,
+    cancelled: &AtomicBool,
+) -> Result<(), CreateError> {
     let mut target = output.try_clone()?;
     target.set_len(0)?;
     if path
@@ -179,6 +213,9 @@ fn normalize_image(path: &PathBuf, output: &File) -> Result<(), CreateError> {
         let mut source = File::open(path)?;
         let mut lba = 0u32;
         loop {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(CreateError::Cancelled);
+            }
             let mut payload = [0u8; 2048];
             let mut read = 0;
             while read < payload.len() {
@@ -216,6 +253,9 @@ fn normalize_image(path: &PathBuf, output: &File) -> Result<(), CreateError> {
             let mut lba = 0u32;
             let mut remaining = length;
             while remaining > 0 {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(CreateError::Cancelled);
+                }
                 let mut payload = [0u8; 2048];
                 let wanted = remaining.min(2048) as usize;
                 source.read_exact(&mut payload[..wanted])?;
@@ -230,6 +270,9 @@ fn normalize_image(path: &PathBuf, output: &File) -> Result<(), CreateError> {
             let mut lba = 0u32;
             let mut remaining = length;
             while remaining > 0 {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(CreateError::Cancelled);
+                }
                 let mut payload = [0u8; 2336];
                 let wanted = remaining.min(2336) as usize;
                 source.read_exact(&mut payload[..wanted])?;
@@ -354,6 +397,7 @@ fn write_psiso(
     output: &File,
     game_id: &str,
     title: &str,
+    cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
     let sector_count = disc_len.div_ceil(SECTOR_SIZE as u64);
     let image_size = sector_count
@@ -394,6 +438,9 @@ fn write_psiso(
     let mut data_offset = 0u32;
     let mut remaining = disc_len;
     for _ in 0..sector_count {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
         let mut sector = vec![0u8; SECTOR_SIZE];
         let count = remaining.min(SECTOR_SIZE as u64) as usize;
         source.read_exact(&mut sector[..count])?;
