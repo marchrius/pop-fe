@@ -3,6 +3,7 @@ _internal/
 __pycache__/
 build/
 dist/
+target/
 pop-fe-work/
 pop-fe-psp-work/
 pop-fe-ps3-work/

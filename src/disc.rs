@@ -71,6 +71,45 @@ pub struct CueSheet {
 }
 
 impl CueSheet {
+    pub fn open_image(path: &Path) -> Result<Self, DiscError> {
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("cue"))
+        {
+            return Self::parse(path);
+        }
+        let mode = match path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase()
+            .as_str()
+        {
+            "iso" => TrackMode::Mode1_2048,
+            "bin" | "img" => TrackMode::Mode2_2352,
+            other => {
+                return Err(DiscError::Cue(format!(
+                    "unsupported image extension .{other}"
+                )));
+            }
+        };
+        if !path.is_file() {
+            return Err(DiscError::Io(io::Error::new(
+                io::ErrorKind::NotFound,
+                path.display().to_string(),
+            )));
+        }
+        Ok(Self {
+            tracks: vec![Track {
+                number: 1,
+                path: path.to_path_buf(),
+                mode,
+                index01: 0,
+            }],
+        })
+    }
+
     pub fn parse(path: &Path) -> Result<Self, DiscError> {
         let source = std::fs::read_to_string(path)?;
         let mut current_file: Option<PathBuf> = None;
@@ -180,14 +219,19 @@ impl CueSheet {
         let mut buffer = [0u8; 1024 * 1024];
         let mut remaining = byte_count;
         while remaining > 0 {
-            let count = file.read(&mut buffer[..buffer.len().min(remaining as usize)])?;
+            let read_length = buffer.len().min(remaining as usize);
+            let count = file.read(&mut buffer[..read_length])?;
             if count == 0 {
                 break;
             }
             digest.update(&buffer[..count]);
             remaining -= count as u64;
         }
-        Ok(format!("{:x}", digest.finalize()))
+        Ok(digest
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect())
     }
 
     /// Read the root SYSTEM.CNF file from a standard ISO9660 data track.
