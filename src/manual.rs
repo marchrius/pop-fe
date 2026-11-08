@@ -53,7 +53,12 @@ pub fn create_psp_document(
     if contents.starts_with(b"\0PGD") {
         return Ok(None);
     }
-    let mut pages = if contents.starts_with(b"%PDF") {
+    let mut pages = if contents.starts_with(b"Rar!") {
+        let extracted = extract_rar(&contents, &temporary.0, cancelled, &progress)?;
+        directory_pages(&extracted, &temporary.0, cancelled, &|fraction| {
+            progress(0.55 + fraction * 0.35);
+        })?
+    } else if contents.starts_with(b"%PDF") {
         pdf_pages(&contents, &temporary.0, cancelled, &progress)?
     } else {
         archive_pages(&contents, &temporary.0, cancelled, &progress)?
@@ -66,6 +71,74 @@ pub fn create_psp_document(
     }
     progress(0.95);
     create_document(game_id, &pages).map(Some)
+}
+
+fn extract_rar(
+    contents: &[u8],
+    temporary: &Path,
+    cancelled: &AtomicBool,
+    progress: &dyn Fn(f64),
+) -> Result<PathBuf, ManualError> {
+    let archive = temporary.join("manual.rar");
+    let destination = temporary.join("rar-pages");
+    fs::write(&archive, contents)?;
+    fs::create_dir(&destination)?;
+    let output_option = format!("-o{}", destination.display());
+    let mut child = Command::new("7z")
+        .args(["x", "-y", "-bd", "-bso0", "-bsp0"])
+        .arg(output_option)
+        .arg(&archive)
+        .current_dir(temporary)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| ManualError::Invalid(format!("7-Zip is unavailable: {error}")))?;
+    loop {
+        if cancelled.load(AtomicOrdering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(ManualError::Cancelled);
+        }
+        let (size, entries) = directory_usage(&destination)?;
+        if size > MAX_MANUAL_BYTES as u64 || entries > MAX_ARCHIVE_ENTRIES {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(ManualError::Invalid(
+                "RAR manual exceeds extraction limits".into(),
+            ));
+        }
+        progress(0.35 + 0.2 * (size as f64 / MAX_MANUAL_BYTES as f64).min(1.0));
+        if let Some(status) = child.try_wait()? {
+            if !status.success() {
+                return Err(ManualError::Invalid("could not extract RAR manual".into()));
+            }
+            break;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(destination)
+}
+
+fn directory_usage(root: &Path) -> Result<(u64, usize), ManualError> {
+    let mut pending = vec![root.to_path_buf()];
+    let mut size = 0u64;
+    let mut entries = 0usize;
+    while let Some(directory) = pending.pop() {
+        for entry in fs::read_dir(directory)? {
+            let entry = entry?;
+            let file_type = entry.file_type()?;
+            entries += 1;
+            if file_type.is_dir() {
+                pending.push(entry.path());
+            } else if file_type.is_file() {
+                size = size.saturating_add(entry.metadata()?.len());
+            }
+            if size > MAX_MANUAL_BYTES as u64 || entries > MAX_ARCHIVE_ENTRIES {
+                return Ok((size, entries));
+            }
+        }
+    }
+    Ok((size, entries))
 }
 
 fn read_source(

@@ -176,6 +176,10 @@ def main():
         raise RuntimeError('poppler-utils and ffmpeg are required to package automatic manual support')
     pdftoppm = Path(pdftoppm)
     ffmpeg = Path(ffmpeg)
+    sevenzip = Path('/usr/lib/7zip/7z')
+    sevenzip_module = Path('/usr/lib/7zip/7z.so')
+    if not sevenzip.is_file() or not sevenzip_module.is_file():
+        raise RuntimeError('7zip is required to package automatic RAR/CBR manual support')
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
@@ -201,14 +205,25 @@ def main():
             target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg') else 0o644)
 
         app_lib = app / 'lib'
-        bundled_tools = [chdman, pdftoppm, ffmpeg]
+        sevenzip_target = app_lib / '7zip/7z'
+        sevenzip_module_target = app_lib / '7zip/7z.so'
+        sevenzip_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(sevenzip, sevenzip_target)
+        shutil.copy2(sevenzip_module, sevenzip_module_target)
+        sevenzip_target.chmod(0o755)
+        sevenzip_module_target.chmod(0o644)
+        wrapper = app / 'bin/7z'
+        wrapper.write_text('#!/bin/sh\nexec /app/lib/7zip/7z "$@"\n', encoding='utf-8')
+        wrapper.chmod(0o755)
+
+        bundled_tools = [chdman, pdftoppm, ffmpeg, sevenzip_target, sevenzip_module_target]
         for name, source in missing_runtime_dependency_closure(bundled_tools, runtime_location).items():
             target = app_lib / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             target.chmod(0o755)
         verify_runtime_libraries(
-            [binary, encoder, xdelta, app / 'bin/chdman', app / 'bin/pdftoppm', app / 'bin/ffmpeg'], runtime_location, arch,
+            [binary, encoder, xdelta, app / 'bin/chdman', app / 'bin/pdftoppm', app / 'bin/ffmpeg', sevenzip_target, sevenzip_module_target], runtime_location, arch,
             bundled_library_dirs=[app_lib],
         )
 
