@@ -33,6 +33,8 @@
   "Enter the disc ID manually if automatic detection shows UNKN00000.": "Enter the disc ID manually if automatic detection shows UNKN00000.",
   "Disable Asset Downloads": "Disable Asset Downloads",
   "Disable SND0": "Disable SND0",
+  "NTSC-U style ICON0": "NTSC-U style ICON0",
+  "Could not create NTSC-U ICON0: {error}": "Could not create NTSC-U ICON0: {error}",
   "Search YouTube…": "Search YouTube…",
   "Load a disc before searching for audio": "Load a disc before searching for audio",
   "Searching YouTube for game audio": "Searching YouTube for game audio",

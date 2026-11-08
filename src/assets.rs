@@ -14,6 +14,55 @@ use crate::database::Database;
 
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_SND0_BYTES: usize = 500_000;
+const NTSC_U_ICON0_FRAME: &[u8] = include_bytes!("../data/psp/icon0_ntsc_u.png");
+
+pub fn frame_ntsc_u_icon0(
+    source_path: &Path,
+    game_id: &str,
+) -> Result<PathBuf, Box<dyn std::error::Error>> {
+    let metadata = fs::metadata(source_path)?;
+    if metadata.len() == 0 || metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return Err("ICON0 image is empty or exceeds the 32 MB limit".into());
+    }
+    let source_bytes = fs::read(source_path)?;
+    let digest = Md5::digest(&source_bytes);
+    let digest = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let directory = cache_directory().join("assets");
+    fs::create_dir_all(&directory)?;
+    let output = directory.join(format!("{}-icon0-ntsc-u-{digest}.png", safe_id(game_id)));
+    if output.is_file() {
+        return Ok(output);
+    }
+    let frame = Pixbuf::from_read(Cursor::new(NTSC_U_ICON0_FRAME))?
+        .scale_simple(80, 80, InterpType::Hyper)
+        .ok_or("could not scale the NTSC-U ICON0 frame")?;
+    let foreground = Pixbuf::from_read(Cursor::new(source_bytes))?
+        .apply_embedded_orientation()
+        .ok_or("could not read the ICON0 orientation")?
+        .scale_simple(60, 67, InterpType::Hyper)
+        .ok_or("could not scale the ICON0 cover")?;
+    foreground.composite(
+        &frame,
+        14,
+        7,
+        60,
+        67,
+        14.0,
+        7.0,
+        1.0,
+        1.0,
+        InterpType::Hyper,
+        255,
+    );
+    let png = frame.save_to_bufferv("png", &[])?;
+    let temporary = output.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary, png)?;
+    fs::rename(temporary, &output)?;
+    Ok(output)
+}
 
 pub fn watermark_pic1_png(
     png: &[u8],

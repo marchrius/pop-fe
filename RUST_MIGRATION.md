@@ -43,7 +43,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 7. Conversione espone CDDA, Force NTSC, Disc Swapping, watermark, PSX-undither,
    disattivazione SND0 e PSTITLEIMG e PIC1 come logo. SND0 personalizzato si
    converte in ATRAC3, si limita ai vincoli PSP e può essere cercato/scaricato
-   da YouTube tramite yt-dlp. Conversione ed estrazione
+   da YouTube tramite yt-dlp. ICON0 può usare la cornice PSN NTSC-U originale.
+   Conversione ed estrazione
    espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel

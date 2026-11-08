@@ -34,6 +34,7 @@ struct DiscFields {
     psx_undither: gtk::CheckButton,
     disable_asset_downloads: gtk::CheckButton,
     disable_snd0: gtk::CheckButton,
+    ntsc_u_icon0: gtk::CheckButton,
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
@@ -212,6 +213,7 @@ fn convert_page(
         psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
+        ntsc_u_icon0: gtk::CheckButton::with_label(&tr("NTSC-U style ICON0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -232,6 +234,10 @@ fn convert_page(
         if !files_for_download_toggle.borrow().is_empty() {
             analyze_first(&files_for_download_toggle, &fields_for_download_toggle);
         }
+    });
+    let fields_for_icon_frame = fields.clone();
+    fields.ntsc_u_icon0.connect_toggled(move |_| {
+        refresh_asset_previews(&fields_for_icon_frame);
     });
     let (frame, body) = section(&tr("Disc Images"));
     let list = gtk::ListBox::builder()
@@ -314,6 +320,7 @@ fn convert_page(
     for label in [
         "Disable Asset Downloads",
         "Disable SND0",
+        "NTSC-U style ICON0",
         "Disable LibCrypt Patching",
         "Use CDDA",
         "PSX-undither",
@@ -339,6 +346,7 @@ fn convert_page(
             }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
             "Disable SND0" => option_body.append(&fields.disable_snd0),
+            "NTSC-U style ICON0" => option_body.append(&fields.ntsc_u_icon0),
             "Force NTSC" => option_body.append(&fields.force_ntsc),
             "Allow Disc Swapping" => option_body.append(&fields.allow_disc_swapping),
             "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
@@ -733,6 +741,20 @@ fn convert_page(
             Some(fields_for_create.manual_entry.text().to_string())
         };
         let mut assets = fields_for_create.assets.borrow().clone();
+        if fields_for_create.ntsc_u_icon0.is_active()
+            && let Some(icon0) = assets.icon0.as_deref()
+        {
+            match crate::assets::frame_ntsc_u_icon0(icon0, &id) {
+                Ok(framed) => assets.icon0 = Some(framed),
+                Err(error) => {
+                    fields_for_create.status.set_text(
+                        &tr("Could not create NTSC-U ICON0: {error}")
+                            .replace("{error}", &error.to_string()),
+                    );
+                    return;
+                }
+            }
+        }
         if fields_for_create.disable_snd0.is_active() {
             assets.snd0 = None;
         }
@@ -989,6 +1011,7 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.id.set_text("");
     fields.title.set_text("");
     fields.cdda.set_active(false);
+    fields.ntsc_u_icon0.set_active(false);
     fields.status.set_text(&tr("Ready"));
     fields
         .theme_generation
@@ -1115,7 +1138,18 @@ fn apply_asset_overrides(
 
 fn refresh_asset_previews(fields: &DiscFields) {
     let assets = fields.assets.borrow();
-    set_picture(&fields.icon_preview, assets.icon0.as_deref());
+    let framed_icon = if fields.ntsc_u_icon0.is_active() {
+        assets
+            .icon0
+            .as_deref()
+            .and_then(|path| crate::assets::frame_ntsc_u_icon0(path, &fields.id.text()).ok())
+    } else {
+        None
+    };
+    set_picture(
+        &fields.icon_preview,
+        framed_icon.as_deref().or(assets.icon0.as_deref()),
+    );
     set_picture(&fields.pic0_preview, assets.pic0.as_deref());
     set_picture(&fields.pic1_preview, assets.pic1.as_deref());
 }
