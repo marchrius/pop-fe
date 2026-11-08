@@ -18,17 +18,19 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
    nella pagina Converti.
-5. Supporto completo a CUE multi-traccia, CCD/CHD, multi-disco, audio,
-   patch, LibCrypt, acquisizione automatica di asset/temi e anteprima XMB.
-6. Progress dettagliato/cancellazione, packaging `.deb`/Flatpak Rust e
+5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE. I temi
+   pittorici generativi sono elencati ma i loro filtri non sono ancora portati.
+6. Supporto completo a CUE multi-traccia, CCD/CHD, multi-disco, audio,
+   patch e LibCrypt.
+7. Progress percentuale, packaging `.deb`/Flatpak Rust e
    rimozione del backend Python dal pacchetto.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CUE multi-traccia, più dischi, selezione
-dei temi e anteprima XMB, o le patch di compatibilità; non va usata come
-sostituto per
-generare EBOOT destinati alla PSP finché il porting non sarà validato.
+la conversione Rust non supporta ancora CUE multi-traccia, più dischi, tracce
+CDDA, patch di compatibilità o i filtri dei temi generativi; non va usata come
+sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
+validato.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4 e libadwaita, oltre a Rust/Cargo.

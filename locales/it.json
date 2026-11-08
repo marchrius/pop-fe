@@ -113,5 +113,6 @@
   "Load a disc before previewing the theme": "Carica un disco prima di visualizzare l’anteprima del tema",
   "PSP XMB simulation · actual artwork from the selected game and theme.": "Simulazione XMB PSP · immagini reali del gioco e del tema selezionato.",
   "Loading theme artwork": "Caricamento immagini del tema",
-  "Wait for theme artwork to finish loading": "Attendi il caricamento delle immagini del tema"
+  "Wait for theme artwork to finish loading": "Attendi il caricamento delle immagini del tema",
+  "This procedural theme is not ported yet": "Questo tema generativo non è ancora stato portato"
 }

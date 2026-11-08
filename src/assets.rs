@@ -1,6 +1,6 @@
 //! Download and normalize known game artwork for embedding in PSP EBOOT files.
 use std::fs;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -124,12 +124,19 @@ fn cached_image(
     {
         return None;
     }
-    let bytes = response.bytes().ok()?;
+    let mut bytes = Vec::new();
+    response
+        .take((MAX_IMAGE_BYTES + 1) as u64)
+        .read_to_end(&mut bytes)
+        .ok()?;
     if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
         return None;
     }
     let pixbuf = Pixbuf::from_read(Cursor::new(bytes)).ok()?;
-    if pixbuf.width() > 8000 || pixbuf.height() > 8000 {
+    if pixbuf.width() > 8000
+        || pixbuf.height() > 8000
+        || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
+    {
         return None;
     }
     save_scaled(&pixbuf, &path, size).ok()?;

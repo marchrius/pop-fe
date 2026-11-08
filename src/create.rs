@@ -126,10 +126,13 @@ pub fn create_from_image_cancellable(
     let psar = align_up(cursor + 30_632, 0x10000);
     offsets[7] = psar as u32;
 
-    if let Some(parent) = config.output.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let mut output = File::create(&config.output)?;
+    let output_dir = config
+        .output
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    fs::create_dir_all(output_dir)?;
+    let staged_output = TempFile::new_in(output_dir, "eboot")?;
+    let mut output = staged_output.file.try_clone()?;
     let mut header = [0u8; 0x28];
     header[..4].copy_from_slice(b"\0PBP");
     put_u32(&mut header, 4, 0x10000);
@@ -195,6 +198,8 @@ pub fn create_from_image_cancellable(
     }
     let _ = psiso_start;
     output.sync_all()?;
+    drop(output);
+    fs::rename(&staged_output.path, &config.output)?;
     Ok(())
 }
 
@@ -372,8 +377,12 @@ struct TempFile {
 }
 impl TempFile {
     fn new(label: &str) -> io::Result<Self> {
+        Self::new_in(&std::env::temp_dir(), label)
+    }
+
+    fn new_in(directory: &std::path::Path, label: &str) -> io::Result<Self> {
         let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
-        let path = std::env::temp_dir().join(format!(
+        let path = directory.join(format!(
             "pop-fe-{label}-{}-{sequence}.tmp",
             std::process::id()
         ));
