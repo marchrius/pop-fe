@@ -141,5 +141,14 @@
   "Select Folder…": "Seleziona cartella…",
   "Game ID": "ID gioco",
   "Conversion warning: {error}": "Avviso durante la conversione: {error}",
-  "Manual could not be added: {error}": "Impossibile aggiungere il manuale: {error}"
+  "Manual could not be added: {error}": "Impossibile aggiungere il manuale: {error}",
+  "I/O error: ": "Errore I/O: ",
+  "Invalid conversion input: ": "Input di conversione non valido: ",
+  "Invalid PBP: ": "PBP non valido: ",
+  "Cannot read disc image: ": "Impossibile leggere l’immagine disco: ",
+  "Invalid or unsupported CUE file: ": "File CUE non valido o non supportato: ",
+  "Manual I/O failed: ": "Errore I/O del manuale: ",
+  "Manual processing failed: ": "Elaborazione del manuale non riuscita: ",
+  "Compressed PSISO sector is invalid": "Il settore PSISO compresso non è valido",
+  "Disc ID could not be determined": "Impossibile determinare l’ID del disco"
 }

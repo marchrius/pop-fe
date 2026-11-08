@@ -140,5 +140,14 @@
   "Select Manual Folder": "Select Manual Folder",
   "Select Folder…": "Select Folder…",
   "Conversion warning: {error}": "Conversion warning: {error}",
-  "Manual could not be added: {error}": "Manual could not be added: {error}"
+  "Manual could not be added: {error}": "Manual could not be added: {error}",
+  "I/O error: ": "I/O error: ",
+  "Invalid conversion input: ": "Invalid conversion input: ",
+  "Invalid PBP: ": "Invalid PBP: ",
+  "Cannot read disc image: ": "Cannot read disc image: ",
+  "Invalid or unsupported CUE file: ": "Invalid or unsupported CUE file: ",
+  "Manual I/O failed: ": "Manual I/O failed: ",
+  "Manual processing failed: ": "Manual processing failed: ",
+  "Compressed PSISO sector is invalid": "Compressed PSISO sector is invalid",
+  "Disc ID could not be determined": "Disc ID could not be determined"
 }

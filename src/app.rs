@@ -920,6 +920,7 @@ fn convert_page(
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Warning(warning)) => {
+                    let warning = crate::i18n::localize_error(&warning);
                     fields
                         .status
                         .set_text(&tr("Conversion warning: {error}").replace("{error}", &warning));
@@ -932,7 +933,8 @@ fn convert_page(
                     if let Some(warning) = warning_state.borrow().as_deref() {
                         message.push('\n');
                         message.push_str(
-                            &tr("Manual could not be added: {error}").replace("{error}", warning),
+                            &tr("Manual could not be added: {error}")
+                                .replace("{error}", &crate::i18n::localize_error(warning)),
                         );
                     }
                     fields.status.set_text(&message);
@@ -949,9 +951,10 @@ fn convert_page(
                         fields.status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
                     } else {
-                        fields
-                            .status
-                            .set_text(&tr("Conversion failed: {error}").replace("{error}", &error));
+                        fields.status.set_text(
+                            &tr("Conversion failed: {error}")
+                                .replace("{error}", &crate::i18n::localize_error(&error)),
+                        );
                         progress.set_text(Some(&tr("Error")));
                     }
                     button.set_sensitive(true);
@@ -1618,7 +1621,7 @@ fn extract_page(
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Warning(warning)) => {
-                    status.set_text(&warning);
+                    status.set_text(&crate::i18n::localize_error(&warning));
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Finished(Ok(files))) => {
@@ -1640,8 +1643,10 @@ fn extract_page(
                         status.set_text(&tr("Operation stopped"));
                         progress.set_text(Some(&tr("Operation stopped")));
                     } else {
-                        status
-                            .set_text(&tr("Extraction failed: {error}").replace("{error}", &error));
+                        status.set_text(
+                            &tr("Extraction failed: {error}")
+                                .replace("{error}", &crate::i18n::localize_error(&error)),
+                        );
                         progress.set_text(Some(&tr("Error")));
                     }
                     button.set_sensitive(true);

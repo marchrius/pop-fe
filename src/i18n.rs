@@ -48,3 +48,29 @@ pub fn tr(message: &str) -> String {
         .cloned()
         .unwrap_or_else(|| message.to_owned())
 }
+
+pub fn localize_error(message: &str) -> String {
+    const PREFIXES: [(&str, &str); 7] = [
+        ("I/O error: ", "I/O error: "),
+        ("invalid conversion input: ", "Invalid conversion input: "),
+        ("invalid PBP: ", "Invalid PBP: "),
+        ("cannot read disc image: ", "Cannot read disc image: "),
+        (
+            "invalid or unsupported CUE file: ",
+            "Invalid or unsupported CUE file: ",
+        ),
+        ("manual I/O failed: ", "Manual I/O failed: "),
+        ("manual processing failed: ", "Manual processing failed: "),
+    ];
+    for (prefix, translation_key) in PREFIXES {
+        if let Some(detail) = message.strip_prefix(prefix) {
+            return format!("{}{}", tr(translation_key), localize_error(detail));
+        }
+    }
+    match message {
+        "operation cancelled" => tr("Operation stopped"),
+        "compressed PSISO sector is invalid" => tr("Compressed PSISO sector is invalid"),
+        "disc ID could not be determined" => tr("Disc ID could not be determined"),
+        _ => message.to_owned(),
+    }
+}
