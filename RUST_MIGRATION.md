@@ -55,7 +55,12 @@ La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
 esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
 gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
 LibCrypt `lcp`. Perciò la copertura LibCrypt è limitata alle patch PPF archiviate
-nel repository. Non usare ancora il port come sostituto per generare EBOOT
+nel repository: il database locale descrive 230 ID protetti e contiene PPF
+statiche per 74 di essi; la versione originale delega l'identificazione e la
+patch degli altri casi all'eseguibile esterno `lcp`. Il port completo richiede
+di migrare il catalogo di patch upstream e associare i boot file agli ID prima
+di rimuovere questa lacuna.
+Non usare ancora il port come sostituto per generare EBOOT
 destinati alla PSP finché non sarà validato su immagini e hardware reali. Non è
 ancora portato il download e la conversione automatica dei manuali in
 DOCUMENT.DAT. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
