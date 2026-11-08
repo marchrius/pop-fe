@@ -196,7 +196,9 @@ fn convert_page(
     let icon_preview = asset_preview(64, 64);
     let pic0_preview = asset_preview(132, 76);
     let pic1_preview = asset_preview(160, 90);
-    let theme = gtk::DropDown::from_strings(&THEME_NAMES);
+    let theme_labels = THEME_NAMES.iter().map(|name| tr(name)).collect::<Vec<_>>();
+    let theme_label_refs = theme_labels.iter().map(String::as_str).collect::<Vec<_>>();
+    let theme = gtk::DropDown::from_strings(&theme_label_refs);
     let manual_entry = gtk::Entry::builder().hexpand(true).build();
     let theme_generation = Rc::new(Cell::new(0));
     let theme_loading = Rc::new(Cell::new(false));
