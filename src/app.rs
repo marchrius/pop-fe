@@ -36,6 +36,7 @@ struct DiscFields {
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
     theme: gtk::DropDown,
+    analysis_generation: Rc<Cell<u64>>,
     theme_generation: Rc<Cell<u64>>,
     theme_loading: Rc<Cell<bool>>,
     icon_preview: gtk::Picture,
@@ -163,6 +164,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         theme,
+        analysis_generation: Rc::new(Cell::new(0)),
         theme_generation,
         theme_loading,
         icon_preview,
@@ -592,6 +594,8 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields
         .status
         .set_text(&tr("Analyzing disc and loading assets"));
+    let generation = fields.analysis_generation.get().wrapping_add(1);
+    fields.analysis_generation.set(generation);
     fields.id.set_text("");
     fields.title.set_text("");
     fields
@@ -620,6 +624,9 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     });
     let fields = fields.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(80), move || {
+        if fields.analysis_generation.get() != generation {
+            return gtk::glib::ControlFlow::Break;
+        }
         match receiver.try_recv() {
             Ok(Ok((metadata, assets))) => {
                 fields.id.set_text(&metadata.id);
@@ -650,6 +657,9 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
 }
 
 fn reset_disc_fields(fields: &DiscFields) {
+    fields
+        .analysis_generation
+        .set(fields.analysis_generation.get().wrapping_add(1));
     fields.id.set_text("");
     fields.title.set_text("");
     fields.cdda.set_active(false);
