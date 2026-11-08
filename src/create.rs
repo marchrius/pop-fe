@@ -91,8 +91,8 @@ pub fn create_from_image_with_progress(
             .and_then(|value| value.to_str())
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let cue_sheet = (extension == "cue")
-            .then(|| CueSheet::parse(image_path))
+        let cue_sheet = matches!(extension.as_str(), "cue" | "chd")
+            .then(|| CueSheet::open_image(image_path))
             .transpose()
             .map_err(|error| CreateError::Invalid(error.to_string()))?;
         let audio_tracks = if let Some(sheet) = &cue_sheet {
@@ -100,7 +100,7 @@ pub fn create_from_image_with_progress(
         } else {
             Vec::new()
         };
-        let normalized = if extension == "cue" || extension == "iso" {
+        let normalized = if matches!(extension.as_str(), "cue" | "chd" | "iso") {
             let image = TempFile::new("raw-disc")?;
             normalize_image(image_path, cue_sheet.as_ref(), &image.file, cancelled)?;
             Some(image)

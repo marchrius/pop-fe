@@ -52,7 +52,7 @@ def find_runtime(runtime_ref):
     )
 
 
-def verify_runtime_libraries(binaries, runtime_location, arch):
+def verify_runtime_libraries(binaries, runtime_location, arch, bundled_library_dirs=()):
     loader_names = {
         'x86_64': 'ld-linux-x86-64.so.2',
         'aarch64': 'ld-linux-aarch64.so.1',
@@ -84,7 +84,7 @@ def verify_runtime_libraries(binaries, runtime_location, arch):
         files / 'usr/lib' / triple,
         files / 'lib',
         files / 'usr/lib',
-    ]
+    ] + list(bundled_library_dirs)
     library_path = ':'.join(str(path) for path in library_dirs)
     runtime_root = files.resolve()
     for binary in binaries:
@@ -102,10 +102,27 @@ def verify_runtime_libraries(binaries, runtime_location, arch):
             if '=>' not in line:
                 continue
             resolved = line.split('=>', 1)[1].strip().split(' (', 1)[0]
-            if resolved.startswith('/') and not Path(resolved).resolve().is_relative_to(runtime_root):
+            resolved_path = Path(resolved).resolve() if resolved.startswith('/') else None
+            if resolved_path and not resolved_path.is_relative_to(runtime_root) and not any(
+                resolved_path.is_relative_to(directory.resolve()) for directory in bundled_library_dirs
+            ):
                 raise RuntimeError(
                     f'{binary.name} resolves {resolved} outside the Flatpak runtime'
                 )
+
+
+def missing_runtime_dependencies(binary, runtime_location):
+    files = (runtime_location / 'files').resolve()
+    result = subprocess.run(['ldd', str(binary)], text=True, capture_output=True, check=True)
+    missing = {}
+    for line in result.stdout.splitlines():
+        if '=>' not in line:
+            continue
+        resolved = line.split('=>', 1)[1].strip().split(' (', 1)[0]
+        source = Path(resolved)
+        if resolved.startswith('/') and source.is_file() and not source.resolve().is_relative_to(files):
+            missing[source.name] = source
+    return missing
 
 
 def main():
@@ -128,7 +145,10 @@ def main():
 
     runtime_ref = f'{RUNTIME}//{RUNTIME_VERSION}'
     runtime_location = find_runtime(runtime_ref)
-    verify_runtime_libraries([binary, encoder, xdelta], runtime_location, arch)
+    chdman = shutil.which('chdman')
+    if not chdman:
+        raise RuntimeError('chdman (MAME tools) is required to package CHD support')
+    chdman = Path(chdman)
 
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
@@ -141,6 +161,7 @@ def main():
             (binary, app / 'bin/pop-fe-psp'),
             (encoder, app / 'bin/atracdenc'),
             (xdelta, app / 'bin/xdelta3'),
+            (chdman, app / 'bin/chdman'),
             (ROOT / 'packaging/org.popfe.PSPManager.desktop', app / 'share/applications/org.popfe.PSPManager.desktop'),
             (ROOT / 'packaging/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg',
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),
@@ -148,7 +169,18 @@ def main():
         for source, target in install_pairs:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc') else 0o644)
+            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman') else 0o644)
+
+        app_lib = app / 'lib'
+        for name, source in missing_runtime_dependencies(chdman, runtime_location).items():
+            target = app_lib / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
+            target.chmod(0o755)
+        verify_runtime_libraries(
+            [binary, encoder, xdelta, app / 'bin/chdman'], runtime_location, arch,
+            bundled_library_dirs=[app_lib],
+        )
 
         run(
             'flatpak', 'build-finish', '--command=pop-fe-psp', '--share=ipc',

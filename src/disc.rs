@@ -1,8 +1,11 @@
 //! PlayStation disc identification primitives used by the Rust backend.
 
 use std::fs::File;
+use std::hash::{Hash, Hasher};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use md5::{Digest, Md5};
 use thiserror::Error;
@@ -73,6 +76,13 @@ pub struct CueSheet {
 
 impl CueSheet {
     pub fn open_image(path: &Path) -> Result<Self, DiscError> {
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("chd"))
+        {
+            return Self::parse(&materialize_chd(path)?);
+        }
         if path
             .extension()
             .and_then(|ext| ext.to_str())
@@ -273,6 +283,96 @@ impl CueSheet {
         Err(DiscError::Cue(
             "SYSTEM.CNF not found in ISO9660 root".into(),
         ))
+    }
+}
+
+fn materialize_chd(path: &Path) -> Result<PathBuf, DiscError> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    let metadata = std::fs::metadata(path)?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.canonicalize()?.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    metadata.modified().ok().hash(&mut hasher);
+    let key = format!("{:016x}", hasher.finish());
+    let cache_root = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|home| home.join(".cache"))
+        })
+        .unwrap_or_else(std::env::temp_dir)
+        .join("org.popfe.PSPManager/disc-images");
+    std::fs::create_dir_all(&cache_root)?;
+    let cached_dir = cache_root.join(key);
+    let cached_cue = cached_dir.join("disc.cue");
+    if cached_cue.is_file() && cached_dir.join("disc.bin").is_file() {
+        return Ok(cached_cue);
+    }
+    if cached_dir.exists() {
+        std::fs::remove_dir_all(&cached_dir)?;
+    }
+    let temporary = cache_root.join(format!(
+        "extract-{}-{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir(&temporary)?;
+    let image = temporary.join("disc.bin");
+    let cue = temporary.join("disc.cue");
+    let bundled_chdman = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join("chdman")))
+        .filter(|exe| exe.is_file());
+    let mut command = bundled_chdman
+        .as_ref()
+        .map(Command::new)
+        .unwrap_or_else(|| Command::new("chdman"));
+    if let Some(executable) = &bundled_chdman {
+        if let Some(app_dir) = executable.parent().and_then(Path::parent) {
+            let library_dir = app_dir.join("lib");
+            let mut library_path = library_dir.into_os_string();
+            if let Some(existing) = std::env::var_os("LD_LIBRARY_PATH") {
+                library_path.push(":");
+                library_path.push(existing);
+            }
+            command.env("LD_LIBRARY_PATH", library_path);
+        }
+    }
+    let extraction = command
+        .args(["extractcd", "-f", "-i"])
+        .arg(path)
+        .arg("-ob")
+        .arg(&image)
+        .arg("-o")
+        .arg(&cue)
+        .output();
+    let result = match extraction {
+        Ok(output) if output.status.success() && image.is_file() && cue.is_file() => Ok(()),
+        Ok(output) => Err(DiscError::Cue(format!(
+            "chdman could not extract {}: {}",
+            path.display(),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ))),
+        Err(error) => Err(DiscError::Cue(format!(
+            "CHD input requires chdman (MAME tools): {error}"
+        ))),
+    };
+    if let Err(error) = result {
+        let _ = std::fs::remove_dir_all(&temporary);
+        return Err(error);
+    }
+    match std::fs::rename(&temporary, &cached_dir) {
+        Ok(()) => Ok(cached_cue),
+        Err(_) if cached_cue.is_file() && cached_dir.join("disc.bin").is_file() => {
+            let _ = std::fs::remove_dir_all(&temporary);
+            Ok(cached_cue)
+        }
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&temporary);
+            Err(DiscError::Io(error))
+        }
     }
 }
 

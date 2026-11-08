@@ -13,7 +13,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, CUE e tracce AEA:
    implementata, da verificare con PBP reali.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
-   di 32 dischi; accetta BIN/IMG raw, ISO 2048 e CUE con tracce dati e audio.
+   di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE e CHD con tracce dati e audio.
    Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel
    PSISO assieme alla TOC.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
@@ -27,8 +27,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
-   fornito dai pacchetti Debian e Flatpak). Restano CCD/CHD, CDDA senza
-   ricodifica, gli altri romhack Xdelta e ulteriori opzioni audio.
+   fornito dai pacchetti Debian e Flatpak). Resta CCD, CDDA senza ricodifica,
+   gli altri romhack Xdelta e ulteriori opzioni audio. GUI e backend
+   accettano CHD tramite `chdman`, mantenendo l'estrazione in cache; entrambi i
+   pacchetti distribuiscono il decoder.
 7. Conversione ed estrazione espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
@@ -36,7 +38,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CCD/CHD, CDDA senza ricodifica e tutti
+la conversione Rust non supporta ancora CCD, CDDA senza ricodifica e tutti
 gli altri romhack Xdelta; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
