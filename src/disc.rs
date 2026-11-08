@@ -38,7 +38,7 @@ impl TrackMode {
         }
     }
 
-    fn sector_size(self) -> u64 {
+    pub fn sector_size(self) -> u64 {
         match self {
             Self::Mode1_2048 => 2048,
             Self::Mode2_2336 => 2336,

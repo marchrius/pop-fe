@@ -104,5 +104,7 @@
   "Conversion complete": "Conversion complete",
   "Conversion failed: {error}": "Conversion failed: {error}",
   "Conversion failed": "Conversion failed",
-  "Error": "Error"
+  "Error": "Error",
+  "Select one disc image; multiple discs are not supported yet": "Select one disc image; multiple discs are not supported yet",
+  "Select a CUE, ISO or raw BIN/IMG image": "Select a CUE, ISO or raw BIN/IMG image"
 }

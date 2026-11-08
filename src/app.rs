@@ -261,7 +261,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let selected = files_for_create.borrow().clone();
         if selected.len() != 1 {
             fields_for_create.status.set_text(&tr(
-                "Select one raw BIN image; other formats and multiple discs are not supported yet",
+                "Select one disc image; multiple discs are not supported yet",
             ));
             return;
         }
@@ -270,10 +270,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             .and_then(|ext| ext.to_str())
             .unwrap_or_default()
             .to_ascii_lowercase();
-        if !["bin", "img"].contains(&extension.as_str()) {
-            fields_for_create.status.set_text(&tr(
-                "The native writer currently accepts raw 2352-byte BIN/IMG images",
-            ));
+        if !["bin", "img", "iso", "cue"].contains(&extension.as_str()) {
+            fields_for_create
+                .status
+                .set_text(&tr("Select a CUE, ISO or raw BIN/IMG image"));
             return;
         }
         let id = fields_for_create.id.text().to_string();
@@ -301,7 +301,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
             let _ = sender.send(
-                crate::create::create_from_raw(&config)
+                crate::create::create_from_image(&config)
                     .map_err(|error| error.to_string())
                     .map(|()| output),
             );

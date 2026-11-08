@@ -9,6 +9,8 @@ use flate2::write::DeflateEncoder;
 use sha1::{Digest, Sha1};
 use thiserror::Error;
 
+use crate::disc::{CueSheet, TrackMode};
+
 const SECTOR_SIZE: usize = 0x9300;
 const PSISO_PAYLOAD_OFFSET: u64 = 0x100000;
 const PSP_BODY: &[u8] = include_bytes!("../data/psp/datapspbody.bin");
@@ -46,13 +48,29 @@ pub struct PbpCreateConfig {
     pub include_title_image: bool,
 }
 
-pub fn create_from_raw(config: &PbpCreateConfig) -> Result<(), CreateError> {
+pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
     if config.game_id.len() != 9 || !config.game_id.is_ascii() {
         return Err(CreateError::Invalid(
             "game ID must contain nine ASCII characters".into(),
         ));
     }
-    let disc = File::open(&config.image)?;
+    let extension = config
+        .image
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let normalized = if extension == "cue" || extension == "iso" {
+        let image = TempFile::new("raw-disc")?;
+        normalize_image(&config.image, &image.file)?;
+        Some(image)
+    } else {
+        None
+    };
+    let disc = match &normalized {
+        Some(temp) => temp.file.try_clone()?,
+        None => File::open(&config.image)?,
+    };
     let disc_len = disc.metadata()?.len();
     if disc_len == 0 {
         return Err(CreateError::Invalid("disc image is empty".into()));
@@ -148,6 +166,161 @@ pub fn create_from_raw(config: &PbpCreateConfig) -> Result<(), CreateError> {
     let _ = psiso_start;
     output.sync_all()?;
     Ok(())
+}
+
+fn normalize_image(path: &PathBuf, output: &File) -> Result<(), CreateError> {
+    let mut target = output.try_clone()?;
+    target.set_len(0)?;
+    if path
+        .extension()
+        .and_then(|ext| ext.to_str())
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("iso"))
+    {
+        let mut source = File::open(path)?;
+        let mut lba = 0u32;
+        loop {
+            let mut payload = [0u8; 2048];
+            let mut read = 0;
+            while read < payload.len() {
+                let count = source.read(&mut payload[read..])?;
+                if count == 0 {
+                    break;
+                }
+                read += count;
+            }
+            if read == 0 {
+                break;
+            }
+            let sector = mode1_sector(lba, payload);
+            target.write_all(&sector)?;
+            lba = lba
+                .checked_add(1)
+                .ok_or_else(|| CreateError::Invalid("ISO is too large".into()))?;
+        }
+        return Ok(());
+    }
+    let sheet = CueSheet::parse(path).map_err(|error| CreateError::Invalid(error.to_string()))?;
+    if sheet.tracks.len() != 1 {
+        return Err(CreateError::Invalid(
+            "native conversion currently supports CUE sheets with one track".into(),
+        ));
+    }
+    let track = &sheet.tracks[0];
+    let mut source = File::open(&track.path)?;
+    let sector_size = track.mode.sector_size();
+    let start = track.index01.saturating_mul(sector_size);
+    let length = source.metadata()?.len().saturating_sub(start);
+    source.seek(SeekFrom::Start(start))?;
+    match track.mode {
+        TrackMode::Mode1_2048 => {
+            let mut lba = 0u32;
+            let mut remaining = length;
+            while remaining > 0 {
+                let mut payload = [0u8; 2048];
+                let wanted = remaining.min(2048) as usize;
+                source.read_exact(&mut payload[..wanted])?;
+                target.write_all(&mode1_sector(lba, payload))?;
+                remaining -= wanted as u64;
+                lba = lba
+                    .checked_add(1)
+                    .ok_or_else(|| CreateError::Invalid("CUE image is too large".into()))?;
+            }
+        }
+        TrackMode::Mode2_2336 => {
+            let mut lba = 0u32;
+            let mut remaining = length;
+            while remaining > 0 {
+                let mut payload = [0u8; 2336];
+                let wanted = remaining.min(2336) as usize;
+                source.read_exact(&mut payload[..wanted])?;
+                let mut sector = sector_prefix(lba, 2);
+                sector[16..].copy_from_slice(&payload);
+                target.write_all(&sector)?;
+                remaining -= wanted as u64;
+                lba = lba
+                    .checked_add(1)
+                    .ok_or_else(|| CreateError::Invalid("CUE image is too large".into()))?;
+            }
+        }
+        TrackMode::Mode1_2352 | TrackMode::Mode2_2352 | TrackMode::Audio => {
+            io::copy(&mut source.take(length), &mut target)?;
+        }
+    }
+    Ok(())
+}
+
+fn mode1_sector(lba: u32, payload: [u8; 2048]) -> [u8; 2352] {
+    let mut sector = sector_prefix(lba, 1);
+    sector[16..2064].copy_from_slice(&payload);
+    let edc = edc(&sector[..2064]);
+    sector[2064..2068].copy_from_slice(&edc.to_le_bytes());
+    let (p, q) = ecc(&sector);
+    sector[2076..2248].copy_from_slice(&p);
+    sector[2248..2352].copy_from_slice(&q);
+    sector
+}
+
+fn sector_prefix(lba: u32, mode: u8) -> [u8; 2352] {
+    let mut sector = [0u8; 2352];
+    sector[1..11].fill(0xff);
+    let frames = lba + 150;
+    sector[12] = bcd((frames / 4500) as u8);
+    sector[13] = bcd(((frames / 75) % 60) as u8);
+    sector[14] = bcd((frames % 75) as u8);
+    sector[15] = mode;
+    sector
+}
+
+fn edc(bytes: &[u8]) -> u32 {
+    let mut value = 0u32;
+    for byte in bytes {
+        value ^= *byte as u32;
+        for _ in 0..8 {
+            value = (value >> 1) ^ if value & 1 != 0 { 0xd8018001 } else { 0 };
+        }
+    }
+    value
+}
+
+fn ecc(data: &[u8; 2352]) -> ([u8; 172], [u8; 104]) {
+    fn parity(
+        source: &[u8],
+        major_count: usize,
+        minor_count: usize,
+        major_mult: usize,
+        minor_inc: usize,
+    ) -> Vec<u8> {
+        let mut forward = [0u8; 256];
+        let mut backward = [0u8; 256];
+        for value in 0..256 {
+            let doubled = (value << 1) ^ if value & 0x80 != 0 { 0x11d } else { 0 };
+            forward[value] = doubled as u8;
+            backward[(value ^ doubled) as usize] = value as u8;
+        }
+        let size = major_count * minor_count;
+        let mut output = vec![0u8; major_count * 2];
+        for major in 0..major_count {
+            let mut index = (major >> 1) * major_mult + (major & 1);
+            let (mut a, mut b) = (0u8, 0u8);
+            for _ in 0..minor_count {
+                let value = source[index];
+                index += minor_inc;
+                if index >= size {
+                    index -= size;
+                }
+                a ^= value;
+                b ^= value;
+                a = forward[a as usize];
+            }
+            a = backward[(forward[a as usize] ^ b) as usize];
+            output[major] = a;
+            output[major + major_count] = a ^ b;
+        }
+        output
+    }
+    let p = parity(&data[12..2076], 86, 24, 2, 86);
+    let q = parity(&data[12..2248], 52, 43, 86, 88);
+    (p.try_into().unwrap(), q.try_into().unwrap())
 }
 
 struct TempFile {
