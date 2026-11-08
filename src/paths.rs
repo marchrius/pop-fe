@@ -11,6 +11,8 @@ pub struct ConversionPreferences {
     pub force_ntsc: bool,
     pub allow_disc_swapping: bool,
     pub disable_title_image: bool,
+    pub disable_pic0: bool,
+    pub disable_pic1: bool,
     pub use_pic1_logo: bool,
     pub watermark: bool,
     pub psx_undither: bool,

@@ -48,6 +48,8 @@
   "PSX-undither": "PSX-undither",
   "Watermark": "Filigrana",
   "Disable PSTITLEIMG": "Disabilita PSTITLEIMG",
+  "Disable PIC0": "Disabilita PIC0 (logo del gioco)",
+  "Disable PIC1": "Disabilita PIC1 (sfondo)",
   "Use PIC1 as Logo": "PIC1 come logo",
   "Force NTSC": "Forza NTSC",
   "Allow Disc Swapping": "Permetti swap disc",

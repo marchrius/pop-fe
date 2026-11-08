@@ -29,6 +29,8 @@ struct DiscFields {
     force_ntsc: gtk::CheckButton,
     allow_disc_swapping: gtk::CheckButton,
     disable_title_image: gtk::CheckButton,
+    disable_pic0: gtk::CheckButton,
+    disable_pic1: gtk::CheckButton,
     use_pic1_logo: gtk::CheckButton,
     watermark: gtk::CheckButton,
     psx_undither: gtk::CheckButton,
@@ -217,6 +219,8 @@ fn convert_page(
         force_ntsc: gtk::CheckButton::with_label(&tr("Force NTSC")),
         allow_disc_swapping: gtk::CheckButton::with_label(&tr("Allow Disc Swapping")),
         disable_title_image: gtk::CheckButton::with_label(&tr("Disable PSTITLEIMG")),
+        disable_pic0: gtk::CheckButton::with_label(&tr("Disable PIC0")),
+        disable_pic1: gtk::CheckButton::with_label(&tr("Disable PIC1")),
         use_pic1_logo: gtk::CheckButton::with_label(&tr("Use PIC1 as Logo")),
         watermark: gtk::CheckButton::with_label(&tr("Watermark")),
         psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
@@ -250,6 +254,12 @@ fn convert_page(
         .disable_title_image
         .set_active(saved_preferences.disable_title_image);
     fields
+        .disable_pic0
+        .set_active(saved_preferences.disable_pic0);
+    fields
+        .disable_pic1
+        .set_active(saved_preferences.disable_pic1);
+    fields
         .use_pic1_logo
         .set_active(saved_preferences.use_pic1_logo);
     fields.watermark.set_active(saved_preferences.watermark);
@@ -274,6 +284,8 @@ fn convert_page(
         fields.force_ntsc.clone(),
         fields.allow_disc_swapping.clone(),
         fields.disable_title_image.clone(),
+        fields.disable_pic0.clone(),
+        fields.disable_pic1.clone(),
         fields.use_pic1_logo.clone(),
         fields.watermark.clone(),
         fields.psx_undither.clone(),
@@ -390,6 +402,8 @@ fn convert_page(
         "PSX-undither",
         "Watermark",
         "Disable PSTITLEIMG",
+        "Disable PIC0",
+        "Disable PIC1",
         "Use PIC1 as Logo",
         "Force NTSC",
         "Allow Disc Swapping",
@@ -414,6 +428,20 @@ fn convert_page(
             "Force NTSC" => option_body.append(&fields.force_ntsc),
             "Allow Disc Swapping" => option_body.append(&fields.allow_disc_swapping),
             "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
+            "Disable PIC0" => {
+                option_body.append(&fields.disable_pic0);
+                let fields = fields.clone();
+                fields
+                    .disable_pic0
+                    .connect_toggled(move |_| refresh_asset_previews(&fields));
+            }
+            "Disable PIC1" => {
+                option_body.append(&fields.disable_pic1);
+                let fields = fields.clone();
+                fields
+                    .disable_pic1
+                    .connect_toggled(move |_| refresh_asset_previews(&fields));
+            }
             "Use PIC1 as Logo" => option_body.append(&fields.use_pic1_logo),
             "Watermark" => option_body.append(&fields.watermark),
             "PSX-undither" => option_body.append(&fields.psx_undither),
@@ -828,6 +856,12 @@ fn convert_page(
         if fields_for_create.use_pic1_logo.is_active() {
             assets.logo = assets.pic1.clone();
         }
+        if fields_for_create.disable_pic0.is_active() {
+            assets.pic0 = None;
+        }
+        if fields_for_create.disable_pic1.is_active() {
+            assets.pic1 = None;
+        }
         let psp = PathBuf::from(fields_for_create.psp_root.text().as_str());
         let output = psp.join("PSP/GAME").join(&id).join("EBOOT.PBP");
         let config = crate::create::PbpCreateConfig {
@@ -1007,6 +1041,8 @@ fn store_conversion_preferences(
     preferences.force_ntsc = fields.force_ntsc.is_active();
     preferences.allow_disc_swapping = fields.allow_disc_swapping.is_active();
     preferences.disable_title_image = fields.disable_title_image.is_active();
+    preferences.disable_pic0 = fields.disable_pic0.is_active();
+    preferences.disable_pic1 = fields.disable_pic1.is_active();
     preferences.use_pic1_logo = fields.use_pic1_logo.is_active();
     preferences.watermark = fields.watermark.is_active();
     preferences.psx_undither = fields.psx_undither.is_active();
@@ -1250,8 +1286,28 @@ fn refresh_asset_previews(fields: &DiscFields) {
         &fields.icon_preview,
         framed_icon.as_deref().or(assets.icon0.as_deref()),
     );
-    set_picture(&fields.pic0_preview, assets.pic0.as_deref());
-    set_picture(&fields.pic1_preview, assets.pic1.as_deref());
+    set_picture(
+        &fields.pic0_preview,
+        if fields.disable_pic0.is_active() {
+            None
+        } else {
+            assets.pic0.as_deref()
+        },
+    );
+    fields
+        .pic0_preview
+        .set_visible(!fields.disable_pic0.is_active());
+    set_picture(
+        &fields.pic1_preview,
+        if fields.disable_pic1.is_active() {
+            None
+        } else {
+            assets.pic1.as_deref()
+        },
+    );
+    fields
+        .pic1_preview
+        .set_visible(!fields.disable_pic1.is_active());
 }
 
 fn show_xmb_preview(
@@ -1294,7 +1350,13 @@ fn show_xmb_preview(
     stage.set_size_request(480, 272);
     let background = asset_preview(480, 272);
     let assets = fields.assets.borrow().clone();
-    set_picture(&background, assets.pic1.as_deref());
+    let disable_pic0 = fields.disable_pic0.is_active();
+    let disable_pic1 = fields.disable_pic1.is_active();
+    set_picture(
+        &background,
+        (!disable_pic1).then_some(assets.pic1.as_deref()).flatten(),
+    );
+    background.set_visible(!disable_pic1);
     stage.set_child(Some(&background));
 
     let tile = gtk::Box::builder()
@@ -1319,12 +1381,15 @@ fn show_xmb_preview(
     stage.add_overlay(&tile);
 
     let detail = asset_preview(264, 158);
-    set_picture(&detail, assets.pic0.as_deref());
+    set_picture(
+        &detail,
+        (!disable_pic0).then_some(assets.pic0.as_deref()).flatten(),
+    );
     detail.set_halign(gtk::Align::End);
     detail.set_valign(gtk::Align::End);
     detail.set_margin_end(16);
     detail.set_margin_bottom(18);
-    detail.set_visible(assets.pic0.is_some());
+    detail.set_visible(!disable_pic0 && assets.pic0.is_some());
     stage.add_overlay(&detail);
     content.append(&stage);
     let caption_text = tr("PSP XMB simulation · actual artwork from the selected game and theme.");
@@ -1354,14 +1419,23 @@ fn show_xmb_preview(
         let background = background.clone();
         let icon = icon.clone();
         let detail = detail.clone();
+        let disable_pic0 = disable_pic0;
+        let disable_pic1 = disable_pic1;
         let operation_busy = operation_busy.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(assets) => {
-                    set_picture(&background, assets.pic1.as_deref());
+                    set_picture(
+                        &background,
+                        (!disable_pic1).then_some(assets.pic1.as_deref()).flatten(),
+                    );
+                    background.set_visible(!disable_pic1);
                     set_picture(&icon, assets.icon0.as_deref());
-                    set_picture(&detail, assets.pic0.as_deref());
-                    detail.set_visible(assets.pic0.is_some());
+                    set_picture(
+                        &detail,
+                        (!disable_pic0).then_some(assets.pic0.as_deref()).flatten(),
+                    );
+                    detail.set_visible(!disable_pic0 && assets.pic0.is_some());
                     operation_busy.set(false);
                     gtk::glib::ControlFlow::Break
                 }
