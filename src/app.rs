@@ -35,7 +35,9 @@ struct DiscFields {
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
-    manual_source: Rc<RefCell<Option<String>>>,
+    asset_overrides: Rc<RefCell<crate::create::PbpAssets>>,
+    asset_override_entries: Rc<RefCell<Vec<gtk::Entry>>>,
+    manual_entry: gtk::Entry,
     theme: gtk::DropDown,
     analysis_generation: Rc<Cell<u64>>,
     theme_generation: Rc<Cell<u64>>,
@@ -146,6 +148,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let pic0_preview = asset_preview(132, 76);
     let pic1_preview = asset_preview(160, 90);
     let theme = gtk::DropDown::from_strings(&THEME_NAMES);
+    let manual_entry = gtk::Entry::builder().hexpand(true).build();
     let theme_generation = Rc::new(Cell::new(0));
     let theme_loading = Rc::new(Cell::new(false));
     let fields = DiscFields {
@@ -164,7 +167,9 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
-        manual_source: Rc::new(RefCell::new(None)),
+        asset_overrides: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
+        asset_override_entries: Rc::new(RefCell::new(Vec::new())),
+        manual_entry,
         theme,
         analysis_generation: Rc::new(Cell::new(0)),
         theme_generation,
@@ -300,6 +305,103 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     }
     content.append(&options);
     let (artwork, artwork_body) = section(&tr("Game Artwork"));
+    for (key, label) in [
+        ("icon0", "ICON0"),
+        ("pic0", "PIC0"),
+        ("pic1", "PIC1"),
+        ("logo", "Logo"),
+        ("snd0", "SND0"),
+    ] {
+        let entry = append_entry(
+            &artwork_body,
+            &tr("Override {name}").replace("{name}", label),
+            "",
+        );
+        let browse = gtk::Button::with_label(&tr("Browse…"));
+        fields
+            .asset_override_entries
+            .borrow_mut()
+            .push(entry.clone());
+        if let Some(row) = entry
+            .parent()
+            .and_then(|widget| widget.downcast::<gtk::Box>().ok())
+        {
+            row.append(&browse);
+        }
+        let fields_for_change = fields.clone();
+        let key_for_change = key.to_string();
+        entry.connect_changed(move |entry| {
+            let text = entry.text();
+            set_asset_override(
+                &fields_for_change,
+                &key_for_change,
+                (!text.is_empty()).then(|| PathBuf::from(text.as_str())),
+            );
+            refresh_asset_previews(&fields_for_change);
+        });
+        let parent_for_dialog = parent.clone();
+        let entry_for_dialog = entry.clone();
+        let history_for_dialog = folder_history.clone();
+        browse.connect_clicked(move |_| {
+            let dialog = gtk::FileDialog::builder()
+                .title(&tr("Select Asset File"))
+                .build();
+            dialog.set_initial_folder(Some(&gio::File::for_path(
+                history_for_dialog.borrow().current(),
+            )));
+            let entry = entry_for_dialog.clone();
+            let history = history_for_dialog.clone();
+            dialog.open(
+                Some(&parent_for_dialog),
+                None::<&gio::Cancellable>,
+                move |result| {
+                    if let Ok(file) = result
+                        && let Some(path) = file.path()
+                    {
+                        history.borrow_mut().remember_file(&path);
+                        entry.set_text(&path.to_string_lossy());
+                    }
+                },
+            );
+        });
+    }
+    let manual_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(12)
+        .build();
+    let manual_label = gtk::Label::new(Some(&tr("Manual / PDF / ZIP")));
+    manual_label.set_xalign(0.0);
+    manual_label.set_width_chars(22);
+    manual_row.append(&manual_label);
+    manual_row.append(&fields.manual_entry);
+    let manual_browse = gtk::Button::with_label(&tr("Browse…"));
+    manual_row.append(&manual_browse);
+    artwork_body.append(&manual_row);
+    let parent_for_manual = parent.clone();
+    let manual_entry = fields.manual_entry.clone();
+    let history_for_manual = folder_history.clone();
+    manual_browse.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select Manual File"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(
+            history_for_manual.borrow().current(),
+        )));
+        let entry = manual_entry.clone();
+        let history = history_for_manual.clone();
+        dialog.open(
+            Some(&parent_for_manual),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_file(&path);
+                    entry.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
     let artwork_row = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(12)
@@ -437,10 +539,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             return;
         }
         let title = fields_for_create.title.text().to_string();
-        let manual_source = if fields_for_create.disable_asset_downloads.is_active() {
+        let manual_source = if fields_for_create.manual_entry.text().is_empty() {
             None
         } else {
-            fields_for_create.manual_source.borrow().clone()
+            Some(fields_for_create.manual_entry.text().to_string())
         };
         let mut assets = fields_for_create.assets.borrow().clone();
         if fields_for_create.use_pic1_logo.is_active() {
@@ -612,7 +714,6 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
-    *fields.manual_source.borrow_mut() = None;
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
@@ -641,7 +742,11 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
-                *fields.manual_source.borrow_mut() = metadata.manual.clone();
+                if fields.manual_entry.text().is_empty() {
+                    fields
+                        .manual_entry
+                        .set_text(metadata.manual.as_deref().unwrap_or(""));
+                }
                 *fields.base_assets.borrow_mut() = assets;
                 refresh_theme_art(&fields);
                 fields.status.set_text(&tr("Automatic data loaded"));
@@ -680,7 +785,11 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
-    *fields.manual_source.borrow_mut() = None;
+    *fields.asset_overrides.borrow_mut() = crate::create::PbpAssets::default();
+    for entry in fields.asset_override_entries.borrow().iter() {
+        entry.set_text("");
+    }
+    fields.manual_entry.set_text("");
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
@@ -697,10 +806,10 @@ fn refresh_theme_art(fields: &DiscFields) {
     fields.theme_generation.set(generation);
     fields.theme_loading.set(false);
     if selected == 0 || selected >= THEME_NAMES.len() {
-        *fields.assets.borrow_mut() = base.clone();
-        set_picture(&fields.icon_preview, base.icon0.as_deref());
-        set_picture(&fields.pic0_preview, base.pic0.as_deref());
-        set_picture(&fields.pic1_preview, base.pic1.as_deref());
+        let mut assets = base;
+        apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
+        *fields.assets.borrow_mut() = assets;
+        refresh_asset_previews(fields);
         return;
     }
     fields.theme_loading.set(true);
@@ -719,12 +828,11 @@ fn refresh_theme_art(fields: &DiscFields) {
     let fields = fields.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
         match receiver.try_recv() {
-            Ok(assets) if fields.theme_generation.get() == generation => {
+            Ok(mut assets) if fields.theme_generation.get() == generation => {
+                apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
                 fields.theme_loading.set(false);
-                *fields.assets.borrow_mut() = assets.clone();
-                set_picture(&fields.icon_preview, assets.icon0.as_deref());
-                set_picture(&fields.pic0_preview, assets.pic0.as_deref());
-                set_picture(&fields.pic1_preview, assets.pic1.as_deref());
+                *fields.assets.borrow_mut() = assets;
+                refresh_asset_previews(&fields);
                 fields.status.set_text(&tr("Theme artwork loaded"));
                 gtk::glib::ControlFlow::Break
             }
@@ -738,6 +846,67 @@ fn refresh_theme_art(fields: &DiscFields) {
             }
         }
     });
+}
+
+fn set_asset_override(fields: &DiscFields, key: &str, path: Option<PathBuf>) {
+    let mut overrides = fields.asset_overrides.borrow_mut();
+    let target = match key {
+        "icon0" => &mut overrides.icon0,
+        "pic0" => &mut overrides.pic0,
+        "pic1" => &mut overrides.pic1,
+        "logo" => &mut overrides.logo,
+        "snd0" => &mut overrides.snd0,
+        _ => return,
+    };
+    *target = path.clone();
+    drop(overrides);
+
+    if let Some(path) = path {
+        let mut assets = fields.assets.borrow_mut();
+        match key {
+            "icon0" => assets.icon0 = Some(path),
+            "pic0" => assets.pic0 = Some(path),
+            "pic1" => assets.pic1 = Some(path),
+            "logo" => assets.logo = Some(path),
+            "snd0" => assets.snd0 = Some(path),
+            _ => {}
+        }
+        drop(assets);
+        refresh_asset_previews(fields);
+    } else if !fields.id.text().is_empty() {
+        refresh_theme_art(fields);
+    }
+}
+
+fn apply_asset_overrides(
+    assets: &mut crate::create::PbpAssets,
+    overrides: &crate::create::PbpAssets,
+) {
+    if overrides.icon0.is_some() {
+        assets.icon0.clone_from(&overrides.icon0);
+    }
+    if overrides.icon1.is_some() {
+        assets.icon1.clone_from(&overrides.icon1);
+    }
+    if overrides.pic0.is_some() {
+        assets.pic0.clone_from(&overrides.pic0);
+    }
+    if overrides.pic1.is_some() {
+        assets.pic1.clone_from(&overrides.pic1);
+    }
+    if overrides.snd0.is_some() {
+        assets.snd0.clone_from(&overrides.snd0);
+    }
+    if overrides.logo.is_some() {
+        assets.logo.clone_from(&overrides.logo);
+    }
+}
+
+fn refresh_asset_previews(fields: &DiscFields) {
+    let assets = fields.assets.borrow();
+    set_picture(&fields.icon_preview, assets.icon0.as_deref());
+    set_picture(&fields.pic0_preview, assets.pic0.as_deref());
+    set_picture(&fields.pic1_preview, assets.pic1.as_deref());
 }
 
 fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
@@ -815,13 +984,15 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
         let id = game_id.clone();
         let selected_theme = theme_name.to_string();
         let allow_downloads = !fields.disable_asset_downloads.is_active();
+        let overrides = fields.asset_overrides.borrow().clone();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
-            let assets = if allow_downloads {
+            let mut assets = if allow_downloads {
                 crate::assets::load_theme_assets(&id, &selected_theme, &base)
             } else {
                 crate::assets::load_theme_assets_offline(&id, &selected_theme, &base)
             };
+            apply_asset_overrides(&mut assets, &overrides);
             let _ = sender.send(assets);
         });
         let background = background.clone();
