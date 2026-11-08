@@ -253,24 +253,26 @@ pub fn create_from_image_with_progress_and_warnings(
                 let patch_file = TempFile::new("xdelta-patch")?;
                 fs::write(&patch_file.path, patch_data)?;
                 let output = TempFile::new("xdelta-output")?;
-                let result = Command::new("xdelta3")
+                let mut command = Command::new("xdelta3");
+                command
                     .arg("decode")
                     .arg("-s")
                     .arg(&source.path)
                     .arg(&patch_file.path)
-                    .arg(&output.path)
-                    .output()
-                    .map_err(|error| {
+                    .arg(&output.path);
+                run_cancellable(
+                    &mut command,
+                    cancelled,
+                    "automatic Xdelta compatibility patch",
+                )
+                .map_err(|error| match error {
+                    CreateError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
                         CreateError::Invalid(format!(
                             "automatic Xdelta fix requires xdelta3: {error}"
                         ))
-                    })?;
-                if !result.status.success() {
-                    return Err(CreateError::Invalid(format!(
-                        "automatic Xdelta compatibility patch failed: {}",
-                        String::from_utf8_lossy(&result.stderr).trim()
-                    )));
-                }
+                    }
+                    error => error,
+                })?;
                 Some(output)
             } else {
                 None
