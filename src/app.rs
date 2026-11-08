@@ -639,22 +639,6 @@ fn refresh_theme_art(fields: &DiscFields) {
         set_picture(&fields.pic1_preview, base.pic1.as_deref());
         return;
     }
-    let theme_name = THEME_NAMES[selected];
-    if crate::database::Database::embedded()
-        .themes
-        .get(theme_name)
-        .and_then(|theme| theme.url.as_ref())
-        .is_none()
-    {
-        *fields.assets.borrow_mut() = base.clone();
-        set_picture(&fields.icon_preview, base.icon0.as_deref());
-        set_picture(&fields.pic0_preview, base.pic0.as_deref());
-        set_picture(&fields.pic1_preview, base.pic1.as_deref());
-        fields
-            .status
-            .set_text(&tr("This procedural theme is not ported yet"));
-        return;
-    }
     fields.theme_loading.set(true);
     fields.status.set_text(&tr("Loading theme artwork"));
     let theme_name = THEME_NAMES[selected].to_string();
@@ -750,17 +734,7 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
     detail.set_visible(assets.pic0.is_some());
     stage.add_overlay(&detail);
     content.append(&stage);
-    let caption_text = if fields.theme.selected() > 0
-        && crate::database::Database::embedded()
-            .themes
-            .get(theme_name)
-            .and_then(|theme| theme.url.as_ref())
-            .is_none()
-    {
-        tr("This procedural theme is not ported yet")
-    } else {
-        tr("PSP XMB simulation · actual artwork from the selected game and theme.")
-    };
+    let caption_text = tr("PSP XMB simulation · actual artwork from the selected game and theme.");
     let caption = gtk::Label::new(Some(&caption_text));
     caption.set_wrap(true);
     caption.add_css_class("dim-label");

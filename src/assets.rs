@@ -4,6 +4,7 @@ use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
 use gdk_pixbuf::{InterpType, Pixbuf};
 use reqwest::blocking::Client;
 
@@ -58,9 +59,7 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
         return base.clone();
     };
     let Some(repository) = theme_info.url.as_deref() else {
-        // Procedural painting themes are still represented by the game art until
-        // their image filters are ported from the Python implementation.
-        return base.clone();
+        return procedural_theme_assets(game_id, theme, base);
     };
     let directory = cache_directory().join("themes");
     if fs::create_dir_all(&directory).is_err() {
@@ -103,6 +102,216 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
         }
     }
     result
+}
+
+fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+    let directory = cache_directory().join("themes").join("generated-v1");
+    if fs::create_dir_all(&directory).is_err() {
+        return base.clone();
+    }
+    let title = Database::embedded().title(game_id).unwrap_or(game_id);
+    let pic0_path = directory.join(format!("{}-{theme}-pic0.png", safe_id(game_id)));
+    let pic1_path = directory.join(format!("{}-{theme}-pic1.png", safe_id(game_id)));
+    let mut result = base.clone();
+    if !pic0_path.is_file() && render_theme_pic0(&pic0_path, title, theme).is_err() {
+        return result;
+    }
+    if !pic1_path.is_file() {
+        let icon = base.icon0.as_deref().or(base.pic1.as_deref());
+        if let Some(icon) = icon {
+            if render_theme_pic1(&pic1_path, icon, theme).is_err() {
+                return result;
+            }
+        }
+    }
+    result.pic0 = Some(pic0_path);
+    if pic1_path.is_file() {
+        result.pic1 = Some(pic1_path);
+    }
+    result
+}
+
+fn render_theme_pic0(
+    path: &Path,
+    title: &str,
+    theme: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut surface = ImageSurface::create(Format::ARgb32, 310, 180)?;
+    let context = Context::new(&surface)?;
+    context.select_font_face("monospace", FontSlant::Normal, FontWeight::Bold);
+    context.set_font_size(10.0);
+    let ascii = theme == "ASCIIART";
+    let (r, g, b) = if ascii {
+        (0.50, 1.0, 0.50)
+    } else {
+        (1.0, 0.50, 0.50)
+    };
+    let rows: Vec<String> = title
+        .split(" - ")
+        .map(|s| s.chars().take(32).collect())
+        .collect();
+    let mut lines = vec!["##############################".to_string()];
+    lines.extend(rows.into_iter().take(8).map(|line| format!("# {line}")));
+    lines.push("##############################".to_string());
+    let mut y = 13.0;
+    for (index, line) in lines.iter().enumerate() {
+        if index == 0 || index + 1 == lines.len() || (ascii && index > 0) {
+            context.set_source_rgb(r, g, b);
+            context.move_to(if ascii { 50.0 } else { 62.0 }, y);
+            context.show_text(line)?;
+        }
+        if index > 0 && index + 1 < lines.len() {
+            context.set_source_rgb(0.0, 0.0, 0.0);
+            context.move_to(if ascii { 57.0 } else { 68.0 }, y);
+            context.show_text(&line[2..])?;
+            context.set_source_rgb(1.0, 1.0, 1.0);
+            context.move_to(if ascii { 56.0 } else { 67.0 }, y - 1.0);
+            context.show_text(&line[2..])?;
+        }
+        y += 12.0;
+    }
+    if !ascii {
+        surface.flush();
+        let stride = surface.stride() as usize;
+        let pixels = surface.data()?.to_vec();
+        let dots = ImageSurface::create(Format::ARgb32, 310, 180)?;
+        let dot_context = Context::new(&dots)?;
+        for y in (0..180usize).step_by(2) {
+            for x in (0..310usize).step_by(2) {
+                let offset = y * stride + x * 4;
+                if pixels[offset + 3] == 0 {
+                    continue;
+                }
+                dot_context.set_source_rgba(
+                    pixels[offset + 2] as f64 / 255.0,
+                    pixels[offset + 1] as f64 / 255.0,
+                    pixels[offset] as f64 / 255.0,
+                    pixels[offset + 3] as f64 / 255.0,
+                );
+                dot_context.arc(x as f64, y as f64, 1.0, 0.0, std::f64::consts::TAU);
+                dot_context.fill()?;
+            }
+        }
+        write_png(dots, path)
+    } else {
+        write_png(surface, path)
+    }
+}
+
+fn render_theme_pic1(
+    path: &Path,
+    source: &Path,
+    theme: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let original = Pixbuf::from_file(source)?;
+    let icon = original
+        .scale_simple(120, 120, InterpType::Bilinear)
+        .ok_or("could not resize theme icon")?;
+    let bytes = icon.read_pixel_bytes();
+    let pixels = bytes.as_ref();
+    let channels = icon.n_channels() as usize;
+    let stride = icon.rowstride() as usize;
+    let surface = ImageSurface::create(Format::ARgb32, 480, 272)?;
+    let context = Context::new(&surface)?;
+    context.set_source_rgb(0.0, 0.0, 0.0);
+    context.paint()?;
+    if theme == "ASCIIART" {
+        let shades = ["W", "#", "%", "?", "*", "+", ";", ":", ",", ".", " "];
+        context.select_font_face("monospace", FontSlant::Normal, FontWeight::Normal);
+        context.set_font_size(5.2);
+        context.set_source_rgb(0.75, 0.75, 0.75);
+        for y in 0..120usize {
+            for x in 0..120usize {
+                let p = pixel(pixels, stride, channels, x, y);
+                let gray = (p[0] as u16 * 30 + p[1] as u16 * 59 + p[2] as u16 * 11) / 100;
+                let shade = 10 - (gray as usize / 26).min(10);
+                context.move_to(105.0 + x as f64 * 3.15, 5.0 + y as f64 * 2.15);
+                context.show_text(shades[shade])?;
+            }
+        }
+    } else {
+        let dots =
+            theme == "DOTPAINTING" || matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
+        for y in 0..120usize {
+            for x in 0..120usize {
+                let mut p = pixel(pixels, stride, channels, x, y);
+                if matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH") {
+                    p = painterly_pixel(pixels, stride, channels, x, y, theme);
+                }
+                if dots {
+                    context.set_source_rgb(
+                        p[0] as f64 / 255.0,
+                        p[1] as f64 / 255.0,
+                        p[2] as f64 / 255.0,
+                    );
+                    let diameter = if theme == "DOTPAINTING" { 3.1 } else { 2.0 };
+                    context.arc(
+                        90.0 + x as f64 * 2.4,
+                        10.0 + y as f64 * 2.1,
+                        diameter / 2.0,
+                        0.0,
+                        std::f64::consts::TAU,
+                    );
+                    context.fill()?;
+                }
+            }
+        }
+    }
+    write_png(surface, path)
+}
+
+fn pixel(data: &[u8], stride: usize, channels: usize, x: usize, y: usize) -> [u8; 3] {
+    let i = y * stride + x * channels;
+    [data[i], data[i + 1], data[i + 2]]
+}
+
+fn painterly_pixel(
+    data: &[u8],
+    stride: usize,
+    channels: usize,
+    x: usize,
+    y: usize,
+    theme: &str,
+) -> [u8; 3] {
+    let mut sum = [0u32; 3];
+    let mut count = 0u32;
+    for dy in -2i32..=2 {
+        for dx in -2i32..=2 {
+            let nx = (x as i32 + dx).clamp(0, 119) as usize;
+            let ny = (y as i32 + dy).clamp(0, 119) as usize;
+            let p = pixel(data, stride, channels, nx, ny);
+            for c in 0..3 {
+                sum[c] += p[c] as u32;
+            }
+            count += 1;
+        }
+    }
+    let mut out = [0; 3];
+    for c in 0..3 {
+        let avg = (sum[c] / count) as u8;
+        out[c] = match theme {
+            "OILPAINTING" => (avg / 32) * 32,
+            "WATERCOLOR" => {
+                ((avg as u16 * 3 + pixel(data, stride, channels, x, y)[c] as u16) / 4 / 16 * 16)
+                    as u8
+            }
+            _ => {
+                ((pixel(data, stride, channels, x, y)[c] as u16 * (255 - avg as u16 / 2)) / 255)
+                    as u8
+            }
+        };
+    }
+    out
+}
+
+fn write_png(surface: ImageSurface, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    surface.flush();
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    let mut file = fs::File::create(&temporary)?;
+    surface.write_to_png(&mut file)?;
+    drop(file);
+    fs::rename(temporary, path)?;
+    Ok(())
 }
 
 fn cached_image(
