@@ -107,5 +107,11 @@
   "Error": "Error",
   "Select one disc image; multiple discs are not supported yet": "Select one disc image; multiple discs are not supported yet",
   "Select a CUE, ISO or raw BIN/IMG image": "Select a CUE, ISO or raw BIN/IMG image",
-  "Game Artwork": "Game Artwork"
+  "Game Artwork": "Game Artwork",
+  "Theme": "Theme",
+  "Theme artwork loaded": "Theme artwork loaded",
+  "Load a disc before previewing the theme": "Load a disc before previewing the theme",
+  "PSP XMB simulation · actual artwork from the selected game and theme.": "PSP XMB simulation · actual artwork from the selected game and theme.",
+  "Loading theme artwork": "Loading theme artwork",
+  "Wait for theme artwork to finish loading": "Wait for theme artwork to finish loading"
 }

@@ -53,6 +53,58 @@ pub fn load_game_assets(game_id: &str) -> PbpAssets {
     }
 }
 
+pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+    let Some(theme_info) = Database::embedded().themes.get(theme) else {
+        return base.clone();
+    };
+    let Some(repository) = theme_info.url.as_deref() else {
+        // Procedural painting themes are still represented by the game art until
+        // their image filters are ported from the Python implementation.
+        return base.clone();
+    };
+    let directory = cache_directory().join("themes");
+    if fs::create_dir_all(&directory).is_err() {
+        return base.clone();
+    }
+    let Ok(client) = Client::builder()
+        .connect_timeout(Duration::from_secs(8))
+        .timeout(Duration::from_secs(20))
+        .user_agent(concat!("POP-FE-PSP/", env!("CARGO_PKG_VERSION")))
+        .build()
+    else {
+        return base.clone();
+    };
+    let mut result = base.clone();
+    for (key, file, size) in [
+        ("icon0", "ICON0.PNG", (80, 80)),
+        ("pic0", "PIC0.PNG", (310, 180)),
+        ("pic1", "PIC1.PNG", (480, 272)),
+    ] {
+        let url = format!(
+            "{}/raw/main/data/{}/{}",
+            repository.trim_end_matches('/'),
+            game_id,
+            file
+        );
+        if let Some(path) = cached_image(
+            &client,
+            &url,
+            &directory,
+            &format!("{game_id}-{theme}"),
+            key,
+            size,
+        ) {
+            match key {
+                "pic0" => result.pic0 = Some(path),
+                "pic1" => result.pic1 = Some(path),
+                "icon0" => result.icon0 = Some(path),
+                _ => {}
+            }
+        }
+    }
+    result
+}
+
 fn cached_image(
     client: &Client,
     url: &str,

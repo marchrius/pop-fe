@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -22,10 +22,24 @@ struct DiscFields {
     disable_asset_downloads: gtk::CheckButton,
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
+    base_assets: Rc<RefCell<crate::create::PbpAssets>>,
+    theme: gtk::DropDown,
+    theme_generation: Rc<Cell<u64>>,
+    theme_loading: Rc<Cell<bool>>,
     icon_preview: gtk::Picture,
     pic0_preview: gtk::Picture,
     pic1_preview: gtk::Picture,
 }
+
+const THEME_NAMES: [&str; 7] = [
+    "Automatic",
+    "98DEMAKE",
+    "ASCIIART",
+    "DOTPAINTING",
+    "OILPAINTING",
+    "WATERCOLOR",
+    "COLORSKETCH",
+];
 
 pub fn activate(application: &adw::Application) {
     let window = adw::ApplicationWindow::builder()
@@ -117,6 +131,9 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let icon_preview = asset_preview(64, 64);
     let pic0_preview = asset_preview(132, 76);
     let pic1_preview = asset_preview(160, 90);
+    let theme = gtk::DropDown::from_strings(&THEME_NAMES);
+    let theme_generation = Rc::new(Cell::new(0));
+    let theme_loading = Rc::new(Cell::new(false));
     let fields = DiscFields {
         id,
         title,
@@ -125,6 +142,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
+        base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
+        theme,
+        theme_generation,
+        theme_loading,
         icon_preview,
         pic0_preview,
         pic1_preview,
@@ -248,7 +269,26 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         artwork_row.append(&column);
     }
     artwork_body.append(&artwork_row);
+    let theme_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(10)
+        .build();
+    let theme_label = gtk::Label::new(Some(&tr("Theme")));
+    theme_label.set_xalign(0.0);
+    theme_label.set_hexpand(true);
+    theme_row.append(&theme_label);
+    theme_row.append(&fields.theme);
+    let preview_button = gtk::Button::with_label(&tr("XMB Preview"));
+    let preview_parent = parent.clone();
+    let preview_fields = fields.clone();
+    preview_button.connect_clicked(move |_| show_xmb_preview(&preview_parent, &preview_fields));
+    theme_row.append(&preview_button);
+    artwork_body.append(&theme_row);
     content.append(&artwork);
+    let theme_fields = fields.clone();
+    fields
+        .theme
+        .connect_selected_notify(move |_| refresh_theme_art(&theme_fields));
     fields.status.set_xalign(0.0);
     fields.status.add_css_class("dim-label");
     content.append(&fields.status);
@@ -329,6 +369,12 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             return;
         }
         let id = fields_for_create.id.text().to_string();
+        if fields_for_create.theme_loading.get() {
+            fields_for_create
+                .status
+                .set_text(&tr("Wait for theme artwork to finish loading"));
+            return;
+        }
         if id.len() != 9 || fields_for_create.psp_root.text().is_empty() {
             fields_for_create.status.set_text(&tr(
                 "Select a PSP folder and identify the disc before conversion",
@@ -477,7 +523,14 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     fields
         .status
         .set_text(&tr("Analyzing disc and loading assets"));
+    fields.id.set_text("");
+    fields.title.set_text("");
+    fields
+        .theme_generation
+        .set(fields.theme_generation.get().wrapping_add(1));
+    fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
+    *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
@@ -503,13 +556,8 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
-                *fields.assets.borrow_mut() = assets;
-                set_picture(
-                    &fields.icon_preview,
-                    fields.assets.borrow().icon0.as_deref(),
-                );
-                set_picture(&fields.pic0_preview, fields.assets.borrow().pic0.as_deref());
-                set_picture(&fields.pic1_preview, fields.assets.borrow().pic1.as_deref());
+                *fields.base_assets.borrow_mut() = assets;
+                refresh_theme_art(&fields);
                 fields.status.set_text(&tr("Automatic data loaded"));
                 gtk::glib::ControlFlow::Break
             }
@@ -537,10 +585,166 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields.title.set_text("");
     fields.cdda.set_active(false);
     fields.status.set_text(&tr("Ready"));
+    fields
+        .theme_generation
+        .set(fields.theme_generation.get().wrapping_add(1));
+    fields.theme_loading.set(false);
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
+    *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
     set_picture(&fields.icon_preview, None);
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
+}
+
+fn refresh_theme_art(fields: &DiscFields) {
+    let game_id = fields.id.text().to_string();
+    if game_id.is_empty() {
+        return;
+    }
+    let selected = fields.theme.selected() as usize;
+    let base = fields.base_assets.borrow().clone();
+    let generation = fields.theme_generation.get().wrapping_add(1);
+    fields.theme_generation.set(generation);
+    fields.theme_loading.set(false);
+    if selected == 0 || selected >= THEME_NAMES.len() {
+        *fields.assets.borrow_mut() = base.clone();
+        set_picture(&fields.icon_preview, base.icon0.as_deref());
+        set_picture(&fields.pic0_preview, base.pic0.as_deref());
+        set_picture(&fields.pic1_preview, base.pic1.as_deref());
+        return;
+    }
+    fields.theme_loading.set(true);
+    fields.status.set_text(&tr("Loading theme artwork"));
+    let theme_name = THEME_NAMES[selected].to_string();
+    let (sender, receiver) = mpsc::channel();
+    thread::spawn(move || {
+        let assets = crate::assets::load_theme_assets(&game_id, &theme_name, &base);
+        let _ = sender.send(assets);
+    });
+    let fields = fields.clone();
+    gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+        match receiver.try_recv() {
+            Ok(assets) if fields.theme_generation.get() == generation => {
+                fields.theme_loading.set(false);
+                *fields.assets.borrow_mut() = assets.clone();
+                set_picture(&fields.icon_preview, assets.icon0.as_deref());
+                set_picture(&fields.pic0_preview, assets.pic0.as_deref());
+                set_picture(&fields.pic1_preview, assets.pic1.as_deref());
+                fields.status.set_text(&tr("Theme artwork loaded"));
+                gtk::glib::ControlFlow::Break
+            }
+            Ok(_) => gtk::glib::ControlFlow::Break,
+            Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+            Err(mpsc::TryRecvError::Disconnected) => {
+                if fields.theme_generation.get() == generation {
+                    fields.theme_loading.set(false);
+                }
+                gtk::glib::ControlFlow::Break
+            }
+        }
+    });
+}
+
+fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
+    let game_id = fields.id.text().to_string();
+    if game_id.is_empty() {
+        fields
+            .status
+            .set_text(&tr("Load a disc before previewing the theme"));
+        return;
+    }
+    let theme_name = THEME_NAMES
+        .get(fields.theme.selected() as usize)
+        .copied()
+        .unwrap_or("Automatic");
+    let window = gtk::Window::builder()
+        .title(tr("XMB Preview · {theme}").replace("{theme}", theme_name))
+        .transient_for(parent)
+        .default_width(600)
+        .default_height(390)
+        .build();
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(10)
+        .margin_top(12)
+        .margin_bottom(12)
+        .margin_start(12)
+        .margin_end(12)
+        .build();
+    let stage = gtk::Overlay::new();
+    stage.set_size_request(480, 272);
+    let background = asset_preview(480, 272);
+    let assets = fields.assets.borrow().clone();
+    set_picture(&background, assets.pic1.as_deref());
+    stage.set_child(Some(&background));
+
+    let tile = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(14)
+        .margin_start(28)
+        .margin_end(28)
+        .margin_top(18)
+        .margin_bottom(18)
+        .halign(gtk::Align::Center)
+        .valign(gtk::Align::Center)
+        .build();
+    tile.add_css_class("card");
+    let icon = asset_preview(68, 68);
+    set_picture(&icon, assets.icon0.as_deref());
+    tile.append(&icon);
+    let title = gtk::Label::new(Some(fields.title.text().as_str()));
+    title.add_css_class("title-3");
+    title.set_wrap(true);
+    title.set_max_width_chars(24);
+    tile.append(&title);
+    stage.add_overlay(&tile);
+
+    let detail = asset_preview(264, 158);
+    set_picture(&detail, assets.pic0.as_deref());
+    detail.set_halign(gtk::Align::End);
+    detail.set_valign(gtk::Align::End);
+    detail.set_margin_end(16);
+    detail.set_margin_bottom(18);
+    detail.set_visible(assets.pic0.is_some());
+    stage.add_overlay(&detail);
+    content.append(&stage);
+    let caption = gtk::Label::new(Some(&tr(
+        "PSP XMB simulation · actual artwork from the selected game and theme.",
+    )));
+    caption.set_wrap(true);
+    caption.add_css_class("dim-label");
+    content.append(&caption);
+    window.set_child(Some(&content));
+    window.present();
+    if fields.theme.selected() > 0 {
+        let base = fields.base_assets.borrow().clone();
+        let id = game_id.clone();
+        let selected_theme = theme_name.to_string();
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sender.send(crate::assets::load_theme_assets(
+                &id,
+                &selected_theme,
+                &base,
+            ));
+        });
+        let background = background.clone();
+        let icon = icon.clone();
+        let detail = detail.clone();
+        gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+            match receiver.try_recv() {
+                Ok(assets) => {
+                    set_picture(&background, assets.pic1.as_deref());
+                    set_picture(&icon, assets.icon0.as_deref());
+                    set_picture(&detail, assets.pic0.as_deref());
+                    detail.set_visible(assets.pic0.is_some());
+                    gtk::glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Disconnected) => gtk::glib::ControlFlow::Break,
+            }
+        });
+    }
 }
 
 fn asset_preview(width: i32, height: i32) -> gtk::Picture {
