@@ -1461,6 +1461,8 @@ fn build_toc(sectors: u64, sheet: Option<&CueSheet>) -> [u8; 1024] {
     toc[27] = bcd((frames / 4500) as u8);
     toc[28] = bcd(((frames / 75) % 60) as u8);
     toc[29] = bcd((frames % 75) as u8);
+    // PSISO block 3 stores the compressed-disc payload address in its last word.
+    put_u32(&mut toc, 0x3fc, PSISO_PAYLOAD_OFFSET as u32);
     if let Some(sheet) = sheet {
         // Restore the A0/A1 entries after writing the standard single-track header.
         let last_track = sheet.tracks.last().map(|track| track.number).unwrap_or(1);
