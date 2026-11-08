@@ -50,6 +50,12 @@ def main():
     write("libcrypt", json_value(source["libcrypt"]))
     write("themes", json_value(source["themes"]))
     write("ppf_fixes", json_value(source["ppf_fixes"]))
+    ppf_files = {
+        str(path.relative_to(ROOT)): path.read_bytes().hex()
+        for path in (ROOT / "ppf").glob("*")
+        if path.is_file()
+    }
+    write("ppf_data", ppf_files)
     export_psp_resources()
 
 

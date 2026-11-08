@@ -56,6 +56,7 @@ pub struct Database {
     pub libcrypt: HashMap<String, LibCryptRecord>,
     pub themes: HashMap<String, ThemeRecord>,
     pub ppf_fixes: HashMap<String, PatchRecord>,
+    ppf_data: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug)]
@@ -82,6 +83,8 @@ impl Database {
                 .expect("theme database JSON must be valid"),
             ppf_fixes: serde_json::from_str(include_str!("../data/ppf_fixes.json"))
                 .expect("PPF database JSON must be valid"),
+            ppf_data: serde_json::from_str(include_str!("../data/ppf_data.json"))
+                .expect("PPF data JSON must be valid"),
         })
     }
 
@@ -127,6 +130,24 @@ impl Database {
     pub fn psp_config(&self, id: &str) -> Option<Vec<u8>> {
         let encoded = self.psp_configs.get(id)?;
         decode_hex(encoded)
+    }
+
+    pub fn psp_patch(&self, id: &str, md5: &str) -> Option<Vec<u8>> {
+        let record = self.ppf_fixes.get(id)?;
+        if record
+            .tags
+            .as_ref()
+            .is_some_and(|tags| !tags.iter().any(|tag| tag == "psp"))
+        {
+            return None;
+        }
+        let mut path = record.ppf.as_deref();
+        if let Some(override_record) = record.hashes.as_ref().and_then(|hashes| hashes.get(md5)) {
+            if let Some(override_path) = override_record.get("ppf") {
+                path = Some(override_path);
+            }
+        }
+        self.ppf_data.get(path?).and_then(|hex| decode_hex(hex))
     }
 }
 

@@ -103,6 +103,28 @@ pub fn create_from_image_cancellable(
                 .map(|metadata| metadata.id)
                 .unwrap_or_else(|_| "UNKN00000".into())
         };
+        let source_md5 = CueSheet::open_image(image_path)
+            .and_then(|sheet| sheet.first_track_md5())
+            .ok();
+        let patch = source_md5
+            .as_deref()
+            .and_then(|md5| crate::database::Database::embedded().psp_patch(&disc_id, md5));
+        let patched = if let Some(patch) = patch {
+            let temp = TempFile::new("patched-disc")?;
+            let mut source = disc.try_clone()?;
+            source.seek(SeekFrom::Start(0))?;
+            io::copy(&mut source, &mut temp.file.try_clone()?)?;
+            crate::ppf::apply(&temp.file, &patch).map_err(|error| {
+                CreateError::Invalid(format!("automatic PPF compatibility patch failed: {error}"))
+            })?;
+            Some(temp)
+        } else {
+            None
+        };
+        let disc = match &patched {
+            Some(temp) => temp.file.try_clone()?,
+            None => disc,
+        };
         let psiso = TempFile::new("psiso")?;
         let psp_config = crate::database::Database::embedded()
             .psp_config(&disc_id)
