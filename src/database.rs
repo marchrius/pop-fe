@@ -52,6 +52,7 @@ pub struct PatchRecord {
 pub struct Database {
     pub discs: HashMap<String, DiscRecord>,
     pub games: HashMap<String, GameRecord>,
+    psp_configs: HashMap<String, String>,
     pub libcrypt: HashMap<String, LibCryptRecord>,
     pub themes: HashMap<String, ThemeRecord>,
     pub ppf_fixes: HashMap<String, PatchRecord>,
@@ -73,6 +74,8 @@ impl Database {
                 .expect("disc database JSON must be valid"),
             games: serde_json::from_str(include_str!("../data/games.json"))
                 .expect("game database JSON must be valid"),
+            psp_configs: serde_json::from_str(include_str!("../data/psp_configs.json"))
+                .expect("PSP config database JSON must be valid"),
             libcrypt: serde_json::from_str(include_str!("../data/libcrypt.json"))
                 .expect("LibCrypt database JSON must be valid"),
             themes: serde_json::from_str(include_str!("../data/themes.json"))
@@ -120,4 +123,24 @@ impl Database {
                     .and_then(|record| record.title.as_deref())
             })
     }
+
+    pub fn psp_config(&self, id: &str) -> Option<Vec<u8>> {
+        let encoded = self.psp_configs.get(id)?;
+        decode_hex(encoded)
+    }
+}
+
+fn decode_hex(input: &str) -> Option<Vec<u8>> {
+    if input.len() % 2 != 0 {
+        return None;
+    }
+    input
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let high = (pair[0] as char).to_digit(16)? as u8;
+            let low = (pair[1] as char).to_digit(16)? as u8;
+            Some((high << 4) | low)
+        })
+        .collect()
 }

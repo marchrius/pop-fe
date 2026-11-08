@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Export the legacy Python literal databases as static Rust-app JSON data."""
 
+import ast
 import json
 import runpy
 from pathlib import Path
@@ -35,11 +36,48 @@ def main():
         for checksum, record in source_discs.items()
     }
     source = runpy.run_path(str(ROOT / "gamedb.py"))
+    psp_configs = {}
+    for game_id, game in source["games"].items():
+        relative = game.get("pspconfig")
+        if not relative:
+            continue
+        config_path = ROOT / relative
+        if config_path.is_file():
+            psp_configs[game_id] = config_path.read_bytes().hex()
     write("disc_by_md5", discs)
     write("games", json_value(source["games"]))
+    write("psp_configs", psp_configs)
     write("libcrypt", json_value(source["libcrypt"]))
     write("themes", json_value(source["themes"]))
     write("ppf_fixes", json_value(source["ppf_fixes"]))
+    export_psp_resources()
+
+
+def export_psp_resources():
+    OUT.joinpath("psp").mkdir(parents=True, exist_ok=True)
+    source = ast.parse((ROOT / "popstation.py").read_text(encoding="utf-8"))
+    names = {"_pstitledata", "_startdatfooter", "_startdatheader", "_datapspbody", "_logo_buffer"}
+    for node in ast.walk(source):
+        if not isinstance(node, ast.Assign):
+            continue
+        target = next((item.id for item in node.targets if isinstance(item, ast.Name) and item.id in names), None)
+        if target is None:
+            continue
+        value = node.value
+        literal = ast.literal_eval(value.args[0]) if isinstance(value, ast.Call) else ast.literal_eval(value)
+        payload = bytes(literal)
+        target_path = OUT / "psp" / f"{target.removeprefix('_')}.bin"
+        target_path.write_bytes(payload)
+        print(f"{target_path.relative_to(ROOT)}: {len(payload):,} bytes")
+
+    frontend = ast.parse((ROOT / "pop-fe.py").read_text(encoding="utf-8"))
+    for node in ast.walk(frontend):
+        if isinstance(node, ast.Assign) and any(isinstance(item, ast.Name) and item.id == "EMPTY_CONFIG" for item in node.targets):
+            target_path = OUT / "psp" / "empty_config.bin"
+            payload = bytes(ast.literal_eval(node.value.args[0]))
+            target_path.write_bytes(payload)
+            print(f"{target_path.relative_to(ROOT)}: {len(payload):,} bytes")
+            break
 
 
 if __name__ == "__main__":

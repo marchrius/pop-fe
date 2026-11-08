@@ -17,7 +17,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    singola.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
-   nella pagina Converti.
+   nella pagina Converti. I config POPS specifici per gioco e i dati LibCrypt
+   vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE. I temi
    pittorici generativi sono elencati ma i loro filtri non sono ancora portati.
 6. Supporto completo a CUE multi-traccia, CCD/CHD, multi-disco, audio,
@@ -27,8 +28,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CUE multi-traccia, tracce CDDA, patch
-di compatibilità o i filtri dei temi generativi; non va usata come
+la conversione Rust non supporta ancora CUE multi-traccia, tracce CDDA, PPF e
+Xdelta o i filtri dei temi generativi; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato.
 

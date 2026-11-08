@@ -19,6 +19,7 @@ const PSTITLE_TEMPLATE: &[u8] = include_bytes!("../data/psp/pstitledata.bin");
 const STARTDAT_HEADER: &[u8] = include_bytes!("../data/psp/startdatheader.bin");
 const STARTDAT_FOOTER: &[u8] = include_bytes!("../data/psp/startdatfooter.bin");
 const DEFAULT_LOGO: &[u8] = include_bytes!("../data/psp/logo_buffer.bin");
+const EMPTY_PSP_CONFIG: &[u8] = include_bytes!("../data/psp/empty_config.bin");
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 #[derive(Debug, Error)]
@@ -103,12 +104,21 @@ pub fn create_from_image_cancellable(
                 .unwrap_or_else(|_| "UNKN00000".into())
         };
         let psiso = TempFile::new("psiso")?;
+        let psp_config = crate::database::Database::embedded()
+            .psp_config(&disc_id)
+            .unwrap_or_else(|| EMPTY_PSP_CONFIG.to_vec());
+        let magic_word = crate::database::Database::embedded()
+            .libcrypt
+            .get(&disc_id)
+            .map(|record| record.magic_word);
         write_psiso(
             &disc,
             disc_len,
             &psiso.file,
             &disc_id,
             &config.title,
+            &psp_config,
+            magic_word,
             cancelled,
         )?;
         let psiso_len = psiso.file.metadata()?.len();
@@ -442,6 +452,8 @@ fn write_psiso(
     output: &File,
     game_id: &str,
     title: &str,
+    psp_config: &[u8],
+    magic_word: Option<u16>,
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
     let sector_count = disc_len.div_ceil(SECTOR_SIZE as u64);
@@ -457,6 +469,12 @@ fn write_psiso(
     let mut game = [0u8; 1024];
     let id = format!("_{}_{}", &game_id[..4], &game_id[4..]);
     game[..11].copy_from_slice(id.as_bytes());
+    if psp_config.len() > game.len() - 0x20 {
+        return Err(CreateError::Invalid(
+            "PSP compatibility config is too large".into(),
+        ));
+    }
+    game[0x20..0x20 + psp_config.len()].copy_from_slice(psp_config);
     psiso.write_all(&game)?;
     psiso.write_all(&build_toc(sector_count))?;
     psiso.write_all(&vec![0u8; 1568])?;
@@ -475,6 +493,15 @@ fn write_psiso(
             CreateError::Invalid("index table is too large".into())
         })?
     ])?;
+    if let Some(magic_word) = magic_word {
+        let subchannels = generate_subchannels(magic_word);
+        let subchannel_offset = psiso.stream_position()? as u32;
+        psiso.seek(SeekFrom::Start(0x12d4))?;
+        psiso.write_all(&subchannel_offset.to_le_bytes())?;
+        psiso.write_all(&((subchannels.len() / 12) as u32).to_le_bytes())?;
+        psiso.seek(SeekFrom::Start(subchannel_offset as u64))?;
+        psiso.write_all(&subchannels)?;
+    }
     psiso.seek(SeekFrom::Start(PSISO_PAYLOAD_OFFSET))?;
 
     let mut source = disc.try_clone()?;
@@ -536,6 +563,61 @@ fn build_toc(sectors: u64) -> [u8; 1024] {
     toc[28] = bcd(((frames / 75) % 60) as u8);
     toc[29] = bcd((frames % 75) as u8);
     toc
+}
+
+fn generate_subchannels(magic_word: u16) -> Vec<u8> {
+    const PAIRS: [(u32, u32); 16] = [
+        (16167, 16172),
+        (16101, 16106),
+        (16031, 16036),
+        (15919, 15924),
+        (15628, 15633),
+        (15378, 15383),
+        (15312, 15317),
+        (15242, 15247),
+        (15130, 15135),
+        (15056, 15061),
+        (14899, 14904),
+        (14649, 14654),
+        (14579, 14584),
+        (14485, 14490),
+        (14231, 14236),
+        (14105, 14110),
+    ];
+    fn bcd(value: u32) -> u8 {
+        ((value / 10) as u8) << 4 | (value % 10) as u8
+    }
+    fn entry(sector: u32, corrupt: bool) -> [u8; 12] {
+        let mut bytes = [0u8; 12];
+        let mut relative = sector - 150;
+        bytes[..4].copy_from_slice(&relative.to_le_bytes());
+        bytes[4] = 1;
+        bytes[5] = 1;
+        if corrupt {
+            relative -= 1;
+        }
+        bytes[8] = bcd(relative % 75);
+        relative -= relative % 75;
+        relative /= 75;
+        bytes[7] = bcd(relative % 60);
+        bytes[6] = bcd(relative / 60);
+        let mut absolute = if corrupt { sector - 1 } else { sector };
+        bytes[11] = bcd(absolute % 75);
+        absolute -= absolute % 75;
+        absolute /= 75;
+        bytes[10] = bcd(absolute % 60);
+        bytes[9] = bcd(absolute / 60);
+        bytes
+    }
+    let mut result = Vec::with_capacity(408);
+    result.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, 0, 0, 0, 0, 0xff, 0xff, 0xff, 0xff]);
+    for (bit, (first, second)) in PAIRS.iter().enumerate().rev() {
+        let corrupt = magic_word & (1 << bit) != 0;
+        result.extend_from_slice(&entry(*first, corrupt));
+        result.extend_from_slice(&entry(*second, corrupt));
+    }
+    result.extend_from_slice(&[0xff; 12]);
+    result
 }
 
 fn generate_sfo(game_id: &str, title: &str) -> Vec<u8> {
