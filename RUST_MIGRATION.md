@@ -60,10 +60,11 @@ statiche per 74 di essi. Se trova `lcp` nel PATH (o in `POPFE_LCP`), il backend
 Rust lo usa come fallback per identificare e patchare gli altri casi; i pacchetti
 non lo includono ancora. Il port indipendente richiede di migrare il catalogo
 upstream e associare i boot file agli ID.
-Non usare ancora il port come sostituto per generare EBOOT
-destinati alla PSP finché non sarà validato su immagini e hardware reali. Non è
-ancora portato il download e la conversione automatica dei manuali in
-DOCUMENT.DAT. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
+Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
+finché non sarà validato su immagini e hardware reali. La decifratura DES dei
+manuali PS3 PGD e la conversione in `DOCUMENT.DAT` non sono ancora state
+verificate con file campione. I filtri pittorici Rust sono approssimazioni dei
+filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4 e libadwaita, oltre a Rust/Cargo.

@@ -1,9 +1,11 @@
 //! Automatic PSP DOCUMENT.DAT creation from database linked manuals.
 use std::cmp::Ordering;
+use std::ffi::CString;
 use std::fs;
 use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering as AtomicOrdering};
 use std::thread;
 use std::time::Duration;
@@ -53,9 +55,14 @@ pub fn create_psp_document(
         return Ok(Some(contents));
     }
     if contents.starts_with(b"\0PGD") {
-        return Err(ManualError::Invalid(
-            "encrypted PS3 manuals are not supported yet".into(),
-        ));
+        let pages = decrypt_ps3_document(&contents)?;
+        if pages.is_empty() {
+            return Err(ManualError::Invalid(
+                "encrypted PS3 manual contains no readable PSP pages".into(),
+            ));
+        }
+        progress(0.95);
+        return create_document(game_id, &pages).map(Some);
     }
     let mut pages = if contents.starts_with(b"Rar!") {
         let extracted = extract_rar(&contents, &temporary.0, cancelled, &progress)?;
@@ -77,6 +84,240 @@ pub fn create_psp_document(
     }
     progress(0.95);
     create_document(game_id, &pages).map(Some)
+}
+
+fn decrypt_ps3_document(data: &[u8]) -> Result<Vec<Vec<u8>>, ManualError> {
+    const PGD_HEADER: &[u8; 16] = b"\0PGD\x01\0\0\0\x01\0\0\0\0\0\0\0";
+    if data.get(..16) != Some(PGD_HEADER) || data.len() < 0x90 {
+        return Err(ManualError::Invalid("invalid PS3 PGD manual header".into()));
+    }
+    let header = checked_slice(data, 0x10, 0x60)?;
+    verify_sha1(
+        header,
+        checked_slice(data, 0x80, 0x10)?,
+        "PS3 document header",
+    )?;
+    let decoded_header = des_cbc_decrypt(header)?;
+    if decoded_header.get(..4) != Some(b"DOC ")
+        || decoded_header.get(4..12) != Some(b"\0\0\x01\0\0\0\x01\0")
+    {
+        return Err(ManualError::Invalid("invalid encrypted DOC header".into()));
+    }
+    let large = read_u32(&decoded_header, 0x1c)? != 0;
+    let info_size = if large { 0x1f3e8 } else { 0x31e8 };
+    let info_end = 0x90usize
+        .checked_add(info_size)
+        .ok_or_else(|| ManualError::Invalid("PS3 manual INFO block overflow".into()))?;
+    let info = checked_slice(data, 0x90, info_size)?;
+    let info_sha = checked_slice(data, info_end + 0x10, 0x10)?;
+    verify_sha1(info, info_sha, "PS3 manual INFO block")?;
+    let decoded_info = des_cbc_decrypt(info)?;
+    if decoded_info.get(..4) != Some(&[0xff; 4]) {
+        return Err(ManualError::Invalid(
+            "invalid PS3 manual INFO marker".into(),
+        ));
+    }
+    let page_count = read_u32(&decoded_info, 4)? as usize;
+    let max_pages = ((info_size.saturating_sub(8)) / 0x80).min(MAX_MANUAL_PAGES);
+    if page_count == 0 || page_count > max_pages {
+        return Err(ManualError::Invalid(format!(
+            "invalid PS3 manual page count: {page_count}"
+        )));
+    }
+
+    let mut pages = Vec::with_capacity(page_count);
+    for index in 0..page_count {
+        let record = 8 + index * 0x80;
+        let offset = read_u32(&decoded_info, record)? as usize;
+        let length = read_u32(&decoded_info, record + 0x0c)? as usize;
+        if length < 0x40 || length > MAX_PAGE_BYTES + 0x1000 {
+            continue;
+        }
+        let encrypted_page = match data.get(offset..offset.saturating_add(length)) {
+            Some(page) => page,
+            None => continue,
+        };
+        if encrypted_page.len() < 0x40 || encrypted_page.len() % 8 != 0 {
+            continue;
+        }
+        let mac_offset = encrypted_page.len() - 0x20;
+        let encrypted_payload = &encrypted_page[..mac_offset];
+        let page_sha = &encrypted_page[mac_offset + 0x10..];
+        if !sha1_matches(encrypted_payload, page_sha) {
+            continue;
+        }
+        let page_header = des_cbc_decrypt(checked_slice(encrypted_payload, 0, 0x20)?)?;
+        if read_u32(&page_header, 0)? as usize != length {
+            continue;
+        }
+        let chunks = read_u32(&page_header, 8)? as usize;
+        let table_size = chunks
+            .checked_mul(8)
+            .and_then(|size| size.checked_add(0x20))
+            .ok_or_else(|| ManualError::Invalid("PS3 page table overflow".into()))?;
+        if chunks > 4096 || table_size > encrypted_payload.len() {
+            continue;
+        }
+        let decoded_table = des_cbc_decrypt(&encrypted_payload[0x20..table_size])?;
+        let mut page = encrypted_payload[table_size..].to_vec();
+        let mut valid = true;
+        for chunk in 0..chunks {
+            let offset = read_u32(&decoded_table, chunk * 8)? as usize;
+            let size = read_u32(&decoded_table, chunk * 8 + 4)? as usize;
+            let end = match offset.checked_add(size) {
+                Some(end) if size != 0 && size % 8 == 0 && end <= page.len() => end,
+                _ => {
+                    valid = false;
+                    break;
+                }
+            };
+            let decoded_chunk = des_cbc_decrypt(&page[offset..end])?;
+            page[offset..end].copy_from_slice(&decoded_chunk);
+        }
+        if !valid {
+            continue;
+        }
+        const PNG_END: &[u8; 8] = b"IEND\xaeB`\x82";
+        let Some(end) = page
+            .windows(PNG_END.len())
+            .rposition(|window| window == PNG_END)
+        else {
+            continue;
+        };
+        let png_end = end + PNG_END.len();
+        if png_end >= 0x43 && png_end <= MAX_PAGE_BYTES {
+            page.truncate(png_end);
+            pages.push(page);
+        }
+    }
+    Ok(pages)
+}
+
+fn verify_sha1(data: &[u8], expected: &[u8], label: &str) -> Result<(), ManualError> {
+    if sha1_matches(data, expected) {
+        Ok(())
+    } else {
+        Err(ManualError::Invalid(format!("{label} SHA-1 mismatch")))
+    }
+}
+
+fn sha1_matches(data: &[u8], expected: &[u8]) -> bool {
+    use sha1::{Digest, Sha1};
+    let digest = Sha1::digest(data);
+    expected.len() == 16 && digest[..16] == *expected
+}
+
+fn checked_slice(data: &[u8], offset: usize, length: usize) -> Result<&[u8], ManualError> {
+    let end = offset
+        .checked_add(length)
+        .ok_or_else(|| ManualError::Invalid("PS3 manual offset overflow".into()))?;
+    data.get(offset..end)
+        .ok_or_else(|| ManualError::Invalid("truncated PS3 manual".into()))
+}
+
+fn read_u32(data: &[u8], offset: usize) -> Result<u32, ManualError> {
+    let bytes = checked_slice(data, offset, 4)?;
+    Ok(u32::from_le_bytes(bytes.try_into().unwrap()))
+}
+
+#[repr(C)]
+struct EvpCipherCtx {
+    _private: [u8; 0],
+}
+
+#[repr(C)]
+struct OsslProvider {
+    _private: [u8; 0],
+}
+
+#[link(name = "crypto")]
+unsafe extern "C" {
+    fn OSSL_PROVIDER_load(
+        context: *mut std::ffi::c_void,
+        name: *const std::ffi::c_char,
+    ) -> *mut OsslProvider;
+    fn EVP_CIPHER_CTX_new() -> *mut EvpCipherCtx;
+    fn EVP_CIPHER_CTX_free(context: *mut EvpCipherCtx);
+    fn EVP_des_cbc() -> *const std::ffi::c_void;
+    fn EVP_DecryptInit_ex(
+        context: *mut EvpCipherCtx,
+        cipher: *const std::ffi::c_void,
+        engine: *mut std::ffi::c_void,
+        key: *const u8,
+        iv: *const u8,
+    ) -> i32;
+    fn EVP_CIPHER_CTX_set_padding(context: *mut EvpCipherCtx, padding: i32) -> i32;
+    fn EVP_DecryptUpdate(
+        context: *mut EvpCipherCtx,
+        output: *mut u8,
+        output_length: *mut i32,
+        input: *const u8,
+        input_length: i32,
+    ) -> i32;
+    fn EVP_DecryptFinal_ex(
+        context: *mut EvpCipherCtx,
+        output: *mut u8,
+        output_length: *mut i32,
+    ) -> i32;
+}
+
+fn des_cbc_decrypt(data: &[u8]) -> Result<Vec<u8>, ManualError> {
+    const KEY: [u8; 8] = [0x39, 0xf7, 0xef, 0xa1, 0x6c, 0xce, 0x5f, 0x4c];
+    const IV: [u8; 8] = [0xa8, 0x19, 0xc4, 0xf5, 0xe1, 0x54, 0xe3, 0x0b];
+    if data.is_empty() || data.len() % 8 != 0 || data.len() > i32::MAX as usize {
+        return Err(ManualError::Invalid(
+            "invalid encrypted PS3 manual block".into(),
+        ));
+    }
+    static LEGACY_PROVIDER: OnceLock<bool> = OnceLock::new();
+    let provider_loaded = *LEGACY_PROVIDER.get_or_init(|| {
+        let name = CString::new("legacy").unwrap();
+        // OpenSSL keeps the provider loaded for the process lifetime.
+        unsafe { !OSSL_PROVIDER_load(std::ptr::null_mut(), name.as_ptr()).is_null() }
+    });
+    if !provider_loaded {
+        return Err(ManualError::Invalid(
+            "OpenSSL DES legacy provider is unavailable".into(),
+        ));
+    }
+    let context = unsafe { EVP_CIPHER_CTX_new() };
+    if context.is_null() {
+        return Err(ManualError::Invalid(
+            "could not allocate DES context".into(),
+        ));
+    }
+    let mut output = vec![0u8; data.len() + 8];
+    let mut first_length = 0;
+    let mut final_length = 0;
+    let result = unsafe {
+        let initialized = EVP_DecryptInit_ex(
+            context,
+            EVP_des_cbc(),
+            std::ptr::null_mut(),
+            KEY.as_ptr(),
+            IV.as_ptr(),
+        ) == 1
+            && EVP_CIPHER_CTX_set_padding(context, 0) == 1
+            && EVP_DecryptUpdate(
+                context,
+                output.as_mut_ptr(),
+                &mut first_length,
+                data.as_ptr(),
+                data.len() as i32,
+            ) == 1
+            && EVP_DecryptFinal_ex(
+                context,
+                output.as_mut_ptr().add(first_length as usize),
+                &mut final_length,
+            ) == 1;
+        EVP_CIPHER_CTX_free(context);
+        initialized
+    };
+    if !result {
+        return Err(ManualError::Invalid("DES decryption failed".into()));
+    }
+    output.truncate((first_length + final_length) as usize);
+    Ok(output)
 }
 
 fn extract_rar(

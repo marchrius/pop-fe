@@ -181,6 +181,9 @@ def main():
     sevenzip_module = Path('/usr/lib/7zip/7z.so')
     if not sevenzip.is_file() or not sevenzip_module.is_file():
         raise RuntimeError('7zip is required to package automatic RAR/CBR manual support')
+    openssl_legacy = next(Path('/usr/lib').glob('*/ossl-modules/legacy.so'), None)
+    if openssl_legacy is None:
+        raise RuntimeError('OpenSSL legacy provider is required for encrypted PS3 manuals')
     yt_dlp = shutil.which('yt-dlp')
     if not yt_dlp:
         raise RuntimeError('yt-dlp is required to package YouTube audio search and download')
@@ -233,8 +236,11 @@ def main():
             encoding='utf-8',
         )
         yt_dlp_wrapper.chmod(0o755)
+        legacy_target = app_lib / 'ossl-modules/legacy.so'
+        legacy_target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(openssl_legacy, legacy_target)
 
-        bundled_tools = [chdman, pdftoppm, ffmpeg, sevenzip_target, sevenzip_module_target]
+        bundled_tools = [binary, chdman, pdftoppm, ffmpeg, sevenzip_target, sevenzip_module_target]
         for name, source in missing_runtime_dependency_closure(bundled_tools, runtime_location).items():
             target = app_lib / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -251,7 +257,7 @@ def main():
             'flatpak', 'build-finish', '--command=pop-fe-psp', '--share=ipc',
             '--socket=wayland', '--socket=fallback-x11', '--device=dri',
             '--share=network', '--talk-name=org.freedesktop.portal.Desktop', str(stage),
-            '--env=LD_LIBRARY_PATH=/app/lib',
+            '--env=LD_LIBRARY_PATH=/app/lib', '--env=OPENSSL_MODULES=/app/lib/ossl-modules',
         )
         run('flatpak', 'build-export', '--arch', arch, str(repo), str(stage), 'stable')
         run('flatpak', 'build-bundle', '--arch', arch, str(repo), str(args.output), APP_ID, 'stable')

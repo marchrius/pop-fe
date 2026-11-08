@@ -72,6 +72,7 @@ def main():
         depends = [
             'libc6', 'libstdc++6', 'libsndfile1', 'xdelta3', 'mame-tools',
             'poppler-utils', 'ffmpeg', '7zip', 'yt-dlp',
+            'libssl3 | libssl3t64',
             'libgtk-4-1 (>= 4.10.0)', 'libadwaita-1-0 (>= 1.5.0)',
             'libgdk-pixbuf-2.0-0',
         ]
