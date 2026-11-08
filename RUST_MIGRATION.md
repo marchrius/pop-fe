@@ -32,8 +32,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    ulteriori opzioni audio. GUI e backend accettano CHD
    tramite `chdman` e CCD tramite parsing nativo; i pacchetti includono il
    decoder CHD.
-7. Conversione espone CDDA, Force NTSC, Disc Swapping, watermark, disattivazione
-   PSTITLEIMG e PIC1 come logo. Conversione ed estrazione
+7. Conversione espone CDDA, Force NTSC, Disc Swapping, watermark, PSX-undither,
+   disattivazione PSTITLEIMG e PIC1 come logo. Conversione ed estrazione
    espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel

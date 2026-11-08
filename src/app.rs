@@ -29,6 +29,7 @@ struct DiscFields {
     disable_title_image: gtk::CheckButton,
     use_pic1_logo: gtk::CheckButton,
     watermark: gtk::CheckButton,
+    psx_undither: gtk::CheckButton,
     disable_asset_downloads: gtk::CheckButton,
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
@@ -154,6 +155,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         disable_title_image: gtk::CheckButton::with_label(&tr("Disable PSTITLEIMG")),
         use_pic1_logo: gtk::CheckButton::with_label(&tr("Use PIC1 as Logo")),
         watermark: gtk::CheckButton::with_label(&tr("Watermark")),
+        psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -268,6 +270,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
             "Use PIC1 as Logo" => option_body.append(&fields.use_pic1_logo),
             "Watermark" => option_body.append(&fields.watermark),
+            "PSX-undither" => option_body.append(&fields.psx_undither),
             _ => {
                 let option = gtk::CheckButton::with_label(&tr(label));
                 option.set_sensitive(false);
@@ -432,6 +435,7 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             force_ntsc: fields_for_create.force_ntsc.is_active(),
             allow_disc_swapping: fields_for_create.allow_disc_swapping.is_active(),
             watermark: fields_for_create.watermark.is_active(),
+            psx_undither: fields_for_create.psx_undither.is_active(),
         };
         fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
         progress_for_create.set_text(Some(&tr("Conversion in progress")));

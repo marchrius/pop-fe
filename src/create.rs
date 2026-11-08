@@ -55,6 +55,7 @@ pub struct PbpCreateConfig {
     pub force_ntsc: bool,
     pub allow_disc_swapping: bool,
     pub watermark: bool,
+    pub psx_undither: bool,
 }
 
 pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
@@ -208,6 +209,19 @@ pub fn create_from_image_with_progress(
             None
         };
         let disc = match &xdelta_patched {
+            Some(temp) => temp.file.try_clone()?,
+            None => disc,
+        };
+        let undithered = if config.psx_undither {
+            let first = 0.10 + 0.02 * index as f64 / config.images.len() as f64;
+            let span = 0.02 / config.images.len() as f64;
+            Some(apply_psx_undither(&disc, cancelled, |fraction| {
+                progress(first + span * fraction);
+            })?)
+        } else {
+            None
+        };
+        let disc = match &undithered {
             Some(temp) => temp.file.try_clone()?,
             None => disc,
         };
@@ -582,6 +596,150 @@ fn normalize_cdda_image(
     Ok(())
 }
 
+fn apply_psx_undither(
+    source: &File,
+    cancelled: &AtomicBool,
+    progress: impl Fn(f64),
+) -> Result<TempFile, CreateError> {
+    const RAW_SECTOR: usize = 2352;
+    const USER_DATA: usize = 2048;
+    const PATTERN: [u8; 6] = [0x00, 0xe1, 0x00, 0x3c, 0x00, 0x02];
+    let input_len = source.metadata()?.len();
+    if input_len == 0 || input_len % RAW_SECTOR as u64 != 0 {
+        return Err(CreateError::Invalid(
+            "PSX-undither needs a raw image aligned to 2352-byte sectors".into(),
+        ));
+    }
+    let copy = TempFile::new("undither-source")?;
+    let mut input = source.try_clone()?;
+    input.seek(SeekFrom::Start(0))?;
+    let mut destination = copy.file.try_clone()?;
+    let mut buffer = vec![0u8; 1024 * 1024];
+    let mut copied = 0u64;
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let count = input.read(&mut buffer)?;
+        if count == 0 {
+            break;
+        }
+        destination.write_all(&buffer[..count])?;
+        copied += count as u64;
+        progress(0.4 * copied as f64 / input_len as f64);
+    }
+    destination.sync_all()?;
+    let sector_count = input_len / RAW_SECTOR as u64;
+    let mut image = copy.file.try_clone()?;
+    let mut sector_index = 0u64;
+    while sector_index < sector_count {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let count = (sector_count - sector_index).min(2) as usize;
+        let mut pair = vec![0u8; count * RAW_SECTOR];
+        image.seek(SeekFrom::Start(sector_index * RAW_SECTOR as u64))?;
+        image.read_exact(&mut pair)?;
+        let mut regions = Vec::with_capacity(count);
+        let mut flattened = vec![0u8; count * USER_DATA];
+        for sector in 0..count {
+            let base = sector * RAW_SECTOR;
+            let raw = &pair[base..base + RAW_SECTOR];
+            let mode = raw[15];
+            let data_offset = match mode {
+                1 if valid_raw_sector(raw) => Some(16),
+                2 if valid_raw_sector(raw) && raw[0x12] & 0x20 == 0 => Some(24),
+                _ => None,
+            };
+            regions.push(data_offset);
+            if let Some(offset) = data_offset {
+                flattened[sector * USER_DATA..(sector + 1) * USER_DATA]
+                    .copy_from_slice(&raw[offset..offset + USER_DATA]);
+            }
+        }
+        let mut changed = false;
+        if flattened.len() >= PATTERN.len() {
+            for position in 0..=flattened.len() - PATTERN.len() {
+                let patched_byte = position + 5;
+                let first_sector = position / USER_DATA;
+                let last_sector = patched_byte / USER_DATA;
+                if regions[first_sector].is_none()
+                    || regions[last_sector].is_none()
+                    || flattened[position] != PATTERN[0]
+                    || flattened[position + 1] != PATTERN[1]
+                    || flattened[position + 3] != PATTERN[3]
+                    || flattened[position + 4] != PATTERN[4]
+                    || flattened[position + 5] != PATTERN[5]
+                {
+                    continue;
+                }
+                let target_sector = patched_byte / USER_DATA;
+                let target_offset = patched_byte % USER_DATA;
+                let raw_offset = target_sector * RAW_SECTOR
+                    + regions[target_sector].expect("validated sector region")
+                    + target_offset;
+                pair[raw_offset] = 0;
+                flattened[patched_byte] = 0;
+                changed = true;
+            }
+        }
+        if changed {
+            for sector in 0..count {
+                if regions[sector].is_some() {
+                    let start = sector * RAW_SECTOR;
+                    repair_raw_sector(&mut pair[start..start + RAW_SECTOR]);
+                }
+            }
+            image.seek(SeekFrom::Start(sector_index * RAW_SECTOR as u64))?;
+            image.write_all(&pair)?;
+        }
+        sector_index += 1;
+        progress(0.4 + 0.6 * sector_index as f64 / sector_count as f64);
+    }
+    image.sync_all()?;
+    Ok(copy)
+}
+
+fn valid_raw_sector(sector: &[u8]) -> bool {
+    sector.len() == 2352
+        && sector[0] == 0
+        && sector[1..11].iter().all(|byte| *byte == 0xff)
+        && sector[11] == 0
+}
+
+fn repair_raw_sector(sector: &mut [u8]) {
+    match sector[15] {
+        1 => {
+            let checksum = edc(&sector[..0x810]);
+            sector[0x810..0x814].copy_from_slice(&checksum.to_le_bytes());
+            sector[0x814..0x81c].fill(0);
+            let raw: &[u8; 2352] = (&*sector).try_into().expect("raw sector size");
+            let (p, q) = ecc(raw);
+            sector[0x81c..0x8c8].copy_from_slice(&p);
+            sector[0x8c8..0x930].copy_from_slice(&q);
+        }
+        2 => {
+            let subheader = [sector[0x10], sector[0x11], sector[0x12], sector[0x13]];
+            sector[0x14..0x18].copy_from_slice(&subheader);
+            if sector[0x12] & 0x20 == 0 {
+                let checksum = edc(&sector[0x10..0x818]);
+                sector[0x818..0x81c].copy_from_slice(&checksum.to_le_bytes());
+                let address = [sector[12], sector[13], sector[14], sector[15]];
+                sector[12..16].fill(0);
+                let raw: &[u8; 2352] = (&*sector).try_into().expect("raw sector size");
+                let (p, q) = ecc(raw);
+                sector[0x81c..0x8c8].copy_from_slice(&p);
+                sector[0x8c8..0x930].copy_from_slice(&q);
+                sector[12..16].copy_from_slice(&address);
+            } else {
+                let checksum = edc(&sector[0x10..0x92c]);
+                sector[0x92c..0x930].copy_from_slice(&checksum.to_le_bytes());
+            }
+        }
+        _ => {}
+    }
+}
+
 struct EncodedAudioTrack {
     file: TempFile,
     data_len: u64,
@@ -806,7 +964,9 @@ fn ecc(data: &[u8; 2352]) -> ([u8; 172], [u8; 104]) {
         output
     }
     let p = parity(&data[12..2076], 86, 24, 2, 86);
-    let q = parity(&data[12..2248], 52, 43, 86, 88);
+    let mut with_p = *data;
+    with_p[2076..2248].copy_from_slice(&p);
+    let q = parity(&with_p[12..2248], 52, 43, 86, 88);
     (p.try_into().unwrap(), q.try_into().unwrap())
 }
 
