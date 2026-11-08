@@ -119,5 +119,9 @@
   "This procedural theme is not ported yet": "This procedural theme is not ported yet",
   "Select between one and 32 disc images": "Select between one and 32 disc images",
   "Select CUE, CCD, CHD, ISO or raw BIN/IMG images": "Select CUE, CCD, CHD, ISO or raw BIN/IMG images",
-  "This option is not ported yet": "This option is not ported yet"
+  "This option is not ported yet": "This option is not ported yet",
+  "Manual / PDF / ZIP": "Manual / PDF / ZIP",
+  "Override {name}": "Override {name}",
+  "Select Asset File": "Select Asset File",
+  "Select Manual File": "Select Manual File"
 }

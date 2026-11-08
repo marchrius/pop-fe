@@ -123,5 +123,6 @@
   "Override {name}": "Sostituisci {name}",
   "Select Asset File": "Seleziona il file dell’asset",
   "Manual / PDF / ZIP": "Manuale / PDF / ZIP",
-  "Select Manual File": "Seleziona il file del manuale"
+  "Select Manual File": "Seleziona il file del manuale",
+  "Game ID": "ID gioco"
 }
