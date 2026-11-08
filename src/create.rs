@@ -2,6 +2,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::process::Command;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -80,9 +81,18 @@ pub fn create_from_image_cancellable(
             .and_then(|value| value.to_str())
             .unwrap_or_default()
             .to_ascii_lowercase();
+        let cue_sheet = (extension == "cue")
+            .then(|| CueSheet::parse(image_path))
+            .transpose()
+            .map_err(|error| CreateError::Invalid(error.to_string()))?;
+        let audio_tracks = if let Some(sheet) = &cue_sheet {
+            prepare_audio_tracks(sheet, cancelled)?
+        } else {
+            Vec::new()
+        };
         let normalized = if extension == "cue" || extension == "iso" {
             let image = TempFile::new("raw-disc")?;
-            normalize_image(image_path, &image.file, cancelled)?;
+            normalize_image(image_path, cue_sheet.as_ref(), &image.file, cancelled)?;
             Some(image)
         } else {
             None
@@ -106,8 +116,17 @@ pub fn create_from_image_cancellable(
         let source_md5 = CueSheet::open_image(image_path)
             .and_then(|sheet| sheet.first_track_md5())
             .ok();
-        let patch = source_md5
-            .as_deref()
+        let ppf_compatible = matches!(extension.as_str(), "bin" | "img")
+            || cue_sheet.as_ref().is_some_and(|sheet| {
+                sheet.tracks.len() == 1
+                    && matches!(
+                        sheet.tracks[0].mode,
+                        TrackMode::Mode1_2352 | TrackMode::Mode2_2352
+                    )
+            });
+        let patch = ppf_compatible
+            .then_some(source_md5.as_deref())
+            .flatten()
             .and_then(|md5| crate::database::Database::embedded().psp_patch(&disc_id, md5));
         let patched = if let Some(patch) = patch {
             let temp = TempFile::new("patched-disc")?;
@@ -141,6 +160,8 @@ pub fn create_from_image_cancellable(
             &config.title,
             &psp_config,
             magic_word,
+            cue_sheet.as_ref(),
+            &audio_tracks,
             cancelled,
         )?;
         let psiso_len = psiso.file.metadata()?.len();
@@ -268,6 +289,7 @@ pub fn create_from_image_cancellable(
 
 fn normalize_image(
     path: &PathBuf,
+    cue_sheet: Option<&CueSheet>,
     output: &File,
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
@@ -304,13 +326,10 @@ fn normalize_image(
         }
         return Ok(());
     }
-    let sheet = CueSheet::parse(path).map_err(|error| CreateError::Invalid(error.to_string()))?;
-    if sheet.tracks.len() != 1 {
-        return Err(CreateError::Invalid(
-            "native conversion currently supports CUE sheets with one track".into(),
-        ));
-    }
-    let track = &sheet.tracks[0];
+    let sheet = cue_sheet.ok_or_else(|| CreateError::Invalid("CUE metadata is missing".into()))?;
+    let track = sheet
+        .data_track()
+        .ok_or_else(|| CreateError::Invalid("CUE sheet does not contain a data track".into()))?;
     if track.mode == TrackMode::Audio {
         return Err(CreateError::Invalid(
             "audio-only CUE tracks cannot be converted as a PSX data disc".into(),
@@ -319,7 +338,15 @@ fn normalize_image(
     let mut source = File::open(&track.path)?;
     let sector_size = track.mode.sector_size();
     let start = track.index01.saturating_mul(sector_size);
-    let length = source.metadata()?.len().saturating_sub(start);
+    let end = sheet
+        .tracks
+        .iter()
+        .skip_while(|next| next.number != track.number)
+        .skip(1)
+        .find(|next| next.path == track.path)
+        .map(|next| next.index00.unwrap_or(next.index01) * next.mode.sector_size())
+        .unwrap_or(source.metadata()?.len());
+    let length = end.saturating_sub(start);
     source.seek(SeekFrom::Start(start))?;
     match track.mode {
         TrackMode::Mode1_2048 => {
@@ -363,6 +390,152 @@ fn normalize_image(
         }
     }
     Ok(())
+}
+
+struct EncodedAudioTrack {
+    file: TempFile,
+    data_len: u64,
+}
+
+fn prepare_audio_tracks(
+    sheet: &CueSheet,
+    cancelled: &AtomicBool,
+) -> Result<Vec<EncodedAudioTrack>, CreateError> {
+    let encoder = atracdenc_path().ok_or_else(|| {
+        CreateError::Invalid("CUE audio needs atracdenc; install it or set POPFE_ATRACDENC".into())
+    })?;
+    let mut encoded_tracks = Vec::new();
+    for (index, track) in sheet
+        .tracks
+        .iter()
+        .enumerate()
+        .filter(|(_, track)| track.mode == TrackMode::Audio)
+    {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let sector_size = track.mode.sector_size();
+        let start = track
+            .index01
+            .checked_mul(sector_size)
+            .ok_or_else(|| CreateError::Invalid("CUE audio offset overflow".into()))?;
+        let source = File::open(&track.path)?;
+        let end = sheet
+            .tracks
+            .iter()
+            .skip(index + 1)
+            .find(|next| next.path == track.path)
+            .map(|next| {
+                next.index00
+                    .unwrap_or(next.index01)
+                    .saturating_mul(next.mode.sector_size())
+            })
+            .unwrap_or(source.metadata()?.len());
+        let length = end.saturating_sub(start);
+        let length = length - length % 2352;
+        if length == 0 {
+            return Err(CreateError::Invalid(format!(
+                "CUE audio track {} is empty",
+                track.number
+            )));
+        }
+        if length > u32::MAX as u64 {
+            return Err(CreateError::Invalid(
+                "CUE audio track exceeds WAV size limit".into(),
+            ));
+        }
+        let wav = TempFile::new_ext("audio", "wav")?;
+        let mut wav_file = wav.file.try_clone()?;
+        write_wav_header(&mut wav_file, length as u32)?;
+        let mut audio_source = source;
+        audio_source.seek(SeekFrom::Start(start))?;
+        let mut remaining = length;
+        let mut buffer = vec![0u8; 1024 * 1024];
+        while remaining > 0 {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(CreateError::Cancelled);
+            }
+            let count = buffer.len().min(remaining as usize);
+            audio_source.read_exact(&mut buffer[..count])?;
+            wav_file.write_all(&buffer[..count])?;
+            remaining -= count as u64;
+        }
+        drop(wav_file);
+        let aea = TempFile::new_ext("audio", "aea")?;
+        let mut child = Command::new(&encoder)
+            .args(["--encode=atrac3", "-i"])
+            .arg(&wav.path)
+            .arg("-o")
+            .arg(&aea.path)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+        let status = loop {
+            if cancelled.load(Ordering::Relaxed) {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(CreateError::Cancelled);
+            }
+            if let Some(status) = child.try_wait()? {
+                break status;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        if !status.success() {
+            let result = child.wait_with_output()?;
+            let diagnostic = String::from_utf8_lossy(&result.stderr);
+            return Err(CreateError::Invalid(format!(
+                "atracdenc failed on audio track {}: {}",
+                track.number,
+                diagnostic.trim()
+            )));
+        }
+        let encoded_len = aea.file.metadata()?.len();
+        if encoded_len <= 0x60 {
+            return Err(CreateError::Invalid(format!(
+                "atracdenc produced an empty track {}",
+                track.number
+            )));
+        }
+        encoded_tracks.push(EncodedAudioTrack {
+            file: aea,
+            data_len: encoded_len - 0x60,
+        });
+    }
+    Ok(encoded_tracks)
+}
+
+fn atracdenc_path() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("POPFE_ATRACDENC").map(PathBuf::from)
+        && path.is_file()
+    {
+        return Some(path);
+    }
+    if let Some(path) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|dir| dir.join("atracdenc"))
+        .find(|path| path.is_file())
+    {
+        return Some(path);
+    }
+    let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("atracdenc/src/atracdenc");
+    bundled.is_file().then_some(bundled)
+}
+
+fn write_wav_header(file: &mut File, data_len: u32) -> io::Result<()> {
+    let mut header = [0u8; 44];
+    header[..4].copy_from_slice(b"RIFF");
+    header[4..8].copy_from_slice(&(data_len + 36).to_le_bytes());
+    header[8..16].copy_from_slice(b"WAVEfmt ");
+    header[16..20].copy_from_slice(&16u32.to_le_bytes());
+    header[20..22].copy_from_slice(&1u16.to_le_bytes());
+    header[22..24].copy_from_slice(&2u16.to_le_bytes());
+    header[24..28].copy_from_slice(&44_100u32.to_le_bytes());
+    header[28..32].copy_from_slice(&176_400u32.to_le_bytes());
+    header[32..34].copy_from_slice(&4u16.to_le_bytes());
+    header[34..36].copy_from_slice(&16u16.to_le_bytes());
+    header[36..40].copy_from_slice(b"data");
+    header[40..44].copy_from_slice(&data_len.to_le_bytes());
+    file.write_all(&header)
 }
 
 fn mode1_sector(lba: u32, payload: [u8; 2048]) -> [u8; 2352] {
@@ -445,7 +618,21 @@ struct TempFile {
 }
 impl TempFile {
     fn new(label: &str) -> io::Result<Self> {
-        Self::new_in(&std::env::temp_dir(), label)
+        Self::new_ext(label, "tmp")
+    }
+
+    fn new_ext(label: &str, extension: &str) -> io::Result<Self> {
+        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "pop-fe-{label}-{}-{sequence}.{extension}",
+            std::process::id()
+        ));
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        Ok(Self { path, file })
     }
 
     fn new_in(directory: &std::path::Path, label: &str) -> io::Result<Self> {
@@ -476,6 +663,8 @@ fn write_psiso(
     title: &str,
     psp_config: &[u8],
     magic_word: Option<u16>,
+    cue_sheet: Option<&CueSheet>,
+    audio_tracks: &[EncodedAudioTrack],
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
     let sector_count = disc_len.div_ceil(SECTOR_SIZE as u64);
@@ -498,7 +687,7 @@ fn write_psiso(
     }
     game[0x20..0x20 + psp_config.len()].copy_from_slice(psp_config);
     psiso.write_all(&game)?;
-    psiso.write_all(&build_toc(sector_count))?;
+    psiso.write_all(&build_toc(sector_count, cue_sheet))?;
     psiso.write_all(&vec![0u8; 1568])?;
     let mut title_block = [0u8; 480];
     title_block[8..10].copy_from_slice(&[0xff, 0x07]);
@@ -558,6 +747,40 @@ fn write_psiso(
             .ok_or_else(|| CreateError::Invalid("compressed image is too large".into()))?;
         indexes.extend_from_slice(&index);
     }
+    if audio_tracks.len() > 98 {
+        return Err(CreateError::Invalid(
+            "PSISO supports at most 98 audio tracks".into(),
+        ));
+    }
+    for (index, audio) in audio_tracks.iter().enumerate() {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(CreateError::Cancelled);
+        }
+        let aligned = align_up(psiso.stream_position()?, 16);
+        psiso.seek(SeekFrom::Start(aligned))?;
+        let relative = aligned
+            .checked_sub(PSISO_PAYLOAD_OFFSET)
+            .ok_or_else(|| CreateError::Invalid("invalid PSISO audio location".into()))?;
+        let mut entry = [0u8; 16];
+        entry[..4].copy_from_slice(
+            &u32::try_from(relative)
+                .map_err(|_| {
+                    CreateError::Invalid("PSISO audio offset exceeds format limit".into())
+                })?
+                .to_le_bytes(),
+        );
+        entry[4..8].copy_from_slice(
+            &u32::try_from(audio.data_len)
+                .map_err(|_| CreateError::Invalid("PSISO audio track exceeds format limit".into()))?
+                .to_le_bytes(),
+        );
+        psiso.seek(SeekFrom::Start(0x0c00 + (index * 16) as u64))?;
+        psiso.write_all(&entry)?;
+        psiso.seek(SeekFrom::Start(aligned))?;
+        let mut encoded = audio.file.file.try_clone()?;
+        encoded.seek(SeekFrom::Start(0x60))?;
+        io::copy(&mut encoded.take(audio.data_len), &mut psiso)?;
+    }
     let end = align_up(psiso.stream_position()?, 16);
     psiso.seek(SeekFrom::Start(end))?;
     psiso.set_len(end)?;
@@ -574,9 +797,30 @@ fn write_psiso(
     Ok(())
 }
 
-fn build_toc(sectors: u64) -> [u8; 1024] {
+fn build_toc(sectors: u64, sheet: Option<&CueSheet>) -> [u8; 1024] {
     let mut toc = [0u8; 1024];
-    let frames = sectors.saturating_add(150);
+    let mut track_starts = Vec::new();
+    let mut total_sectors = sectors;
+    if let Some(sheet) = sheet {
+        let mut file_offsets = std::collections::HashMap::<PathBuf, u64>::new();
+        let mut next_file_offset = 0u64;
+        for track in &sheet.tracks {
+            let base = *file_offsets.entry(track.path.clone()).or_insert_with(|| {
+                let offset = next_file_offset;
+                if let Ok(metadata) = track.path.metadata() {
+                    next_file_offset =
+                        next_file_offset.saturating_add(metadata.len() / track.mode.sector_size());
+                }
+                offset
+            });
+            track_starts.push((track.number, track.mode, base.saturating_add(track.index01)));
+        }
+        total_sectors = next_file_offset.max(sectors);
+        let last_track = sheet.tracks.last().map(|track| track.number).unwrap_or(1);
+        toc[..10].copy_from_slice(&[0x41, 0, 0xa0, 0, 0, 0, 0, 1, 0x20, 0]);
+        toc[10..20].copy_from_slice(&[0x41, 0, 0xa1, 0, 0, 0, 0, bcd(last_track), 0, 0]);
+    }
+    let frames = total_sectors.saturating_add(150);
     toc[..40].copy_from_slice(&[
         0x41, 0, 0xa0, 0, 0, 0, 0, 0x01, 0x20, 0, 0x41, 0, 0xa1, 0, 0, 0, 0, 0x01, 0, 0, 0x41, 0,
         0xa2, 0, 0, 0, 0, 0, 0, 0, 0x41, 0, 0x01, 0, 0x02, 0x01, 0, 0, 0x02, 0,
@@ -584,6 +828,33 @@ fn build_toc(sectors: u64) -> [u8; 1024] {
     toc[27] = bcd((frames / 4500) as u8);
     toc[28] = bcd(((frames / 75) % 60) as u8);
     toc[29] = bcd((frames % 75) as u8);
+    if let Some(sheet) = sheet {
+        // Restore the A0/A1 entries after writing the standard single-track header.
+        let last_track = sheet.tracks.last().map(|track| track.number).unwrap_or(1);
+        toc[7] = 1;
+        toc[8] = 0x20;
+        toc[17] = bcd(last_track);
+        for (index, (number, mode, start)) in track_starts.iter().enumerate() {
+            let offset = 30 + index * 10;
+            if offset + 10 > toc.len() {
+                break;
+            }
+            let mut frames = start.saturating_add(150);
+            toc[offset] = if *mode == TrackMode::Audio {
+                0x01
+            } else {
+                0x41
+            };
+            toc[offset + 2] = bcd(*number);
+            toc[offset + 3] = bcd((frames / 4500) as u8);
+            toc[offset + 4] = bcd(((frames / 75) % 60) as u8);
+            toc[offset + 5] = bcd((frames % 75) as u8);
+            frames = frames.saturating_add(150);
+            toc[offset + 7] = bcd((frames / 4500) as u8);
+            toc[offset + 8] = bcd(((frames / 75) % 60) as u8);
+            toc[offset + 9] = bcd((frames % 75) as u8);
+        }
+    }
     toc
 }
 

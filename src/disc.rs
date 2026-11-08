@@ -63,6 +63,7 @@ pub struct Track {
     pub path: PathBuf,
     pub mode: TrackMode,
     pub index01: u64,
+    pub index00: Option<u64>,
 }
 
 #[derive(Clone, Debug)]
@@ -106,6 +107,7 @@ impl CueSheet {
                 path: path.to_path_buf(),
                 mode,
                 index01: 0,
+                index00: None,
             }],
         })
     }
@@ -155,9 +157,11 @@ impl CueSheet {
                         path: image,
                         mode: TrackMode::parse(mode)?,
                         index01: 0,
+                        index00: None,
                     });
                 }
-                "INDEX" if words.next() == Some("01") => {
+                "INDEX" => {
+                    let index = words.next();
                     let time = words.next().ok_or_else(|| {
                         DiscError::Cue(format!("missing INDEX time at line {}", line_number + 1))
                     })?;
@@ -167,9 +171,14 @@ impl CueSheet {
                             line_number + 1
                         ))
                     })?;
-                    track.index01 = cue_time_to_frames(time).ok_or_else(|| {
+                    let frames = cue_time_to_frames(time).ok_or_else(|| {
                         DiscError::Cue(format!("invalid INDEX time at line {}", line_number + 1))
                     })?;
+                    match index {
+                        Some("00") => track.index00 = Some(frames),
+                        Some("01") => track.index01 = frames,
+                        _ => {}
+                    }
                 }
                 _ => {}
             }

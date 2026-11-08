@@ -13,22 +13,24 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, CUE e tracce AEA:
    implementata, da verificare con PBP reali.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
-   di 32 dischi; ogni disco accetta BIN/IMG raw, ISO 2048 o CUE a traccia
-   singola.
+   di 32 dischi; accetta BIN/IMG raw, ISO 2048 e CUE con tracce dati e audio.
+   Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel
+   PSISO assieme alla TOC.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; le anteprime vengono mostrate
    nella pagina Converti. I config POPS specifici per gioco e i dati LibCrypt
    vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE. I temi
    pittorici generativi sono elencati ma i loro filtri non sono ancora portati.
-6. Supporto completo a CUE multi-traccia, CCD/CHD, multi-disco, audio,
-   patch e LibCrypt.
+6. Restano CCD/CHD, CDDA senza ricodifica, Xdelta e ulteriori opzioni audio.
+   PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
+   BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
 7. Progress percentuale, packaging `.deb`/Flatpak Rust e
    rimozione del backend Python dal pacchetto.
 
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
-la conversione Rust non supporta ancora CUE multi-traccia, tracce CDDA, PPF e
+la conversione Rust non supporta ancora CCD/CHD, CDDA senza ricodifica,
 Xdelta o i filtri dei temi generativi; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato.
