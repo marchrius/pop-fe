@@ -8,7 +8,7 @@ Servono Rust/Cargo, CMake, un compilatore C/C++, GTK 4.10 o superiore, libadwait
 
 ```sh
 python3 packaging/build_deb.py --offline
-sudo apt install ./dist/pop-fe-psp_0.1.6_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.7_amd64.deb
 ```
 
 Rimuovi `--offline` se Cargo deve scaricare dipendenze. Lo script compila `atracdenc` se manca, compila l'app Rust in release e crea il `.deb` in `dist/` senza privilegi di root.

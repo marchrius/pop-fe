@@ -431,16 +431,14 @@ fn convert_page(
             "Disable PIC0" => {
                 option_body.append(&fields.disable_pic0);
                 let fields = fields.clone();
-                fields
-                    .disable_pic0
-                    .connect_toggled(move |_| refresh_asset_previews(&fields));
+                let check = fields.disable_pic0.clone();
+                check.connect_toggled(move |_| refresh_asset_previews(&fields));
             }
             "Disable PIC1" => {
                 option_body.append(&fields.disable_pic1);
                 let fields = fields.clone();
-                fields
-                    .disable_pic1
-                    .connect_toggled(move |_| refresh_asset_previews(&fields));
+                let check = fields.disable_pic1.clone();
+                check.connect_toggled(move |_| refresh_asset_previews(&fields));
             }
             "Use PIC1 as Logo" => option_body.append(&fields.use_pic1_logo),
             "Watermark" => option_body.append(&fields.watermark),
