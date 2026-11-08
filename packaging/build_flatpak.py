@@ -209,6 +209,8 @@ def main():
             (ROOT / 'packaging/org.popfe.PSPManager.desktop', app / 'share/applications/org.popfe.PSPManager.desktop'),
             (ROOT / 'packaging/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg',
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),
+            (ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt',
+             app / 'share/licenses/libcrypt-patcher-BSD-3-Clause.txt'),
         ]
         for source, target in install_pairs:
             target.parent.mkdir(parents=True, exist_ok=True)

@@ -1,4 +1,4 @@
-//! Safe PPF2 and PPF3 method 2 patch application.
+//! Safe PPF1, PPF2 and PPF3 method 2 patch application.
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -16,20 +16,59 @@ pub fn apply(file: &File, patch: &[u8]) -> Result<(), PatchError> {
     if patch.len() < 4 {
         return Err(PatchError::Invalid("header is truncated".into()));
     }
-    if patch.ends_with(b".DIZ")
-        || (patch.len() >= 6 && &patch[patch.len() - 6..patch.len() - 2] == b".DIZ")
-    {
-        return Err(PatchError::Invalid(
-            "PPF description footer is unsupported".into(),
-        ));
-    }
+    let patch = without_description_footer(patch)?;
     let mut image = file.try_clone()?;
     let image_len = image.metadata()?.len();
     match &patch[..4] {
+        b"PPF1" => apply_v1(&mut image, image_len, patch),
         b"PPF2" => apply_v2(&mut image, image_len, patch),
         b"PPF3" => apply_v3(&mut image, image_len, patch),
         _ => Err(PatchError::Invalid("unknown PPF version".into())),
     }
+}
+
+fn without_description_footer(patch: &[u8]) -> Result<&[u8], PatchError> {
+    if patch.len() < 6 || &patch[patch.len() - 6..patch.len() - 2] != b".DIZ" {
+        return Ok(patch);
+    }
+    let description_len =
+        u16::from_le_bytes([patch[patch.len() - 2], patch[patch.len() - 1]]) as usize;
+    let footer_start = patch
+        .len()
+        .checked_sub(description_len + 2)
+        .filter(|start| *start >= 4)
+        .ok_or_else(|| PatchError::Invalid("invalid PPF description footer".into()))?;
+    let footer = &patch[footer_start..patch.len() - 2];
+    if !footer.ends_with(b".DIZ") {
+        return Err(PatchError::Invalid("invalid PPF description footer".into()));
+    }
+    let footer_start = patch[..footer_start]
+        .windows(b"@BEGIN_FILE_ID.DIZ".len())
+        .rposition(|window| window == b"@BEGIN_FILE_ID.DIZ")
+        .unwrap_or(footer_start);
+    Ok(&patch[..footer_start])
+}
+
+fn apply_v1(file: &mut File, image_len: u64, patch: &[u8]) -> Result<(), PatchError> {
+    if patch.len() < 56 {
+        return Err(PatchError::Invalid("PPF1 header is truncated".into()));
+    }
+    let mut pos = 56;
+    while pos < patch.len() {
+        let offset = u32_at(patch, pos)? as u64;
+        let count = *patch
+            .get(pos + 4)
+            .ok_or_else(|| PatchError::Invalid("truncated record".into()))?
+            as usize;
+        pos += 5;
+        let end = pos
+            .checked_add(count)
+            .filter(|end| *end <= patch.len())
+            .ok_or_else(|| PatchError::Invalid("truncated record data".into()))?;
+        apply_record(file, image_len, offset, &patch[pos..end])?;
+        pos = end;
+    }
+    Ok(())
 }
 
 fn apply_v2(file: &mut File, image_len: u64, patch: &[u8]) -> Result<(), PatchError> {

@@ -63,6 +63,7 @@ pub struct Database {
     pub themes: HashMap<String, ThemeRecord>,
     pub ppf_fixes: HashMap<String, PatchRecord>,
     ppf_data: HashMap<String, String>,
+    libcrypt_patches: HashMap<String, String>,
 }
 
 #[derive(Clone, Debug)]
@@ -91,6 +92,8 @@ impl Database {
                 .expect("PPF database JSON must be valid"),
             ppf_data: serde_json::from_str(include_str!("../data/ppf_data.json"))
                 .expect("PPF data JSON must be valid"),
+            libcrypt_patches: serde_json::from_str(include_str!("../data/libcrypt_patches.json"))
+                .expect("LibCrypt patch map JSON must be valid"),
         })
     }
 
@@ -181,7 +184,11 @@ impl Database {
     }
 
     pub fn libcrypt_patch(&self, id: &str) -> Option<Vec<u8>> {
-        let path = self.libcrypt.get(id)?.ppf.as_deref()?;
+        let path = self
+            .libcrypt
+            .get(id)
+            .and_then(|record| record.ppf.as_deref())
+            .or_else(|| self.libcrypt_patches.get(id).map(String::as_str))?;
         self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
     }
 

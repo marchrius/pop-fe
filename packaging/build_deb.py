@@ -59,6 +59,7 @@ def main():
 
         doc = stage / 'usr/share/doc/pop-fe-psp'
         install(ROOT / 'LICENCE-LGPL-2.1.txt', doc / 'copyright')
+        install(ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt', doc / 'libcrypt-patcher-BSD-3-Clause.txt')
         install(ROOT / 'packaging/README.md', doc / 'README.md')
         (doc / 'changelog.Debian').write_text(
             f'pop-fe-psp ({args.version}) unstable; urgency=medium\n\n'
