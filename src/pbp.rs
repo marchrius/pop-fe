@@ -13,6 +13,7 @@ use crate::disc::CueSheet;
 const PBP_HEADER_SIZE: usize = 0x28;
 const PSISO_HEADER_SIZE: u64 = 0x100000;
 const SECTOR_SIZE: usize = 0x9300;
+const RAW_SECTOR_SIZE: u64 = 2352;
 const INDEX_OFFSET: u64 = 0x4000;
 const MAX_DISC_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
@@ -216,8 +217,9 @@ impl Pbp {
                     if length == 0 {
                         break;
                     }
-                    work = work.saturating_add(SECTOR_SIZE as u64);
-                    work = work.saturating_add(SECTOR_SIZE as u64);
+                    // Extraction writes each decoded PSISO sector once, then
+                    // scans its 2352-byte CD sectors while exporting the ISO.
+                    work = work.saturating_add(SECTOR_SIZE as u64 + RAW_SECTOR_SIZE);
                     index_pos += 32;
                     scanned_sectors += 1;
                 }
