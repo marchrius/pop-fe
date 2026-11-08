@@ -32,7 +32,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    ulteriori opzioni audio. GUI e backend accettano CHD
    tramite `chdman` e CCD tramite parsing nativo; i pacchetti includono il
    decoder CHD.
-7. Conversione ed estrazione espongono percentuali determinate e cancellazione.
+7. Conversione espone CDDA, Force NTSC, Disc Swapping, disattivazione
+   PSTITLEIMG e PIC1 come logo. Conversione ed estrazione
+   espongono percentuali determinate e cancellazione.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
    sandbox e su PSP resta da verificare.
@@ -40,7 +42,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 Durante la migrazione gli script Python restano la versione completa e il
 riferimento di comportamento. Il crate non è ancora un sostituto completo:
 la conversione Rust non supporta ancora CDDA senza ricodifica e tutti
-gli altri romhack Xdelta; non va usata come
+gli altri romhack Xdelta o il patcher LibCrypt `lcp`; non va usata come
 sostituto per generare EBOOT destinati alla PSP finché il porting non sarà
 validato. I filtri pittorici Rust sono approssimazioni dei filtri OpenCV.
 

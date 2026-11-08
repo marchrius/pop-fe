@@ -52,6 +52,8 @@ pub struct PbpCreateConfig {
     pub assets: PbpAssets,
     pub include_title_image: bool,
     pub use_cdda: bool,
+    pub force_ntsc: bool,
+    pub allow_disc_swapping: bool,
 }
 
 pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
@@ -219,6 +221,22 @@ pub fn create_from_image_with_progress(
             }
             if psp_config.len() > 0x8d {
                 psp_config[0x8d] |= 0x20;
+            }
+        }
+        if config.force_ntsc {
+            if psp_config.len() > 0x0b {
+                psp_config[0x0b] |= 0x10;
+            }
+            if psp_config.len() > 0x8f {
+                psp_config[0x8f] |= 0x10;
+            }
+        }
+        if config.allow_disc_swapping {
+            if psp_config.len() > 0x09 {
+                psp_config[0x09] |= 0x80;
+            }
+            if psp_config.len() > 0x8d {
+                psp_config[0x8d] |= 0x80;
             }
         }
         let magic_word = crate::database::Database::embedded()

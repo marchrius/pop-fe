@@ -24,6 +24,10 @@ struct DiscFields {
     title: gtk::Entry,
     psp_root: gtk::Entry,
     cdda: gtk::CheckButton,
+    force_ntsc: gtk::CheckButton,
+    allow_disc_swapping: gtk::CheckButton,
+    disable_title_image: gtk::CheckButton,
+    use_pic1_logo: gtk::CheckButton,
     disable_asset_downloads: gtk::CheckButton,
     status: gtk::Label,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
@@ -144,6 +148,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         title,
         psp_root,
         cdda: gtk::CheckButton::with_label(&tr("Use CDDA")),
+        force_ntsc: gtk::CheckButton::with_label(&tr("Force NTSC")),
+        allow_disc_swapping: gtk::CheckButton::with_label(&tr("Allow Disc Swapping")),
+        disable_title_image: gtk::CheckButton::with_label(&tr("Disable PSTITLEIMG")),
+        use_pic1_logo: gtk::CheckButton::with_label(&tr("Use PIC1 as Logo")),
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -253,6 +261,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
                 option_body.append(&fields.cdda);
             }
             "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
+            "Force NTSC" => option_body.append(&fields.force_ntsc),
+            "Allow Disc Swapping" => option_body.append(&fields.allow_disc_swapping),
+            "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
+            "Use PIC1 as Logo" => option_body.append(&fields.use_pic1_logo),
             _ => {
                 let option = gtk::CheckButton::with_label(&tr(label));
                 option.set_sensitive(false);
@@ -400,6 +412,10 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             return;
         }
         let title = fields_for_create.title.text().to_string();
+        let mut assets = fields_for_create.assets.borrow().clone();
+        if fields_for_create.use_pic1_logo.is_active() {
+            assets.logo = assets.pic1.clone();
+        }
         let psp = PathBuf::from(fields_for_create.psp_root.text().as_str());
         let output = psp.join("PSP/GAME").join(&id).join("EBOOT.PBP");
         let config = crate::create::PbpCreateConfig {
@@ -407,9 +423,11 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
             output: output.clone(),
             game_id: id,
             title,
-            assets: fields_for_create.assets.borrow().clone(),
-            include_title_image: true,
+            assets,
+            include_title_image: !fields_for_create.disable_title_image.is_active(),
             use_cdda: fields_for_create.cdda.is_active(),
+            force_ntsc: fields_for_create.force_ntsc.is_active(),
+            allow_disc_swapping: fields_for_create.allow_disc_swapping.is_active(),
         };
         fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
         progress_for_create.set_text(Some(&tr("Conversion in progress")));
