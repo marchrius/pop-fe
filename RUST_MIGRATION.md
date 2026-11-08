@@ -22,6 +22,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    o errori durante la decodifica non lasciano immagini parziali.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
    di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE, CCD e CHD con tracce dati e audio.
+   BIN/IMG e ISO usano una CUE sintetica per calcolare la TOC in settori CD,
+   mantenendo corretto il lead-out PSISO anche per input senza CUE fornita.
    Le tracce audio vengono codificate in ATRAC3 con `atracdenc` e incluse nel
    PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
    imposta i flag POPS corrispondenti.

@@ -127,10 +127,15 @@ pub fn create_from_image_with_progress_and_warnings(
             .and_then(|value| value.to_str())
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let cue_sheet = matches!(extension.as_str(), "cue" | "chd" | "ccd")
-            .then(|| CueSheet::open_image_cancellable(image_path, cancelled))
-            .transpose()
-            .map_err(|error| CreateError::Invalid(error.to_string()))?;
+        // Even raw BIN/IMG and ISO inputs need a synthetic single-track CUE:
+        // PSISO TOC lead-out values are CD sectors, not 0x9300-byte blocks.
+        let cue_sheet = matches!(
+            extension.as_str(),
+            "cue" | "chd" | "ccd" | "iso" | "bin" | "img"
+        )
+        .then(|| CueSheet::open_image_cancellable(image_path, cancelled))
+        .transpose()
+        .map_err(|error| CreateError::Invalid(error.to_string()))?;
         let audio_tracks = if config.use_cdda {
             Vec::new()
         } else if let Some(sheet) = &cue_sheet {
