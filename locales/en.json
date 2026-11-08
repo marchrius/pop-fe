@@ -94,5 +94,15 @@
   "Extraction in progress": "Extraction in progress",
   "Extraction complete: {count} files": "Extraction complete: {count} files",
   "Extraction failed: {error}": "Extraction failed: {error}",
-  "Extraction failed": "Extraction failed"
+  "Extraction failed": "Extraction failed",
+  "Select PSP Root Folder": "Select PSP Root Folder",
+  "Select one raw BIN image; other formats and multiple discs are not supported yet": "Select one raw BIN image; other formats and multiple discs are not supported yet",
+  "The native writer currently accepts raw 2352-byte BIN/IMG images": "The native writer currently accepts raw 2352-byte BIN/IMG images",
+  "Select a PSP folder and identify the disc before conversion": "Select a PSP folder and identify the disc before conversion",
+  "Writing EBOOT.PBP": "Writing EBOOT.PBP",
+  "Conversion in progress": "Conversion in progress",
+  "Conversion complete": "Conversion complete",
+  "Conversion failed: {error}": "Conversion failed: {error}",
+  "Conversion failed": "Conversion failed",
+  "Error": "Error"
 }

@@ -15,6 +15,7 @@ use crate::paths::FolderHistory;
 struct DiscFields {
     id: gtk::Entry,
     title: gtk::Entry,
+    psp_root: gtk::Entry,
     cdda: gtk::CheckButton,
     status: gtk::Label,
 }
@@ -103,11 +104,13 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let files: Rc<RefCell<Vec<PathBuf>>> = Rc::default();
     let folder_history = Rc::new(RefCell::new(FolderHistory::load()));
     let (settings, settings_body) = section(&tr("Game Details"));
+    let psp_root = append_entry(&settings_body, &tr("PSP Root Folder"), "");
     let title = append_entry(&settings_body, &tr("Title"), "");
     let id = append_entry(&settings_body, &tr("Game ID"), "");
     let fields = DiscFields {
         id,
         title,
+        psp_root,
         cdda: gtk::CheckButton::with_label(&tr("Use CDDA")),
         status: gtk::Label::new(Some(&tr("Ready"))),
     };
@@ -214,7 +217,131 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
     let convert = gtk::Button::with_label(&tr("Create EBOOT.PBP"));
     convert.add_css_class("suggested-action");
     convert.set_halign(gtk::Align::End);
-    convert.set_sensitive(false);
+    convert.set_sensitive(true);
+    let root_browse = gtk::Button::with_label(&tr("Browse…"));
+    let root = fields.psp_root.clone();
+    let root_history = folder_history.clone();
+    let root_parent = parent.clone();
+    root_browse.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select PSP Root Folder"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(root_history.borrow().current())));
+        let root = root.clone();
+        let history = root_history.clone();
+        dialog.select_folder(
+            Some(&root_parent),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_directory(&path);
+                    root.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
+    if let Some(row) = fields
+        .psp_root
+        .parent()
+        .and_then(|widget| widget.downcast::<gtk::Box>().ok())
+    {
+        row.append(&root_browse);
+    }
+    let files_for_create = files.clone();
+    let fields_for_create = fields.clone();
+    let button_for_create = convert.clone();
+    let progress = gtk::ProgressBar::new();
+    progress.set_show_text(true);
+    progress.set_text(Some(&tr("Ready")));
+    content.append(&progress);
+    let progress_for_create = progress.clone();
+    convert.connect_clicked(move |_| {
+        let selected = files_for_create.borrow().clone();
+        if selected.len() != 1 {
+            fields_for_create.status.set_text(&tr(
+                "Select one raw BIN image; other formats and multiple discs are not supported yet",
+            ));
+            return;
+        }
+        let extension = selected[0]
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        if !["bin", "img"].contains(&extension.as_str()) {
+            fields_for_create.status.set_text(&tr(
+                "The native writer currently accepts raw 2352-byte BIN/IMG images",
+            ));
+            return;
+        }
+        let id = fields_for_create.id.text().to_string();
+        if id.len() != 9 || fields_for_create.psp_root.text().is_empty() {
+            fields_for_create.status.set_text(&tr(
+                "Select a PSP folder and identify the disc before conversion",
+            ));
+            return;
+        }
+        let title = fields_for_create.title.text().to_string();
+        let psp = PathBuf::from(fields_for_create.psp_root.text().as_str());
+        let output = psp.join("PSP/GAME").join(&id).join("EBOOT.PBP");
+        let config = crate::create::PbpCreateConfig {
+            image: selected[0].clone(),
+            output: output.clone(),
+            game_id: id,
+            title,
+            assets: crate::create::PbpAssets::default(),
+            include_title_image: true,
+        };
+        fields_for_create.status.set_text(&tr("Writing EBOOT.PBP"));
+        progress_for_create.set_text(Some(&tr("Conversion in progress")));
+        progress_for_create.pulse();
+        button_for_create.set_sensitive(false);
+        let (sender, receiver) = mpsc::channel();
+        thread::spawn(move || {
+            let _ = sender.send(
+                crate::create::create_from_raw(&config)
+                    .map_err(|error| error.to_string())
+                    .map(|()| output),
+            );
+        });
+        let fields = fields_for_create.clone();
+        let button = button_for_create.clone();
+        let progress = progress_for_create.clone();
+        gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+            match receiver.try_recv() {
+                Ok(Ok(path)) => {
+                    fields.status.set_text(&format!(
+                        "{}: {}",
+                        tr("Conversion complete"),
+                        path.display()
+                    ));
+                    progress.set_fraction(1.0);
+                    progress.set_text(Some(&tr("Completed")));
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+                Ok(Err(error)) => {
+                    fields
+                        .status
+                        .set_text(&tr("Conversion failed: {error}").replace("{error}", &error));
+                    progress.set_text(Some(&tr("Error")));
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+                Err(mpsc::TryRecvError::Empty) => {
+                    progress.pulse();
+                    gtk::glib::ControlFlow::Continue
+                }
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    fields.status.set_text(&tr("Conversion failed"));
+                    button.set_sensitive(true);
+                    gtk::glib::ControlFlow::Break
+                }
+            }
+        });
+    });
     content.append(&convert);
     scroll
 }

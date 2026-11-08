@@ -10,7 +10,7 @@ use thiserror::Error;
 const PBP_HEADER_SIZE: usize = 0x28;
 const PSISO_HEADER_SIZE: u64 = 0x100000;
 const SECTOR_SIZE: usize = 0x9300;
-const INDEX_OFFSET: u64 = 0x4400;
+const INDEX_OFFSET: u64 = 0x4000;
 const MAX_DISC_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Error)]

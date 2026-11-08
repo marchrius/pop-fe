@@ -94,5 +94,15 @@
   "Extraction in progress": "Estrazione in corso",
   "Extraction complete: {count} files": "Estrazione completata: {count} file",
   "Extraction failed: {error}": "Estrazione non riuscita: {error}",
-  "Extraction failed": "Estrazione non riuscita"
+  "Extraction failed": "Estrazione non riuscita",
+  "Select PSP Root Folder": "Seleziona cartella principale PSP",
+  "Select one raw BIN image; other formats and multiple discs are not supported yet": "Seleziona una singola immagine BIN raw; gli altri formati e i giochi multi-disco non sono ancora supportati",
+  "The native writer currently accepts raw 2352-byte BIN/IMG images": "Il writer nativo accetta attualmente immagini BIN/IMG raw da 2352 byte per settore",
+  "Select a PSP folder and identify the disc before conversion": "Seleziona la cartella PSP e identifica il disco prima della conversione",
+  "Writing EBOOT.PBP": "Scrittura EBOOT.PBP",
+  "Conversion in progress": "Conversione in corso",
+  "Conversion complete": "Conversione completata",
+  "Conversion failed: {error}": "Conversione non riuscita: {error}",
+  "Conversion failed": "Conversione non riuscita",
+  "Error": "Errore"
 }
