@@ -147,7 +147,7 @@ impl Pbp {
             let mut title = [0u8; 1024];
             source.seek(SeekFrom::Start(psar))?;
             source.read_exact(&mut title)?;
-            let file = output.join("PSTITLEIMG.DAT");
+            let file = staging_dir.join("PSTITLEIMG.DAT");
             fs::write(&file, title)?;
             reporter.add(1024);
             written.push(file);

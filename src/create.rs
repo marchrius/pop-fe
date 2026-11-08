@@ -1142,23 +1142,59 @@ fn run_cancellable(
     cancelled: &AtomicBool,
     operation: &str,
 ) -> Result<(), CreateError> {
-    command.stdout(Stdio::null()).stderr(Stdio::null());
+    const MAX_ERROR_BYTES: usize = 32 * 1024;
+    command.stdout(Stdio::null()).stderr(Stdio::piped());
     let mut child = command.spawn()?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| CreateError::Invalid("failed to capture command error output".into()))?;
+    let stderr_reader = std::thread::spawn(move || {
+        let mut output = Vec::new();
+        let mut buffer = [0u8; 4096];
+        loop {
+            let count = match stderr.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => count,
+            };
+            output.extend_from_slice(&buffer[..count]);
+            if output.len() > MAX_ERROR_BYTES {
+                let excess = output.len() - MAX_ERROR_BYTES;
+                output.drain(..excess);
+            }
+        }
+        output
+    });
     loop {
         if cancelled.load(Ordering::Relaxed) {
             let _ = child.kill();
             let _ = child.wait();
+            let _ = stderr_reader.join();
             return Err(CreateError::Cancelled);
         }
-        if let Some(status) = child.try_wait()? {
-            if status.success() {
-                return Ok(());
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if status.success() {
+                    let _ = stderr_reader.join();
+                    return Ok(());
+                }
+                let error = stderr_reader.join().unwrap_or_default();
+                let detail = String::from_utf8_lossy(&error).trim().to_owned();
+                let message = if detail.is_empty() {
+                    format!("{operation} failed with {status}")
+                } else {
+                    format!("{operation} failed with {status}: {detail}")
+                };
+                return Err(CreateError::Invalid(message));
             }
-            return Err(CreateError::Invalid(format!(
-                "{operation} failed with {status}"
-            )));
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stderr_reader.join();
+                return Err(error.into());
+            }
         }
-        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 
