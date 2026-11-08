@@ -393,15 +393,15 @@ pub fn create_from_image_with_progress_and_warnings(
     let sfo = generate_sfo(&config.game_id, &config.title);
     let mut offsets = [0u32; 8];
     let mut cursor = 0x28u64;
-    offsets[0] = cursor as u32;
+    offsets[0] = format_u32(cursor, "PBP section offset")?;
     cursor += sfo.len() as u64;
     for index in 0..5 {
-        offsets[index + 1] = cursor as u32;
+        offsets[index + 1] = format_u32(cursor, "PBP section offset")?;
         cursor += assets[index].len() as u64;
     }
-    offsets[6] = cursor as u32;
+    offsets[6] = format_u32(cursor, "PBP section offset")?;
     let psar = align_up(cursor + 30_632, 0x10000);
-    offsets[7] = psar as u32;
+    offsets[7] = format_u32(psar, "PBP PSAR offset")?;
 
     let output_dir = config
         .output
@@ -427,7 +427,10 @@ pub fn create_from_image_with_progress_and_warnings(
     if include_title_image {
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
-        let first_psiso_relative = (align_up(psar + 0x400, 0x8000) - psar) as u32;
+        let first_psiso_relative = format_u32(
+            align_up(psar + 0x400, 0x8000) - psar,
+            "PBP title image PSISO offset",
+        )?;
         put_u32(&mut title_image, 0x200, first_psiso_relative);
         let game_id = format!("_{}_{}", &config.game_id[..4], &config.game_id[4..]);
         title_image[0x264..0x26f].copy_from_slice(game_id.as_bytes());
@@ -451,7 +454,13 @@ pub fn create_from_image_with_progress_and_warnings(
         }
         let current = output.stream_position()?;
         output.seek(SeekFrom::Start(align_up(current, 0x8000)))?;
-        psiso_offsets.push((output.stream_position()? - psar) as u32);
+        psiso_offsets.push(format_u32(
+            output
+                .stream_position()?
+                .checked_sub(psar)
+                .ok_or_else(|| CreateError::Invalid("invalid PBP PSISO location".into()))?,
+            "PBP PSISO offset",
+        )?);
         let mut psiso_reader = psiso.file.try_clone()?;
         psiso_reader.seek(SeekFrom::Start(0))?;
         let mut remaining = *psiso_len;
@@ -475,7 +484,11 @@ pub fn create_from_image_with_progress_and_warnings(
     let startdat = align_up(output.stream_position()?, 16);
     output.seek(SeekFrom::Start(startdat))?;
     let mut start_header = STARTDAT_HEADER.to_vec();
-    put_u32(&mut start_header, 20, logo.len() as u32);
+    put_u32(
+        &mut start_header,
+        20,
+        format_u32(logo.len() as u64, "PBP logo size")?,
+    );
     output.write_all(&start_header)?;
     output.write_all(&logo)?;
     output.write_all(STARTDAT_FOOTER)?;
@@ -486,8 +499,19 @@ pub fn create_from_image_with_progress_and_warnings(
         for (index, offset) in psiso_offsets.iter().enumerate() {
             put_u32(&mut title_image, 0x200 + index * 4, *offset);
         }
-        put_u32(&mut title_image, 0x10, (startdat - psar) as u32);
-        put_u32(&mut title_image, 0x284, (startdat - psar + 0x2d31) as u32);
+        let startdat_relative = startdat
+            .checked_sub(psar)
+            .ok_or_else(|| CreateError::Invalid("invalid PBP STARTDAT location".into()))?;
+        put_u32(
+            &mut title_image,
+            0x10,
+            format_u32(startdat_relative, "PBP STARTDAT offset")?,
+        );
+        put_u32(
+            &mut title_image,
+            0x284,
+            format_u32(startdat_relative.saturating_add(0x2d31), "PBP STARTDAT end")?,
+        );
         let game_id = format!("_{}_{}", &config.game_id[..4], &config.game_id[4..]);
         title_image[0x264..0x26f].copy_from_slice(game_id.as_bytes());
         copy_text(&mut title_image[0x30c..], &config.title);
@@ -1306,7 +1330,10 @@ fn write_psiso(
     psiso.set_len(0)?;
     let mut header = [0u8; 1024];
     header[..12].copy_from_slice(b"PSISOIMG0000");
-    put_u32(&mut header, 12, (image_size + PSISO_PAYLOAD_OFFSET) as u32);
+    let psiso_size = image_size
+        .checked_add(PSISO_PAYLOAD_OFFSET)
+        .ok_or_else(|| CreateError::Invalid("disc image is too large".into()))?;
+    put_u32(&mut header, 12, format_u32(psiso_size, "PSISO image size")?);
     psiso.write_all(&header)?;
     let mut game = [0u8; 1024];
     let id = format!("_{}_{}", &game_id[..4], &game_id[4..]);
@@ -1337,7 +1364,7 @@ fn write_psiso(
     ])?;
     if let Some(magic_word) = magic_word {
         let subchannels = generate_subchannels(magic_word);
-        let subchannel_offset = psiso.stream_position()? as u32;
+        let subchannel_offset = format_u32(psiso.stream_position()?, "PSISO subchannel offset")?;
         psiso.seek(SeekFrom::Start(0x12d4))?;
         psiso.write_all(&subchannel_offset.to_le_bytes())?;
         psiso.write_all(&((subchannels.len() / 12) as u32).to_le_bytes())?;
@@ -1424,8 +1451,8 @@ fn write_psiso(
     psiso.seek(SeekFrom::Start(0))?;
     psiso.write_all(b"PSISOIMG0000")?;
     psiso.seek(SeekFrom::Start(12))?;
-    psiso.write_all(&(end as u32).to_le_bytes())?;
-    let p2_len = end.saturating_add(0x2d31) as u32;
+    psiso.write_all(&format_u32(end, "PSISO image size")?.to_le_bytes())?;
+    let p2_len = format_u32(end.saturating_add(0x2d31), "PSISO image end")?;
     psiso.seek(SeekFrom::Start(0x0c00 + 1568))?;
     psiso.write_all(&p2_len.to_le_bytes())?;
     psiso.sync_all()?;
@@ -1628,6 +1655,10 @@ fn bcd(value: u8) -> u8 {
 }
 fn align_up(value: u64, alignment: u64) -> u64 {
     value.div_ceil(alignment) * alignment
+}
+fn format_u32(value: u64, field: &str) -> Result<u32, CreateError> {
+    u32::try_from(value)
+        .map_err(|_| CreateError::Invalid(format!("{field} exceeds the PBP/PSISO format limit")))
 }
 fn put_u32(target: &mut [u8], offset: usize, value: u32) {
     target[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
