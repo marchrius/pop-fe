@@ -78,6 +78,39 @@ pub fn activate(application: &adw::Application) {
         .halign(gtk::Align::Center)
         .build();
     let header = adw::HeaderBar::builder().title_widget(&switcher).build();
+    let menu = gio::Menu::new();
+    menu.append(Some(&tr("About POP-FE")), Some("win.about"));
+    menu.append(Some(&tr("Quit")), Some("win.quit"));
+    let menu_button = gtk::MenuButton::builder()
+        .icon_name("open-menu-symbolic")
+        .tooltip_text(tr("Main Menu"))
+        .popover(&gtk::PopoverMenu::from_model(Some(&menu)))
+        .build();
+    header.pack_end(&menu_button);
+
+    let about = gio::SimpleAction::new("about", None);
+    let about_parent = window.clone();
+    about.connect_activate(move |_, _| {
+        adw::AboutWindow::builder()
+            .transient_for(&about_parent)
+            .application_name("POP-FE PSP Manager")
+            .application_icon("org.popfe.PSPManager")
+            .version(env!("CARGO_PKG_VERSION"))
+            .developer_name("POP-FE contributors")
+            .comments(tr(
+                "Convert and extract PlayStation disc images for PSP with POP-FE.",
+            ))
+            .license_type(gtk::License::Lgpl21)
+            .website("https://github.com/selphie87/pop-fe")
+            .build()
+            .present();
+    });
+    window.add_action(&about);
+
+    let quit = gio::SimpleAction::new("quit", None);
+    let quit_window = window.clone();
+    quit.connect_activate(move |_, _| quit_window.close());
+    window.add_action(&quit);
 
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
