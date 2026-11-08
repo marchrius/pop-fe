@@ -400,7 +400,12 @@ pub fn create_from_image_with_progress_and_warnings(
         cursor += assets[index].len() as u64;
     }
     offsets[6] = format_u32(cursor, "PBP section offset")?;
-    let psar = align_up(cursor + 30_632, 0x10000);
+    let psar = align_up(
+        cursor
+            .checked_add(30_632)
+            .ok_or_else(|| CreateError::Invalid("PBP section offset overflow".into()))?,
+        0x10000,
+    )?;
     offsets[7] = format_u32(psar, "PBP PSAR offset")?;
 
     let output_dir = config
@@ -428,7 +433,11 @@ pub fn create_from_image_with_progress_and_warnings(
         let mut title_image = PSTITLE_TEMPLATE.to_vec();
         title_image[..16].copy_from_slice(b"PSTITLEIMG000000");
         let first_psiso_relative = format_u32(
-            align_up(psar + 0x400, 0x8000) - psar,
+            align_up(
+                psar.checked_add(0x400)
+                    .ok_or_else(|| CreateError::Invalid("PBP PSAR offset overflow".into()))?,
+                0x8000,
+            )? - psar,
             "PBP title image PSISO offset",
         )?;
         put_u32(&mut title_image, 0x200, first_psiso_relative);
@@ -436,9 +445,13 @@ pub fn create_from_image_with_progress_and_warnings(
         title_image[0x264..0x26f].copy_from_slice(game_id.as_bytes());
         copy_text(&mut title_image[0x30c..], &config.title);
         output.write_all(&title_image)?;
-        output.seek(SeekFrom::Start(align_up(psar + 0x400, 0x8000)))?;
+        output.seek(SeekFrom::Start(align_up(
+            psar.checked_add(0x400)
+                .ok_or_else(|| CreateError::Invalid("PBP PSAR offset overflow".into()))?,
+            0x8000,
+        )?))?;
     } else {
-        output.seek(SeekFrom::Start(align_up(psar, 0x10000)))?;
+        output.seek(SeekFrom::Start(align_up(psar, 0x10000)?))?;
     }
     let mut psiso_offsets = Vec::with_capacity(psiso_discs.len());
     let mut buffer = vec![0u8; 1024 * 1024];
@@ -453,7 +466,7 @@ pub fn create_from_image_with_progress_and_warnings(
             return Err(CreateError::Cancelled);
         }
         let current = output.stream_position()?;
-        output.seek(SeekFrom::Start(align_up(current, 0x8000)))?;
+        output.seek(SeekFrom::Start(align_up(current, 0x8000)?))?;
         psiso_offsets.push(format_u32(
             output
                 .stream_position()?
@@ -479,9 +492,9 @@ pub fn create_from_image_with_progress_and_warnings(
             progress(0.80 + 0.19 * copied_psiso_bytes as f64 / total_psiso_bytes as f64);
         }
         let current = output.stream_position()?;
-        output.seek(SeekFrom::Start(align_up(current, 16)))?;
+        output.seek(SeekFrom::Start(align_up(current, 16)?))?;
     }
-    let startdat = align_up(output.stream_position()?, 16);
+    let startdat = align_up(output.stream_position()?, 16)?;
     output.seek(SeekFrom::Start(startdat))?;
     let mut start_header = STARTDAT_HEADER.to_vec();
     put_u32(
@@ -510,7 +523,12 @@ pub fn create_from_image_with_progress_and_warnings(
         put_u32(
             &mut title_image,
             0x284,
-            format_u32(startdat_relative.saturating_add(0x2d31), "PBP STARTDAT end")?,
+            format_u32(
+                startdat_relative
+                    .checked_add(0x2d31)
+                    .ok_or_else(|| CreateError::Invalid("PBP STARTDAT end overflow".into()))?,
+                "PBP STARTDAT end",
+            )?,
         );
         let game_id = format!("_{}_{}", &config.game_id[..4], &config.game_id[4..]);
         title_image[0x264..0x26f].copy_from_slice(game_id.as_bytes());
@@ -1418,7 +1436,7 @@ fn write_psiso(
         if cancelled.load(Ordering::Relaxed) {
             return Err(CreateError::Cancelled);
         }
-        let aligned = align_up(psiso.stream_position()?, 16);
+        let aligned = align_up(psiso.stream_position()?, 16)?;
         psiso.seek(SeekFrom::Start(aligned))?;
         let relative = aligned
             .checked_sub(PSISO_PAYLOAD_OFFSET)
@@ -1443,7 +1461,7 @@ fn write_psiso(
         encoded.seek(SeekFrom::Start(0x60))?;
         io::copy(&mut encoded.take(audio.data_len), &mut psiso)?;
     }
-    let end = align_up(psiso.stream_position()?, 16);
+    let end = align_up(psiso.stream_position()?, 16)?;
     psiso.seek(SeekFrom::Start(end))?;
     psiso.set_len(end)?;
     psiso.seek(SeekFrom::Start(index_start))?;
@@ -1653,8 +1671,11 @@ fn copy_text(target: &mut [u8], value: &str) {
 fn bcd(value: u8) -> u8 {
     (value / 10) << 4 | (value % 10)
 }
-fn align_up(value: u64, alignment: u64) -> u64 {
-    value.div_ceil(alignment) * alignment
+fn align_up(value: u64, alignment: u64) -> Result<u64, CreateError> {
+    value
+        .checked_add(alignment - 1)
+        .map(|rounded| rounded / alignment * alignment)
+        .ok_or_else(|| CreateError::Invalid("PBP/PSISO offset overflow".into()))
 }
 fn format_u32(value: u64, field: &str) -> Result<u32, CreateError> {
     u32::try_from(value)
