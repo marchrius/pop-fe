@@ -1452,7 +1452,8 @@ fn build_toc(sectors: u64, sheet: Option<&CueSheet>) -> [u8; 1024] {
         toc[..10].copy_from_slice(&[0x41, 0, 0xa0, 0, 0, 0, 0, 1, 0x20, 0]);
         toc[10..20].copy_from_slice(&[0x41, 0, 0xa1, 0, 0, 0, 0, bcd(last_track), 0, 0]);
     }
-    let frames = total_sectors.saturating_add(150);
+    // POP-FE's PSX TOC stores the frame immediately after the final sector.
+    let frames = total_sectors.saturating_add(1);
     toc[..40].copy_from_slice(&[
         0x41, 0, 0xa0, 0, 0, 0, 0, 0x01, 0x20, 0, 0x41, 0, 0xa1, 0, 0, 0, 0, 0x01, 0, 0, 0x41, 0,
         0xa2, 0, 0, 0, 0, 0, 0, 0, 0x41, 0, 0x01, 0, 0x02, 0x01, 0, 0, 0x02, 0,
@@ -1466,17 +1467,19 @@ fn build_toc(sectors: u64, sheet: Option<&CueSheet>) -> [u8; 1024] {
         toc[7] = 1;
         toc[8] = 0x20;
         toc[17] = bcd(last_track);
-        for (index, (number, mode, start)) in track_starts.iter().enumerate() {
+        for (index, (number, _mode, start)) in track_starts.iter().enumerate() {
             let offset = 30 + index * 10;
             if offset + 10 > toc.len() {
                 break;
             }
-            let mut frames = start.saturating_add(150);
-            toc[offset] = if *mode == TrackMode::Audio {
-                0x01
-            } else {
-                0x41
-            };
+            // Track 1 is encoded with POPS' fixed 00:02:01 / 00:02:00
+            // addresses in the template above, independent of CUE INDEX.
+            if *number == 1 {
+                continue;
+            }
+            let mut frames = *start;
+            // Keep the original PSX CUE TOC convention for subsequent tracks.
+            toc[offset] = 0x01;
             toc[offset + 2] = bcd(*number);
             toc[offset + 3] = bcd((frames / 4500) as u8);
             toc[offset + 4] = bcd(((frames / 75) % 60) as u8);
