@@ -169,6 +169,13 @@ fn convert_page(parent: &adw::ApplicationWindow) -> gtk::ScrolledWindow {
         pic0_preview,
         pic1_preview,
     };
+    let fields_for_download_toggle = fields.clone();
+    let files_for_download_toggle = files.clone();
+    fields.disable_asset_downloads.connect_toggled(move |_| {
+        if !files_for_download_toggle.borrow().is_empty() {
+            analyze_first(&files_for_download_toggle, &fields_for_download_toggle);
+        }
+    });
     let (frame, body) = section(&tr("Disc Images"));
     let list = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::None)
@@ -678,9 +685,14 @@ fn refresh_theme_art(fields: &DiscFields) {
     fields.theme_loading.set(true);
     fields.status.set_text(&tr("Loading theme artwork"));
     let theme_name = THEME_NAMES[selected].to_string();
+    let allow_downloads = !fields.disable_asset_downloads.is_active();
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let assets = crate::assets::load_theme_assets(&game_id, &theme_name, &base);
+        let assets = if allow_downloads {
+            crate::assets::load_theme_assets(&game_id, &theme_name, &base)
+        } else {
+            crate::assets::load_theme_assets_offline(&game_id, &theme_name, &base)
+        };
         let _ = sender.send(assets);
     });
     let fields = fields.clone();
@@ -781,13 +793,15 @@ fn show_xmb_preview(parent: &adw::ApplicationWindow, fields: &DiscFields) {
         let base = fields.base_assets.borrow().clone();
         let id = game_id.clone();
         let selected_theme = theme_name.to_string();
+        let allow_downloads = !fields.disable_asset_downloads.is_active();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
-            let _ = sender.send(crate::assets::load_theme_assets(
-                &id,
-                &selected_theme,
-                &base,
-            ));
+            let assets = if allow_downloads {
+                crate::assets::load_theme_assets(&id, &selected_theme, &base)
+            } else {
+                crate::assets::load_theme_assets_offline(&id, &selected_theme, &base)
+            };
+            let _ = sender.send(assets);
         });
         let background = background.clone();
         let icon = icon.clone();

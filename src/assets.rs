@@ -144,6 +144,10 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
     result
 }
 
+pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+    procedural_theme_assets(game_id, theme, base)
+}
+
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
     let directory = cache_directory().join("themes").join("generated-v1");
     if fs::create_dir_all(&directory).is_err() {
