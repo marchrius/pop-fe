@@ -54,6 +54,7 @@ pub struct PbpCreateConfig {
     pub use_cdda: bool,
     pub force_ntsc: bool,
     pub allow_disc_swapping: bool,
+    pub watermark: bool,
 }
 
 pub fn create_from_image(config: &PbpCreateConfig) -> Result<(), CreateError> {
@@ -274,6 +275,13 @@ pub fn create_from_image_with_progress(
             Some(path) => fs::read(path)?,
             None => Vec::new(),
         });
+    }
+    #[cfg(feature = "gui")]
+    if config.watermark && !assets[3].is_empty() {
+        assets[3] = crate::assets::watermark_pic1_png(&assets[3], &config.title, &config.game_id)
+            .map_err(|error| {
+            CreateError::Invalid(format!("could not watermark PIC1: {error}"))
+        })?;
     }
     let logo = match &config.assets.logo {
         Some(path) => fs::read(path)?,

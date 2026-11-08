@@ -13,6 +13,46 @@ use crate::database::Database;
 
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 
+pub fn watermark_pic1_png(
+    png: &[u8],
+    title: &str,
+    game_id: &str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let mut input = Cursor::new(png);
+    let surface = ImageSurface::create_from_png(&mut input)?;
+    let context = Context::new(&surface)?;
+    context.select_font_face("sans", FontSlant::Normal, FontWeight::Normal);
+    context.set_font_size(8.0);
+    context.set_source_rgba(1.0, 1.0, 1.0, 0.92);
+    let mut y = 18.0;
+    for line in title.split(" - ").take(8) {
+        let extents = context.text_extents(line)?;
+        context.move_to(
+            (surface.width() as f64 - extents.x_advance() - 4.0).max(1.0),
+            y,
+        );
+        context.show_text(line)?;
+        y += extents.height().max(8.0) + 2.0;
+    }
+    let extents = context.text_extents(game_id)?;
+    let x = (surface.width() as f64 - extents.x_advance()).max(0.0);
+    let top = (surface.height() as f64 - extents.height() - 2.0).max(0.0);
+    context.set_source_rgba(0.0, 0.0, 0.0, 0.92);
+    context.rectangle(
+        x - 1.0,
+        top,
+        surface.width() as f64 - x + 1.0,
+        surface.height() as f64 - top,
+    );
+    context.fill()?;
+    context.set_source_rgb(1.0, 1.0, 1.0);
+    context.move_to(x, surface.height() as f64 - 2.0);
+    context.show_text(game_id)?;
+    let mut output = Vec::new();
+    surface.write_to_png(&mut output)?;
+    Ok(output)
+}
+
 pub fn load_game_assets(game_id: &str) -> PbpAssets {
     let Some(game) = Database::embedded().games.get(game_id) else {
         return PbpAssets::default();
