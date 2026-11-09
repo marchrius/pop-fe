@@ -15,7 +15,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    virtuale di 150 frame per le tracce audio che non lo dichiarano, come il
    parser originale. I nomi FILE CUE non quotati possono contenere spazi e
    vengono separati dal tipo usando l'ultimo campo; gli indici non supportati
-   vengono rifiutati esplicitamente; ogni traccia deve dichiarare `INDEX 01`.
+   vengono rifiutati esplicitamente; la numerazione deve essere consecutiva
+   da 01 (massimo 99 tracce), ogni traccia deve dichiarare `INDEX 01` e gli
+   indici `0`/`1` senza zero iniziale restano compatibili.
    Anche la lettura dei download artwork viene
    interrotta ai confini dei blocchi ricevuti. I processi esterni vengono
    isolati in gruppi e terminati insieme ai discendenti quando si annulla.

@@ -178,6 +178,16 @@ impl CueSheet {
                             .ok_or_else(|| {
                                 DiscError::Cue(format!("bad TRACK at line {}", line_number + 1))
                             })?;
+                    let expected = tracks.len() + 1;
+                    if expected > 99 {
+                        return Err(DiscError::Cue("CUE supports at most 99 tracks".into()));
+                    }
+                    if number as usize != expected {
+                        return Err(DiscError::Cue(format!(
+                            "unexpected CUE TRACK {number}; expected {expected} at line {}",
+                            line_number + 1
+                        )));
+                    }
                     let mode = words.next().ok_or_else(|| {
                         DiscError::Cue(format!("missing track mode at line {}", line_number + 1))
                     })?;
@@ -210,9 +220,9 @@ impl CueSheet {
                     let frames = cue_time_to_frames(time).ok_or_else(|| {
                         DiscError::Cue(format!("invalid INDEX time at line {}", line_number + 1))
                     })?;
-                    match index {
-                        Some("00") => track.index00 = Some(frames),
-                        Some("01") => {
+                    match index.and_then(|value| value.parse::<u8>().ok()) {
+                        Some(0) => track.index00 = Some(frames),
+                        Some(1) => {
                             track.index01 = frames;
                             if let Some(seen) = has_index01.last_mut() {
                                 *seen = true;
@@ -221,9 +231,17 @@ impl CueSheet {
                                 track.index00 = Some(frames.saturating_sub(150));
                             }
                         }
-                        Some(other) => {
+                        Some(_) => {
                             return Err(DiscError::Cue(format!(
-                                "unsupported INDEX {other} at line {}",
+                                "unsupported INDEX {} at line {}",
+                                index.unwrap_or_default(),
+                                line_number + 1
+                            )));
+                        }
+                        None if index.is_some() => {
+                            return Err(DiscError::Cue(format!(
+                                "unsupported INDEX {} at line {}",
+                                index.unwrap_or_default(),
                                 line_number + 1
                             )));
                         }

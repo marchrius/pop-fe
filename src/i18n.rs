@@ -175,6 +175,15 @@ pub fn localize_error(message: &str) -> String {
     if let Some(track) = message.strip_prefix("missing INDEX 01 for track ") {
         return tr("Missing CUE INDEX 01 for track {track}").replace("{track}", track);
     }
+    if let Some(rest) = message.strip_prefix("unexpected CUE TRACK ")
+        && let Some((number, rest)) = rest.split_once("; expected ")
+        && let Some((expected, line)) = rest.split_once(" at line ")
+    {
+        return tr("Unexpected CUE TRACK {number}; expected {expected} at line {line}")
+            .replace("{number}", number)
+            .replace("{expected}", expected)
+            .replace("{line}", line);
+    }
     if let Some(extension) = message.strip_prefix("unsupported image extension .") {
         return tr("Unsupported disc image extension: .{extension}")
             .replace("{extension}", extension);
@@ -247,6 +256,7 @@ pub fn localize_error(message: &str) -> String {
         "PSISO supports at most 98 audio tracks" => "PSISO supports at most 98 audio tracks",
         "CDDA image is not aligned to sectors" => "CDDA image is not aligned to sectors",
         "CUE audio track is empty" => "CUE audio track is empty",
+        "CUE supports at most 99 tracks" => "CUE supports at most 99 tracks",
         "CUE audio track exceeds WAV size limit" => "CUE audio track exceeds WAV size limit",
         "invalid PPF description footer" => "Invalid PPF description footer",
         "PPF1 header is truncated" => "PPF1 header is truncated",
