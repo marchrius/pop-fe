@@ -182,11 +182,12 @@ pub fn create_from_image_with_progress_and_warnings(
             .ok();
         let ppf_compatible = matches!(extension.as_str(), "bin" | "img")
             || cue_sheet.as_ref().is_some_and(|sheet| {
-                sheet.tracks.len() == 1
-                    && matches!(
-                        sheet.tracks[0].mode,
-                        TrackMode::Mode1_2352 | TrackMode::Mode2_2352
-                    )
+                sheet.tracks.first().is_some_and(|first| {
+                    matches!(first.mode, TrackMode::Mode1_2352 | TrackMode::Mode2_2352)
+                        && sheet
+                            .data_track()
+                            .is_some_and(|data| data.number == first.number)
+                })
             });
         let patch = ppf_compatible
             .then_some(source_md5.as_deref())

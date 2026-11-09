@@ -46,7 +46,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Il caricamento del tema può essere annullato, si interrompe prima di caricare
    la nuova selezione e la chiusura dell'app attende la terminazione del worker.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
-   BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
+   BIN/IMG raw e sui CUE con la traccia dati raw come prima traccia, anche con
+   tracce audio successive, quando ID/hash corrispondono.
    Sono incluse anche le patch PPF LibCrypt presenti in `libcrypt/`, applicate
    automaticamente per i giochi nel cui record è indicato un file PPF; le
    varianti upstream con revisioni note vengono selezionate tramite MD5 del
