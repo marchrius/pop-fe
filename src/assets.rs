@@ -15,6 +15,7 @@ use crate::database::Database;
 
 const MAX_IMAGE_BYTES: usize = 32 * 1024 * 1024;
 const MAX_SND0_BYTES: usize = 500_000;
+const MAX_THEME_AUDIO_BYTES: usize = 32 * 1024 * 1024;
 const NTSC_U_ICON0_FRAME: &[u8] = include_bytes!("../data/psp/icon0_ntsc_u.png");
 
 pub fn frame_ntsc_u_icon0(
@@ -243,6 +244,11 @@ pub fn load_theme_assets_cancellable(
         if cancelled.load(Ordering::Relaxed) {
             return base.clone();
         }
+    }
+    if let Some(path) =
+        cached_theme_snd0(&client, repository, game_id, theme, &directory, cancelled)
+    {
+        result.snd0 = Some(path);
     }
     result
 }
@@ -617,6 +623,65 @@ fn cached_snd0(
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, bytes).ok()?;
     fs::rename(&temporary, &path).ok()?;
+    Some(path)
+}
+
+fn cached_theme_snd0(
+    client: &Client,
+    repository: &str,
+    game_id: &str,
+    theme: &str,
+    directory: &Path,
+    cancelled: &AtomicBool,
+) -> Option<PathBuf> {
+    if is_cancelled(Some(cancelled)) {
+        return None;
+    }
+    let path = directory.join(format!("{}-{}-snd0.wav", safe_id(game_id), safe_id(theme)));
+    if path.is_file() {
+        let mut header = [0u8; 12];
+        if fs::File::open(&path)
+            .and_then(|mut file| std::io::Read::read_exact(&mut file, &mut header))
+            .is_ok()
+            && &header[..4] == b"RIFF"
+            && &header[8..] == b"WAVE"
+            && fs::metadata(&path)
+                .ok()
+                .is_some_and(|metadata| metadata.len() <= MAX_THEME_AUDIO_BYTES as u64)
+        {
+            return Some(path);
+        }
+        let _ = fs::remove_file(&path);
+    }
+    let url = format!(
+        "{}/raw/main/data/{}/SND0.WAV",
+        repository.trim_end_matches('/'),
+        game_id
+    );
+    let response = client.get(url).send().ok()?.error_for_status().ok()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_THEME_AUDIO_BYTES as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    read_response(response, MAX_THEME_AUDIO_BYTES, Some(cancelled), &mut bytes)?;
+    if bytes.len() < 12
+        || &bytes[..4] != b"RIFF"
+        || &bytes[8..12] != b"WAVE"
+        || bytes.len() > MAX_THEME_AUDIO_BYTES
+        || is_cancelled(Some(cancelled))
+    {
+        return None;
+    }
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary, bytes).ok()?;
+    if is_cancelled(Some(cancelled)) {
+        let _ = fs::remove_file(&temporary);
+        return None;
+    }
+    fs::rename(temporary, &path).ok()?;
     Some(path)
 }
 
