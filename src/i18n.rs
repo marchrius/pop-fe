@@ -143,6 +143,14 @@ pub fn localize_error(message: &str) -> String {
             "Invalid CUE INDEX time at line {line}",
         ),
         (
+            "unsupported INDEX ",
+            "Unsupported CUE INDEX {index} at line {line}",
+        ),
+        (
+            "missing INDEX number at line ",
+            "Missing CUE INDEX number at line {line}",
+        ),
+        (
             "invalid CCD MODE at line ",
             "Invalid CCD MODE at line {line}",
         ),
@@ -152,7 +160,13 @@ pub fn localize_error(message: &str) -> String {
         ),
     ] {
         if let Some(line) = message.strip_prefix(prefix) {
-            return tr(key).replace("{line}", line);
+            if prefix == "unsupported INDEX " {
+                if let Some((index, line)) = line.split_once(" at line ") {
+                    return tr(key).replace("{index}", index).replace("{line}", line);
+                }
+            } else {
+                return tr(key).replace("{line}", line);
+            }
         }
     }
     if let Some(mode) = message.strip_prefix("unknown track mode ") {

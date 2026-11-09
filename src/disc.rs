@@ -216,7 +216,18 @@ impl CueSheet {
                                 track.index00 = Some(frames.saturating_sub(150));
                             }
                         }
-                        _ => {}
+                        Some(other) => {
+                            return Err(DiscError::Cue(format!(
+                                "unsupported INDEX {other} at line {}",
+                                line_number + 1
+                            )));
+                        }
+                        None => {
+                            return Err(DiscError::Cue(format!(
+                                "missing INDEX number at line {}",
+                                line_number + 1
+                            )));
+                        }
                     }
                 }
                 _ => {}
