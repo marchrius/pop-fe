@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 
 from yt_dlp_bundle import ensure_bundle
+from deno_bundle import ensure_bundle as ensure_deno_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_ID = 'org.popfe.PSPManager'
@@ -166,6 +167,7 @@ def main():
     xdelta = Path(xdelta)
     arch = host_architecture()
     yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
+    deno, deno_license = ensure_deno_bundle(arch, offline=args.offline)
 
     runtime_ref = f'{RUNTIME}//{RUNTIME_VERSION}'
     runtime_location = find_runtime(runtime_ref)
@@ -208,11 +210,13 @@ def main():
             (yt_dlp, app / 'bin/yt-dlp'),
             (yt_dlp_license, app / 'share/licenses/yt-dlp-LICENSE.txt'),
             (yt_dlp_third_party, app / 'share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt'),
+            (deno, app / 'bin/deno'),
+            (deno_license, app / 'share/licenses/deno-LICENSE.md'),
         ]
         for source, target in install_pairs:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg', 'yt-dlp') else 0o644)
+            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg', 'yt-dlp', 'deno') else 0o644)
 
         app_lib = app / 'lib'
         sevenzip_target = app_lib / '7zip/7z'
@@ -230,14 +234,14 @@ def main():
         legacy_target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(openssl_legacy, legacy_target)
 
-        bundled_tools = [binary, chdman, pdftoppm, ffmpeg, sevenzip_target, sevenzip_module_target]
+        bundled_tools = [binary, chdman, pdftoppm, ffmpeg, deno, sevenzip_target, sevenzip_module_target]
         for name, source in missing_runtime_dependency_closure(bundled_tools, runtime_location).items():
             target = app_lib / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
             target.chmod(0o755)
         verify_runtime_libraries(
-            [binary, encoder, xdelta, app / 'bin/chdman', app / 'bin/pdftoppm', app / 'bin/ffmpeg', sevenzip_target, sevenzip_module_target], runtime_location, arch,
+            [binary, encoder, xdelta, app / 'bin/chdman', app / 'bin/pdftoppm', app / 'bin/ffmpeg', app / 'bin/deno', sevenzip_target, sevenzip_module_target], runtime_location, arch,
             bundled_library_dirs=[app_lib],
         )
 

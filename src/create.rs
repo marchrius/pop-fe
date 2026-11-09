@@ -1031,7 +1031,8 @@ fn prepare_snd0(
         let output = target.path.with_extension("");
         let yt_dlp = yt_dlp_executable()
             .ok_or_else(|| CreateError::Invalid("YouTube SND0 download needs yt-dlp".into()))?;
-        let mut command = Command::new(yt_dlp);
+        let mut command = Command::new(&yt_dlp);
+        expose_bundled_tools(&mut command, &yt_dlp);
         command
             .args([
                 "--no-playlist",
@@ -1137,6 +1138,19 @@ fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+fn expose_bundled_tools(command: &mut Command, executable: &std::path::Path) {
+    let Some(directory) = executable.parent() else {
+        return;
+    };
+    let mut search_path = vec![directory.to_path_buf()];
+    search_path.extend(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    ));
+    if let Ok(search_path) = std::env::join_paths(search_path) {
+        command.env("PATH", search_path);
+    }
+}
+
 pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("POPFE_YT_DLP").map(PathBuf::from)
         && path.is_file()
@@ -1160,7 +1174,9 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
 pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Result<String, String> {
     let executable = yt_dlp_executable()
         .ok_or_else(|| crate::i18n::tr("yt-dlp is required to search YouTube"))?;
-    let mut child = Command::new(executable)
+    let mut command = Command::new(&executable);
+    expose_bundled_tools(&mut command, &executable);
+    let mut child = command
         .args([
             "--quiet",
             "--no-warnings",

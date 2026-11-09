@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 
 from yt_dlp_bundle import ensure_bundle
+from deno_bundle import ensure_bundle as ensure_deno_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,9 +46,9 @@ def main():
     binary = ROOT / 'target/release/pop-fe-psp'
     if not binary.is_file():
         parser.error('Cargo did not produce target/release/pop-fe-psp')
-    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
-
     arch = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
+    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
+    deno, deno_license = ensure_deno_bundle(arch, offline=args.offline)
     output = ROOT / 'dist'
     output.mkdir(exist_ok=True)
     package = output / f'pop-fe-psp_{args.version}_{arch}.deb'
@@ -57,6 +58,7 @@ def main():
         install(binary, app / 'pop-fe-psp', 0o755)
         install(encoder, app / 'atracdenc', 0o755)
         install(yt_dlp, app / 'yt-dlp', 0o755)
+        install(deno, app / 'deno', 0o755)
         install(ROOT / 'packaging/pop-fe-psp', stage / 'usr/bin/pop-fe-psp', 0o755)
         install(ROOT / 'packaging/org.popfe.PSPManager.desktop', stage / 'usr/share/applications/org.popfe.PSPManager.desktop')
         shutil.copytree(ROOT / 'packaging/icons', stage / 'usr/share/icons')
@@ -66,6 +68,7 @@ def main():
         install(ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt', doc / 'libcrypt-patcher-BSD-3-Clause.txt')
         install(yt_dlp_license, doc / 'yt-dlp-LICENSE.txt')
         install(yt_dlp_third_party, doc / 'yt-dlp-THIRD_PARTY_LICENSES.txt')
+        install(deno_license, doc / 'deno-LICENSE.md')
         install(ROOT / 'packaging/README.md', doc / 'README.md')
         (doc / 'changelog.Debian').write_text(
             f'pop-fe-psp ({args.version}) unstable; urgency=medium\n\n'
