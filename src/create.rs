@@ -1016,34 +1016,69 @@ fn prepare_audio_tracks(
         }
         drop(wav_file);
         let aea = TempFile::new_ext("audio", "aea")?;
-        let mut child = Command::new(&encoder)
+        let mut command = Command::new(&encoder);
+        command
             .args(["--encode=atrac3", "-i"])
             .arg(&wav.path)
             .arg("-o")
             .arg(&aea.path)
             .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .stderr(std::process::Stdio::piped());
+        crate::process::isolate(&mut command);
+        let mut child = command.spawn()?;
+        let Some(mut stderr) = child.stderr.take() else {
+            crate::process::terminate(&mut child);
+            let _ = child.wait();
+            return Err(CreateError::Invalid(
+                "failed to capture atracdenc error output".into(),
+            ));
+        };
+        let stderr_reader = std::thread::spawn(move || {
+            const MAX_BYTES: usize = 16 * 1024;
+            let mut output = Vec::new();
+            let mut buffer = [0u8; 4096];
+            loop {
+                let count = match stderr.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(count) => count,
+                };
+                output.extend_from_slice(&buffer[..count]);
+                if output.len() > MAX_BYTES {
+                    let excess = output.len() - MAX_BYTES;
+                    output.drain(..excess);
+                }
+            }
+            output
+        });
         let status = loop {
             if cancelled.load(Ordering::Relaxed) {
-                let _ = child.kill();
+                crate::process::terminate(&mut child);
                 let _ = child.wait();
+                let _ = stderr_reader.join();
                 return Err(CreateError::Cancelled);
             }
-            if let Some(status) = child.try_wait()? {
-                break status;
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) => {}
+                Err(error) => {
+                    crate::process::terminate(&mut child);
+                    let _ = child.wait();
+                    let _ = stderr_reader.join();
+                    return Err(error.into());
+                }
             }
             std::thread::sleep(std::time::Duration::from_millis(50));
         };
         if !status.success() {
-            let result = child.wait_with_output()?;
-            let diagnostic = String::from_utf8_lossy(&result.stderr);
+            let diagnostic = String::from_utf8_lossy(&stderr_reader.join().unwrap_or_default())
+                .trim()
+                .to_owned();
             return Err(CreateError::Invalid(format!(
                 "atracdenc failed on audio track {}: {}",
-                track.number,
-                diagnostic.trim()
+                track.number, diagnostic
             )));
         }
+        let _ = stderr_reader.join();
         let encoded_len = aea.file.metadata()?.len();
         if encoded_len <= 0x60 {
             return Err(CreateError::Invalid(format!(
@@ -1247,7 +1282,7 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
         .ok_or_else(|| crate::i18n::tr("yt-dlp is required to search YouTube"))?;
     let mut command = Command::new(&executable);
     expose_bundled_tools(&mut command, &executable);
-    let mut child = command
+    command
         .args([
             "--quiet",
             "--no-warnings",
@@ -1259,13 +1294,14 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
         ])
         .arg(format!("ytsearch1:{title} ps1 ost"))
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|error| error.to_string())?;
-    let mut stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| "failed to capture yt-dlp error output".to_string())?;
+        .stderr(Stdio::piped());
+    crate::process::isolate(&mut command);
+    let mut child = command.spawn().map_err(|error| error.to_string())?;
+    let Some(mut stderr) = child.stderr.take() else {
+        crate::process::terminate(&mut child);
+        let _ = child.wait();
+        return Err("failed to capture yt-dlp error output".to_string());
+    };
     let stderr_reader = std::thread::spawn(move || {
         const MAX_BYTES: usize = 16 * 1024;
         let mut output = Vec::new();
@@ -1286,7 +1322,7 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
 
     let status = loop {
         if cancelled.load(Ordering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             let _ = stderr_reader.join();
             return Err("operation cancelled".into());
@@ -1295,7 +1331,7 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
             Ok(Some(status)) => break status,
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
             Err(error) => {
-                let _ = child.kill();
+                crate::process::terminate(&mut child);
                 let _ = child.wait();
                 let _ = stderr_reader.join();
                 return Err(error.to_string());
@@ -1335,11 +1371,15 @@ fn run_cancellable(
 ) -> Result<(), CreateError> {
     const MAX_ERROR_BYTES: usize = 32 * 1024;
     command.stdout(Stdio::null()).stderr(Stdio::piped());
+    crate::process::isolate(command);
     let mut child = command.spawn()?;
-    let mut stderr = child
-        .stderr
-        .take()
-        .ok_or_else(|| CreateError::Invalid("failed to capture command error output".into()))?;
+    let Some(mut stderr) = child.stderr.take() else {
+        crate::process::terminate(&mut child);
+        let _ = child.wait();
+        return Err(CreateError::Invalid(
+            "failed to capture command error output".into(),
+        ));
+    };
     let stderr_reader = std::thread::spawn(move || {
         let mut output = Vec::new();
         let mut buffer = [0u8; 4096];
@@ -1358,7 +1398,7 @@ fn run_cancellable(
     });
     loop {
         if cancelled.load(Ordering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             let _ = stderr_reader.join();
             return Err(CreateError::Cancelled);
@@ -1380,7 +1420,7 @@ fn run_cancellable(
             }
             Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
             Err(error) => {
-                let _ = child.kill();
+                crate::process::terminate(&mut child);
                 let _ = child.wait();
                 let _ = stderr_reader.join();
                 return Err(error.into());

@@ -12,7 +12,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    implementati per l'analisi iniziale. La materializzazione CHD con `chdman`
    e il calcolo MD5 rispondono alla cancellazione quando si sostituisce o
    rimuove l'immagine in analisi; anche la lettura dei download artwork viene
-   interrotta ai confini dei blocchi ricevuti. L'analisi iniziale mostra un
+   interrotta ai confini dei blocchi ricevuti. I processi esterni vengono
+   isolati in gruppi e terminati insieme ai discendenti quando si annulla.
+   L'analisi iniziale mostra un
    indicatore di attività ed è annullabile; l'app attende il worker annullato
    prima di terminare.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, ISO, CUE e tracce AEA:

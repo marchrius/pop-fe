@@ -693,21 +693,30 @@ fn find_archived_disc(directory: &Path) -> Option<PathBuf> {
 }
 
 fn run_chdman_cancellable(command: &mut Command, cancelled: &AtomicBool) -> Result<(), DiscError> {
+    crate::process::isolate(command);
     let mut child = command.spawn().map_err(|error| {
         DiscError::Cue(format!("CHD input requires chdman (MAME tools): {error}"))
     })?;
     loop {
         if cancelled.load(Ordering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(DiscError::Cancelled);
         }
-        if let Some(status) = child.try_wait()? {
-            return if status.success() {
-                Ok(())
-            } else {
-                Err(DiscError::Cue(format!("chdman exited with {status}")))
-            };
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                return if status.success() {
+                    Ok(())
+                } else {
+                    Err(DiscError::Cue(format!("chdman exited with {status}")))
+                };
+            }
+            Ok(None) => {}
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error.into());
+            }
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
     }

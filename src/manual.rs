@@ -332,35 +332,53 @@ fn extract_rar(
     fs::write(&archive, contents)?;
     fs::create_dir(&destination)?;
     let output_option = format!("-o{}", destination.display());
-    let mut child = Command::new("7z")
+    let mut command = Command::new("7z");
+    command
         .args(["x", "-y", "-bd", "-bso0", "-bsp0"])
         .arg(output_option)
         .arg(&archive)
         .current_dir(temporary)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    crate::process::isolate(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| ManualError::Invalid(format!("7-Zip is unavailable: {error}")))?;
     loop {
         if cancelled.load(AtomicOrdering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(ManualError::Cancelled);
         }
-        let (size, entries) = directory_usage(&destination)?;
+        let (size, entries) = match directory_usage(&destination) {
+            Ok(usage) => usage,
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error.into());
+            }
+        };
         if size > MAX_MANUAL_BYTES as u64 || entries > MAX_ARCHIVE_ENTRIES {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(ManualError::Invalid(
                 "RAR manual exceeds extraction limits".into(),
             ));
         }
         progress(0.35 + 0.2 * (size as f64 / MAX_MANUAL_BYTES as f64).min(1.0));
-        if let Some(status) = child.try_wait()? {
-            if !status.success() {
-                return Err(ManualError::Invalid("could not extract RAR manual".into()));
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return Err(ManualError::Invalid("could not extract RAR manual".into()));
+                }
+                break;
             }
-            break;
+            Ok(None) => {}
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error.into());
+            }
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -602,27 +620,38 @@ fn pdf_pages(
     let input = temporary.join(format!("source-{unique}.pdf"));
     fs::write(&input, contents)?;
     let prefix = temporary.join(format!("render-{unique}"));
-    let mut child = Command::new("pdftoppm")
+    let mut command = Command::new("pdftoppm");
+    command
         .arg("-png")
         .arg("-scale-to")
         .arg("960")
         .arg(&input)
         .arg(&prefix)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    crate::process::isolate(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| ManualError::Invalid(format!("pdftoppm is unavailable: {error}")))?;
     loop {
         if cancelled.load(AtomicOrdering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(ManualError::Cancelled);
         }
-        if let Some(status) = child.try_wait()? {
-            if !status.success() {
-                return Err(ManualError::Invalid("could not render manual PDF".into()));
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                if !status.success() {
+                    return Err(ManualError::Invalid("could not render manual PDF".into()));
+                }
+                break;
             }
-            break;
+            Ok(None) => {}
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error.into());
+            }
         }
         thread::sleep(Duration::from_millis(100));
     }
@@ -670,23 +699,32 @@ fn decode_image(
     let source = temporary.join(format!("page-{index}.jp2"));
     let output = temporary.join(format!("decoded-{index}.png"));
     fs::write(&source, contents)?;
-    let mut child = Command::new("ffmpeg")
+    let mut command = Command::new("ffmpeg");
+    command
         .args(["-nostdin", "-v", "error", "-y", "-i"])
         .arg(&source)
         .args(["-frames:v", "1"])
         .arg(&output)
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::null());
+    crate::process::isolate(&mut command);
+    let mut child = command
         .spawn()
         .map_err(|error| ManualError::Invalid(format!("ffmpeg is unavailable: {error}")))?;
     let status = loop {
         if cancelled.load(AtomicOrdering::Relaxed) {
-            let _ = child.kill();
+            crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(ManualError::Cancelled);
         }
-        if let Some(status) = child.try_wait()? {
-            break status;
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {}
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error.into());
+            }
         }
         thread::sleep(Duration::from_millis(100));
     };
