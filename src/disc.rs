@@ -828,7 +828,12 @@ fn parse_cue_filename(line: &str) -> Option<String> {
     if let Some(quoted) = value.strip_prefix('"') {
         Some(quoted.split_once('"')?.0.to_owned())
     } else {
-        value.split_whitespace().next().map(str::to_owned)
+        let end = value
+            .rfind(char::is_whitespace)
+            .map(|index| index)
+            .unwrap_or(value.len());
+        let filename = value[..end].trim();
+        (!filename.is_empty()).then(|| filename.to_owned())
     }
 }
 

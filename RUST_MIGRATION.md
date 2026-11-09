@@ -13,7 +13,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    e il calcolo MD5 rispondono alla cancellazione quando si sostituisce o
    rimuove l'immagine in analisi. Il parser CUE ricrea anche l'INDEX 00
    virtuale di 150 frame per le tracce audio che non lo dichiarano, come il
-   parser originale. Anche la lettura dei download artwork viene
+   parser originale. I nomi FILE CUE non quotati possono contenere spazi e
+   vengono separati dal tipo usando l'ultimo campo. Anche la lettura dei download artwork viene
    interrotta ai confini dei blocchi ricevuti. I processi esterni vengono
    isolati in gruppi e terminati insieme ai discendenti quando si annulla.
    L'analisi iniziale mostra un
