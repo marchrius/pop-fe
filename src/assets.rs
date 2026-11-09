@@ -251,21 +251,29 @@ pub fn load_theme_assets_cancellable(
         ("pic0", "PIC0.PNG", (310, 180)),
         ("pic1", "PIC1.PNG", (480, 272)),
     ] {
-        let url = format!(
-            "{}/raw/main/data/{}/{}",
-            repository.trim_end_matches('/'),
-            game_id,
-            file
-        );
-        if let Some(path) = cached_image(
-            &client,
-            &url,
-            &directory,
-            &format!("{game_id}-{theme}"),
-            key,
-            size,
-            Some(cancelled),
-        ) {
+        let lowercase = file.to_ascii_lowercase();
+        let mut loaded = None;
+        for filename in [file, lowercase.as_str()] {
+            let url = format!(
+                "{}/raw/main/data/{}/{}",
+                repository.trim_end_matches('/'),
+                game_id,
+                filename
+            );
+            loaded = cached_image(
+                &client,
+                &url,
+                &directory,
+                &format!("{game_id}-{theme}"),
+                key,
+                size,
+                Some(cancelled),
+            );
+            if loaded.is_some() || cancelled.load(Ordering::Relaxed) {
+                break;
+            }
+        }
+        if let Some(path) = loaded {
             match key {
                 "pic0" => result.pic0 = Some(path),
                 "pic1" => result.pic1 = Some(path),
