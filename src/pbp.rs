@@ -594,6 +594,14 @@ fn write_cue(
     image_len: u64,
     include_audio_tracks: bool,
 ) -> Result<u64, PbpError> {
+    let mut disc_image = File::open(image)?;
+    let mut first_sector = [0u8; RAW_SECTOR_SIZE as usize];
+    disc_image.read_exact(&mut first_sector)?;
+    let data_mode = if first_sector[15] == 1 {
+        "MODE1/2352"
+    } else {
+        "MODE2/2352"
+    };
     let mut toc = [0u8; 1020];
     source.seek(SeekFrom::Start(base + PSISO_HEADER_SIZE + 0x800))?;
     source.read_exact(&mut toc)?;
@@ -618,8 +626,8 @@ fn write_cue(
         .filter(|size| *size > 0 && *size <= image_len)
         .unwrap_or(image_len);
     let mut cue_text = format!(
-        "FILE \"{}\" BINARY\n  TRACK 01 MODE2/2352\n    INDEX 01 00:00:00\n",
-        image.file_name().unwrap_or_default().to_string_lossy()
+        "FILE \"{}\" BINARY\n  TRACK 01 {data_mode}\n    INDEX 01 00:00:00\n",
+        image.file_name().unwrap_or_default().to_string_lossy(),
     );
     for track in 2..=if include_audio_tracks { tracks } else { 1 } {
         let point = track as u8;
