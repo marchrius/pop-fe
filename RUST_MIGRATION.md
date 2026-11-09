@@ -51,8 +51,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    LibCrypt vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini e SND0 dei temi 98DEMAKE e
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
-   COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili
-   con le dimensioni PSP; non replicano esattamente i filtri OpenCV originali.
+   COLORSKETCH. Il PIC0 segue il flusso di disegno e ridimensionamento della
+   GUI originale; i filtri pittorici PIC1 restano approssimazioni Rust dei
+   filtri OpenCV originali.
    Il caricamento del tema può essere annullato, si interrompe prima di caricare
    la nuova selezione e la chiusura dell'app attende la terminazione del worker.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui

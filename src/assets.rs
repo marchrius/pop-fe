@@ -361,7 +361,7 @@ fn valid_wave_file(path: &Path) -> bool {
 }
 
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    let directory = cache_directory().join("themes").join("generated-v2");
+    let directory = cache_directory().join("themes").join("generated-v3");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
     }
@@ -392,66 +392,63 @@ fn render_theme_pic0(
     title: &str,
     theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let mut surface = ImageSurface::create(Format::ARgb32, 310, 180)?;
+    let surface = ImageSurface::create(Format::ARgb32, 250, 140)?;
     let context = Context::new(&surface)?;
-    context.select_font_face("monospace", FontSlant::Normal, FontWeight::Bold);
-    context.set_font_size(10.0);
+    context.set_operator(cairo::Operator::Source);
+    context.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+    context.paint()?;
+    context.set_operator(cairo::Operator::Over);
+    context.select_font_face("monospace", FontSlant::Normal, FontWeight::Normal);
+    context.set_font_size(12.0);
     let ascii = theme == "ASCIIART";
-    let (r, g, b) = if ascii {
-        (0.50, 1.0, 0.50)
+    let (r, g, b, origin) = if ascii {
+        (128.0 / 255.0, 1.0, 128.0 / 255.0, 80.0)
     } else {
-        (1.0, 0.50, 0.50)
+        (
+            1.0,
+            128.0 / 255.0,
+            128.0 / 255.0,
+            if theme == "DOTPAINTING" { 80.0 } else { 100.0 },
+        )
     };
-    let rows: Vec<String> = title
-        .split(" - ")
-        .map(|s| s.chars().take(32).collect())
-        .collect();
-    let mut lines = vec!["##############################".to_string()];
-    lines.extend(rows.into_iter().take(8).map(|line| format!("# {line}")));
-    lines.push("##############################".to_string());
-    let mut y = 13.0;
-    for (index, line) in lines.iter().enumerate() {
-        if index == 0 || index + 1 == lines.len() || (ascii && index > 0) {
+    let line_height = context.font_extents()?.height() + 2.0;
+    let draw_text = |text: &str, x: f64, y: f64| -> Result<(), cairo::Error> {
+        let extents = context.text_extents(text)?;
+        context.move_to(x - extents.x_bearing(), y - extents.y_bearing());
+        context.show_text(text)
+    };
+    context.set_source_rgb(r, g, b);
+    draw_text("##############################", origin, 1.0)?;
+    let mut y = 1.0 + line_height;
+    for line in title.split(" - ") {
+        if ascii {
             context.set_source_rgb(r, g, b);
-            context.move_to(if ascii { 50.0 } else { 62.0 }, y);
-            context.show_text(line)?;
-        }
-        if index > 0 && index + 1 < lines.len() {
+            draw_text("#", origin, y)?;
             context.set_source_rgb(0.0, 0.0, 0.0);
-            context.move_to(if ascii { 57.0 } else { 68.0 }, y);
-            context.show_text(&line[2..])?;
+            draw_text(line, origin + 12.0, y)?;
             context.set_source_rgb(1.0, 1.0, 1.0);
-            context.move_to(if ascii { 56.0 } else { 67.0 }, y - 1.0);
-            context.show_text(&line[2..])?;
+            draw_text(line, origin + 11.0, y - 1.0)?;
+        } else {
+            context.set_source_rgb(r, g, b);
+            draw_text("#", origin, y)?;
+            context.set_source_rgb(1.0, 1.0, 1.0);
+            draw_text(line, origin + 11.0, y)?;
         }
-        y += 12.0;
+        y += line_height;
     }
-    if !ascii {
-        surface.flush();
-        let stride = surface.stride() as usize;
-        let pixels = surface.data()?.to_vec();
-        let dots = ImageSurface::create(Format::ARgb32, 310, 180)?;
-        let dot_context = Context::new(&dots)?;
-        for y in (0..180usize).step_by(2) {
-            for x in (0..310usize).step_by(2) {
-                let offset = y * stride + x * 4;
-                if pixels[offset + 3] == 0 {
-                    continue;
-                }
-                dot_context.set_source_rgba(
-                    pixels[offset + 2] as f64 / 255.0,
-                    pixels[offset + 1] as f64 / 255.0,
-                    pixels[offset] as f64 / 255.0,
-                    pixels[offset + 3] as f64 / 255.0,
-                );
-                dot_context.arc(x as f64, y as f64, 1.0, 0.0, std::f64::consts::TAU);
-                dot_context.fill()?;
-            }
-        }
-        write_png(dots, path)
-    } else {
-        write_png(surface, path)
-    }
+    context.set_source_rgb(r, g, b);
+    draw_text("##############################", origin, y)?;
+
+    let mut source_png = Vec::new();
+    surface.write_to_png(&mut source_png)?;
+    let enlarged = Pixbuf::from_read(Cursor::new(source_png))?
+        .scale_simple(1000, 560, InterpType::Nearest)
+        .ok_or("could not enlarge procedural theme PIC0")?;
+    let normalized = enlarged
+        .scale_simple(310, 180, InterpType::Hyper)
+        .ok_or("could not normalize procedural theme PIC0")?;
+    fs::write(path, normalized.save_to_bufferv("png", &[])?)?;
+    Ok(())
 }
 
 fn render_theme_pic1(
