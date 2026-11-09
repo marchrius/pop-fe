@@ -313,6 +313,7 @@ fn convert_page(
         &tr("Automatic assets, themes and previews are used during conversion."),
     );
     let files: Rc<RefCell<Vec<PathBuf>>> = Rc::default();
+    let romhack_patches: Rc<RefCell<Vec<(PathBuf, PathBuf)>>> = Rc::default();
     let folder_history = Rc::new(RefCell::new(FolderHistory::load()));
     let conversion_preferences = Rc::new(RefCell::new(crate::paths::ConversionPreferences::load()));
     let saved_preferences = conversion_preferences.borrow().clone();
@@ -540,6 +541,100 @@ fn convert_page(
     actions.append(&add);
     actions.append(&clear);
     body.append(&actions);
+    let patch_actions = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let choose_patches = gtk::Button::with_label(&tr("Choose Romhack Patches…"));
+    let clear_patches = gtk::Button::with_label(&tr("Clear Patches"));
+    clear_patches.set_sensitive(false);
+    let patch_summary = gtk::Label::builder()
+        .label(&tr("No manual patches selected"))
+        .xalign(0.0)
+        .hexpand(true)
+        .wrap(true)
+        .build();
+    patch_actions.append(&choose_patches);
+    patch_actions.append(&clear_patches);
+    patch_actions.append(&patch_summary);
+    body.append(&patch_actions);
+    let patch_parent = parent.clone();
+    let patch_history = folder_history.clone();
+    let patch_state = romhack_patches.clone();
+    let patch_files = files.clone();
+    let patch_status = fields.status.clone();
+    let patch_summary_for_dialog = patch_summary.clone();
+    let clear_patches_for_dialog = clear_patches.clone();
+    choose_patches.connect_clicked(move |_| {
+        let chooser = gtk::FileDialog::builder()
+            .title(&tr("Select Romhack Patches"))
+            .modal(true)
+            .build();
+        chooser.set_initial_folder(Some(&gio::File::for_path(patch_history.borrow().current())));
+        let state = patch_state.clone();
+        let images = patch_files.borrow().clone();
+        let history = patch_history.clone();
+        let status = patch_status.clone();
+        let summary = patch_summary_for_dialog.clone();
+        let clear = clear_patches_for_dialog.clone();
+        chooser.open_multiple(
+            Some(&patch_parent),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(selected) = result {
+                    let mut patches = Vec::new();
+                    for index in 0..selected.n_items() {
+                        if let Some(path) = selected
+                            .item(index)
+                            .and_then(|item| item.downcast::<gio::File>().ok())
+                            .and_then(|file| file.path())
+                        {
+                            history.borrow_mut().remember_file(&path);
+                            patches.push(path);
+                        }
+                    }
+                    if patches.len() > images.len() {
+                        status
+                            .set_text(&tr("Choose no more patches than the number of disc images"));
+                        return;
+                    }
+                    if patches.iter().any(|path| {
+                        !path.extension().is_some_and(|extension| {
+                            extension.eq_ignore_ascii_case("ppf")
+                                || extension.eq_ignore_ascii_case("xdelta")
+                        })
+                    }) {
+                        status.set_text(&tr("Select only .ppf or .xdelta patch files"));
+                        return;
+                    }
+                    let summary_text = patches
+                        .iter()
+                        .map(|path| path.file_name().unwrap_or_default().to_string_lossy())
+                        .map(|name| name.into_owned())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    *state.borrow_mut() = images.into_iter().zip(patches).collect();
+                    if summary_text.is_empty() {
+                        summary.set_text(&tr("No manual patches selected"));
+                    } else {
+                        summary.set_text(&summary_text);
+                    }
+                    clear.set_sensitive(!summary_text.is_empty());
+                    status.set_text(&tr("Romhack patches assigned to discs in order"));
+                }
+            },
+        );
+    });
+    let patch_state = romhack_patches.clone();
+    let patch_summary_for_clear = patch_summary.clone();
+    let patch_status_for_clear = fields.status.clone();
+    let clear_patches_button = clear_patches.clone();
+    clear_patches.connect_clicked(move |_| {
+        patch_state.borrow_mut().clear();
+        patch_summary_for_clear.set_text(&tr("No manual patches selected"));
+        patch_status_for_clear.set_text(&tr("Manual patches cleared"));
+        clear_patches_button.set_sensitive(false);
+    });
     content.append(&frame);
     content.append(&settings);
 
@@ -921,6 +1016,7 @@ fn convert_page(
         row.append(&root_browse);
     }
     let files_for_create = files.clone();
+    let patches_for_create = romhack_patches.clone();
     let fields_for_create = fields.clone();
     let button_for_create = convert.clone();
     let warning_state: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
@@ -1019,8 +1115,20 @@ fn convert_page(
         }
         let psp = PathBuf::from(fields_for_create.psp_root.text().as_str());
         let output = psp.join("PSP/GAME").join(&id).join("EBOOT.PBP");
+        let selected_patches = patches_for_create.borrow();
+        let manual_patches = selected
+            .iter()
+            .map(|image| {
+                selected_patches
+                    .iter()
+                    .find(|(patched_image, _)| patched_image == image)
+                    .map(|(_, patch)| patch.clone())
+            })
+            .collect();
+        drop(selected_patches);
         let config = crate::create::PbpCreateConfig {
             images: selected,
+            romhack_patches: manual_patches,
             output: output.clone(),
             game_id: id,
             title,

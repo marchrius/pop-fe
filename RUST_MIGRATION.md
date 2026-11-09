@@ -63,6 +63,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    da YouTube tramite yt-dlp. ICON0 può usare la cornice PSN NTSC-U originale.
    Conversione ed estrazione
    espongono percentuali determinate e cancellazione.
+   La GUI consente di selezionare patch romhack PPF/Xdelta, abbinate alle
+   immagini disco nell'ordine selezionato e applicate dopo i fix automatici.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
    sandbox e su PSP resta da verificare.
@@ -70,8 +72,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 Durante la migrazione gli script Python restano il riferimento di comportamento.
 Il crate non è ancora un sostituto completo:
 La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
-esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
-la selezione manuale dei romhack da file, disponibile nel CLI Python. Il
+esplicita conserva invece l'audio raw e imposta i flag POPS. Il
 database descrive 230 ID LibCrypt: 229 hanno patch automatiche nel database, o
 sono revisioni note senza protezione, con un caso di Final Fantasy VIII PAL che
 usa ancora un PPF zip esterno. Le revisioni non riconosciute possono usare `lcp`

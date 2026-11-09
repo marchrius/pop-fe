@@ -50,7 +50,7 @@ pub fn tr(message: &str) -> String {
 }
 
 pub fn localize_error(message: &str) -> String {
-    const PREFIXES: [(&str, &str); 11] = [
+    const PREFIXES: [(&str, &str); 14] = [
         ("I/O error: ", "I/O error: "),
         ("invalid conversion input: ", "Invalid conversion input: "),
         ("invalid PBP: ", "Invalid PBP: "),
@@ -76,6 +76,18 @@ pub fn localize_error(message: &str) -> String {
         (
             "automatic Xdelta fix requires xdelta3: ",
             "Automatic Xdelta fix requires xdelta3: ",
+        ),
+        (
+            "manual PPF romhack patch failed: ",
+            "Manual PPF romhack patch failed: ",
+        ),
+        (
+            "manual Xdelta romhack patch failed: ",
+            "Manual Xdelta romhack patch failed: ",
+        ),
+        (
+            "manual Xdelta romhack patch failed with ",
+            "Manual Xdelta romhack patch failed with ",
         ),
     ];
     for (prefix, translation_key) in PREFIXES {
@@ -137,6 +149,9 @@ pub fn localize_error(message: &str) -> String {
         return tr("Unsupported disc image extension: .{extension}")
             .replace("{extension}", extension);
     }
+    if let Some(format) = message.strip_prefix("unsupported romhack patch format: ") {
+        return tr("Unsupported romhack patch format: {format}").replace("{format}", format);
+    }
     let key = match message {
         "operation cancelled" => "Operation stopped",
         "compressed PSISO sector is invalid" => "Compressed PSISO sector is invalid",
@@ -153,6 +168,12 @@ pub fn localize_error(message: &str) -> String {
         "SND0 conversion needs ffmpeg" => "SND0 conversion needs ffmpeg",
         "SND0 conversion needs atracdenc" => "SND0 conversion needs atracdenc",
         "yt-dlp did not produce a WAV file" => "yt-dlp did not produce a WAV file",
+        "manual Xdelta romhack patch produced no disc image" => {
+            "Manual Xdelta romhack patch produced no disc image"
+        }
+        "failed to capture command error output" => "Failed to capture command error output",
+        "failed to capture yt-dlp error output" => "Failed to capture yt-dlp error output",
+        "manual Xdelta romhack patch" => "Manual Xdelta romhack patch",
         "ATRAC3 SND0 exceeds the PSP 500 KB limit" => "ATRAC3 SND0 exceeds the PSP 500 KB limit",
         "atracdenc produced an invalid SND0 stream" => "atracdenc produced an invalid SND0 stream",
         "ISO is too large" => "ISO is too large",

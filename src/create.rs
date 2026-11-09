@@ -46,6 +46,8 @@ pub struct PbpAssets {
 #[derive(Clone, Debug)]
 pub struct PbpCreateConfig {
     pub images: Vec<PathBuf>,
+    /// Optional user-selected PPF or Xdelta romhack patch for each disc.
+    pub romhack_patches: Vec<Option<PathBuf>>,
     pub output: PathBuf,
     pub game_id: String,
     pub title: String,
@@ -306,6 +308,54 @@ pub fn create_from_image_with_progress_and_warnings(
             None
         };
         let disc = match &xdelta_patched {
+            Some(temp) => temp.file.try_clone()?,
+            None => disc,
+        };
+        let manual_patch = config.romhack_patches.get(index).and_then(Option::as_deref);
+        let manual_patched = if let Some(patch_path) = manual_patch {
+            let extension = patch_path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            let output = TempFile::new("romhack-disc")?;
+            if extension == "ppf" {
+                let mut source = disc.try_clone()?;
+                source.seek(SeekFrom::Start(0))?;
+                io::copy(&mut source, &mut output.file.try_clone()?)?;
+                let patch_data = fs::read(patch_path)?;
+                crate::ppf::apply(&output.file, &patch_data).map_err(|error| {
+                    CreateError::Invalid(format!("manual PPF romhack patch failed: {error}"))
+                })?;
+            } else if extension == "xdelta" {
+                let source = TempFile::new("romhack-source")?;
+                let mut input = disc.try_clone()?;
+                input.seek(SeekFrom::Start(0))?;
+                io::copy(&mut input, &mut source.file.try_clone()?)?;
+                let mut command = Command::new("xdelta3");
+                command
+                    .arg("decode")
+                    .arg("-s")
+                    .arg(&source.path)
+                    .arg(patch_path)
+                    .arg(&output.path);
+                run_cancellable(&mut command, cancelled, "manual Xdelta romhack patch")?;
+                if fs::metadata(&output.path)?.len() == 0 {
+                    return Err(CreateError::Invalid(
+                        "manual Xdelta romhack patch produced no disc image".into(),
+                    ));
+                }
+            } else {
+                return Err(CreateError::Invalid(format!(
+                    "unsupported romhack patch format: {}",
+                    patch_path.display()
+                )));
+            }
+            Some(output)
+        } else {
+            None
+        };
+        let disc = match &manual_patched {
             Some(temp) => temp.file.try_clone()?,
             None => disc,
         };
