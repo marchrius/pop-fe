@@ -235,82 +235,56 @@ pub fn create_from_image_with_progress_and_warnings(
                 "LibCrypt patch unavailable for {disc_id}; install lcp to patch this game"
             ));
         }
-        let patched = if patch.is_some() || libcrypt_patch.is_some() || lcp.is_some() {
-            let temp = TempFile::new("patched-disc")?;
-            let mut source = disc.try_clone()?;
-            source.seek(SeekFrom::Start(0))?;
-            io::copy(&mut source, &mut temp.file.try_clone()?)?;
-            if let Some(patch) = patch {
-                crate::ppf::apply(&temp.file, &patch).map_err(|error| {
-                    CreateError::Invalid(format!(
-                        "automatic PPF compatibility patch failed: {error}"
-                    ))
-                })?;
-            }
-            if let Some(patch) = libcrypt_patch {
-                crate::ppf::apply(&temp.file, &patch).map_err(|error| {
-                    CreateError::Invalid(format!("automatic LibCrypt patch failed: {error}"))
-                })?;
-            }
-            if let Some(lcp) = lcp {
-                let mut command = Command::new(lcp);
-                command.arg(&temp.path);
-                run_cancellable(&mut command, cancelled, "LibCrypt patcher")?;
-            }
+        // Match POP-FE's PSP pipeline: compatibility PPF, compatibility
+        // Xdelta, user romhack, LibCrypt, then optional PSX-undither.
+        let ppf_patched = if let Some(patch) = patch {
+            let temp = copy_disc_to_temp(&disc, "patched-disc")?;
+            crate::ppf::apply(&temp.file, &patch).map_err(|error| {
+                CreateError::Invalid(format!("automatic PPF compatibility patch failed: {error}"))
+            })?;
             Some(temp)
         } else {
             None
         };
-        let disc = match &patched {
+        let mut disc = match &ppf_patched {
             Some(temp) => temp.file.try_clone()?,
             None => disc,
         };
-        let xdelta_patched = if patched.is_none() {
-            if let Some(patch_data) = xdelta {
-                let source = TempFile::new("xdelta-source")?;
-                let mut input = disc.try_clone()?;
-                input.seek(SeekFrom::Start(0))?;
-                let mut target = source.file.try_clone()?;
-                io::copy(&mut input, &mut target)?;
-                let patch_file = TempFile::new("xdelta-patch")?;
-                fs::write(&patch_file.path, patch_data)?;
-                let output = TempFile::new("xdelta-output")?;
-                let mut command = Command::new("xdelta3");
-                command
-                    .arg("decode")
-                    .arg("-s")
-                    .arg(&source.path)
-                    .arg(&patch_file.path)
-                    .arg(&output.path);
-                run_cancellable(
-                    &mut command,
-                    cancelled,
-                    "automatic Xdelta compatibility patch",
-                )
-                .map_err(|error| match error {
-                    CreateError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
-                        CreateError::Invalid(format!(
-                            "automatic Xdelta fix requires xdelta3: {error}"
-                        ))
-                    }
-                    error => error,
-                })?;
-                if fs::metadata(&output.path)?.len() == 0 {
-                    return Err(CreateError::Invalid(
-                        "automatic Xdelta compatibility patch produced no disc image".into(),
-                    ));
+        let xdelta_patched = if let Some(patch_data) = xdelta {
+            let source = copy_disc_to_temp(&disc, "xdelta-source")?;
+            let patch_file = TempFile::new("xdelta-patch")?;
+            fs::write(&patch_file.path, patch_data)?;
+            let output = TempFile::new("xdelta-output")?;
+            let mut command = Command::new("xdelta3");
+            command
+                .arg("decode")
+                .arg("-s")
+                .arg(&source.path)
+                .arg(&patch_file.path)
+                .arg(&output.path);
+            run_cancellable(
+                &mut command,
+                cancelled,
+                "automatic Xdelta compatibility patch",
+            )
+            .map_err(|error| match error {
+                CreateError::Io(error) if error.kind() == io::ErrorKind::NotFound => {
+                    CreateError::Invalid(format!("automatic Xdelta fix requires xdelta3: {error}"))
                 }
-                Some(output)
-            } else {
-                None
+                error => error,
+            })?;
+            if fs::metadata(&output.path)?.len() == 0 {
+                return Err(CreateError::Invalid(
+                    "automatic Xdelta compatibility patch produced no disc image".into(),
+                ));
             }
+            Some(output)
         } else {
             None
         };
-        let disc = match &xdelta_patched {
-            Some(temp) => temp.file.try_clone()?,
-            None => disc,
-        };
+        if let Some(temp) = &xdelta_patched {
+            disc = temp.file.try_clone()?;
+        }
         let manual_patch = config.romhack_patches.get(index).and_then(Option::as_deref);
         let manual_patched = if let Some(patch_path) = manual_patch {
             let extension = patch_path
@@ -355,10 +329,28 @@ pub fn create_from_image_with_progress_and_warnings(
         } else {
             None
         };
-        let disc = match &manual_patched {
-            Some(temp) => temp.file.try_clone()?,
-            None => disc,
+        if let Some(temp) = &manual_patched {
+            disc = temp.file.try_clone()?;
+        }
+        let libcrypt_patched = if libcrypt_patch.is_some() || lcp.is_some() {
+            let temp = copy_disc_to_temp(&disc, "libcrypt-disc")?;
+            if let Some(patch) = libcrypt_patch {
+                crate::ppf::apply(&temp.file, &patch).map_err(|error| {
+                    CreateError::Invalid(format!("automatic LibCrypt patch failed: {error}"))
+                })?;
+            }
+            if let Some(lcp) = lcp {
+                let mut command = Command::new(lcp);
+                command.arg(&temp.path);
+                run_cancellable(&mut command, cancelled, "LibCrypt patcher")?;
+            }
+            Some(temp)
+        } else {
+            None
         };
+        if let Some(temp) = &libcrypt_patched {
+            disc = temp.file.try_clone()?;
+        }
         let undithered = if config.psx_undither {
             let first = 0.10 + 0.02 * index as f64 / config.images.len() as f64;
             let span = 0.02 / config.images.len() as f64;
@@ -1539,6 +1531,15 @@ impl TempFile {
         Ok(Self { path, file })
     }
 }
+
+fn copy_disc_to_temp(source: &File, label: &str) -> Result<TempFile, CreateError> {
+    let temporary = TempFile::new(label)?;
+    let mut input = source.try_clone()?;
+    input.seek(SeekFrom::Start(0))?;
+    io::copy(&mut input, &mut temporary.file.try_clone()?)?;
+    Ok(temporary)
+}
+
 impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = fs::remove_file(&self.path);

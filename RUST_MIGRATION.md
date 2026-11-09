@@ -64,7 +64,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Conversione ed estrazione
    espongono percentuali determinate e cancellazione.
    La GUI consente di selezionare patch romhack PPF/Xdelta, abbinate alle
-   immagini disco nell'ordine selezionato e applicate dopo i fix automatici.
+   immagini disco nell'ordine selezionato. La sequenza è fix PPF automatico,
+   Xdelta automatico, romhack selezionato e patch LibCrypt.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
    sandbox e su PSP resta da verificare.
