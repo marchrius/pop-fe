@@ -148,7 +148,10 @@ pub fn create_from_image_with_progress_and_warnings(
         } else {
             Vec::new()
         };
-        let normalized = if matches!(extension.as_str(), "cue" | "chd" | "ccd" | "iso" | "zip") {
+        let normalized = if matches!(
+            extension.as_str(),
+            "cue" | "chd" | "ccd" | "iso" | "bin" | "img" | "zip"
+        ) {
             let image = TempFile::new("raw-disc")?;
             if config.use_cdda {
                 if let Some(sheet) = cue_sheet.as_ref() {

@@ -99,6 +99,17 @@ impl CueSheet {
         if path
             .extension()
             .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("bin") || ext.eq_ignore_ascii_case("img"))
+            && let Some(cue) = companion_cue(path)
+        {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(DiscError::Cancelled);
+            }
+            return Self::parse(&cue);
+        }
+        if path
+            .extension()
+            .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("cue"))
         {
             return Self::parse(path);
@@ -409,6 +420,25 @@ impl CueSheet {
             "SYSTEM.CNF not found in ISO9660 root".into(),
         ))
     }
+}
+
+fn companion_cue(image: &Path) -> Option<PathBuf> {
+    let parent = image.parent().unwrap_or_else(|| Path::new("."));
+    let stem = image.file_stem()?;
+    std::fs::read_dir(parent)
+        .ok()?
+        .filter_map(Result::ok)
+        .map(|entry| entry.path())
+        .find(|candidate| {
+            candidate
+                .file_stem()
+                .is_some_and(|candidate_stem| candidate_stem == stem)
+                && candidate
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("cue"))
+                && candidate.is_file()
+        })
 }
 
 fn parse_ccd_integer(value: &str) -> Option<u64> {
