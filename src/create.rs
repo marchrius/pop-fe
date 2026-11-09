@@ -1144,25 +1144,33 @@ fn prepare_snd0(
         let output = target.path.with_extension("");
         let yt_dlp = yt_dlp_executable()
             .ok_or_else(|| CreateError::Invalid("YouTube SND0 download needs yt-dlp".into()))?;
-        let mut command = Command::new(&yt_dlp);
-        expose_bundled_tools(&mut command, &yt_dlp);
-        command
-            .args([
+        let make_command = |force_ipv4: bool| {
+            let mut command = Command::new(&yt_dlp);
+            expose_bundled_tools(&mut command, &yt_dlp);
+            command.args([
                 "--no-playlist",
                 "--no-progress",
                 "--quiet",
                 "--js-runtimes",
                 "deno",
-                "-f",
-                "bestaudio",
-                "-x",
-                "--audio-format",
-                "wav",
-                "-o",
-            ])
-            .arg(output)
-            .arg(source);
-        run_cancellable(&mut command, cancelled, "YouTube SND0 download")?;
+            ]);
+            if force_ipv4 {
+                command.arg("--force-ipv4").arg("--force-overwrites");
+            }
+            command
+                .args(["-f", "bestaudio", "-x", "--audio-format", "wav", "-o"])
+                .arg(&output)
+                .arg(source);
+            command
+        };
+        match run_cancellable(&mut make_command(false), cancelled, "YouTube SND0 download") {
+            Ok(()) => {}
+            Err(error) if error.to_string().contains("HTTP Error 403: Forbidden") => {
+                let mut command = make_command(true);
+                run_cancellable(&mut command, cancelled, "YouTube SND0 IPv4 retry")?;
+            }
+            Err(error) => return Err(error),
+        }
         progress(0.25);
         if !target.path.is_file() {
             return Err(CreateError::Invalid(

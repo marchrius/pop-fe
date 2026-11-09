@@ -45,7 +45,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    PIC1 e ICON0 quando gli URL sono disponibili; PIC0 rispetta anche scala e
    offset definiti per gioco nel database. Per SND0 usa l'audio del tema quando
    disponibile, altrimenti il cache upstream dei file ATRAC3 già pronti; l'audio
-   viene limitato ai vincoli PSP. Le anteprime artwork vengono mostrate nella
+   viene limitato ai vincoli PSP; se YouTube risponde HTTP 403, il download
+   riprova automaticamente tramite IPv4. Le anteprime artwork vengono mostrate nella
    pagina Converti. I config POPS specifici per gioco e i dati
    LibCrypt vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini e SND0 dei temi 98DEMAKE e
