@@ -1271,9 +1271,7 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
             return Some(bundled);
         }
     }
-    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|directory| directory.join("yt-dlp"))
-        .find(|path| path.is_file())
+    None
 }
 
 #[cfg(feature = "gui")]
