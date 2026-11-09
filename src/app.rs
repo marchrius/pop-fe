@@ -1066,7 +1066,7 @@ fn convert_page(
     let patches_for_create = romhack_patches.clone();
     let fields_for_create = fields.clone();
     let button_for_create = convert.clone();
-    let warning_state: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let warning_state: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
     let warning_state_for_create = warning_state.clone();
     let operation_busy_for_create = operation_busy.clone();
     let progress = gtk::ProgressBar::new();
@@ -1093,7 +1093,7 @@ fn convert_page(
                 .set_text(&tr("Another operation is in progress"));
             return;
         }
-        *warning_state_for_create.borrow_mut() = None;
+        warning_state_for_create.borrow_mut().clear();
         let selected = files_for_create.borrow().clone();
         if selected.is_empty() || selected.len() > 32 {
             fields_for_create
@@ -1234,16 +1234,16 @@ fn convert_page(
                     fields
                         .status
                         .set_text(&tr("Conversion warning: {error}").replace("{error}", &warning));
-                    *warning_state.borrow_mut() = Some(warning);
+                    warning_state.borrow_mut().push(warning);
                     gtk::glib::ControlFlow::Continue
                 }
                 Ok(TaskMessage::Finished(Ok(path))) => {
                     operation_busy.set(false);
                     let mut message = format!("{}: {}", tr("Conversion complete"), path.display());
-                    if let Some(warning) = warning_state.borrow().as_deref() {
+                    for warning in warning_state.borrow().iter() {
                         message.push('\n');
                         message.push_str(
-                            &tr("Manual could not be added: {error}")
+                            &tr("Conversion warning: {error}")
                                 .replace("{error}", &crate::i18n::localize_error(warning)),
                         );
                     }
