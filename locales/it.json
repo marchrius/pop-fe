@@ -11,7 +11,6 @@
   "About POP-FE": "Informazioni su POP-FE",
   "Quit": "Esci",
   "POP-FE Help": "Guida a POP-FE",
-  "Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\nExtract: select the PBP and an output folder.\n\nCtrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit": "Converti: aggiungi le immagini dei giochi, controlla dati e anteprime, scegli la cartella di destinazione e crea EBOOT.PBP.\n\nEstrai: seleziona il PBP e una cartella di destinazione.\n\nCtrl+O — Apri immagini o PBP\nAlt+1 — Converti\nAlt+2 — Estrai\nF1 — Guida\nCtrl+Q — Esci",
   "Close": "Chiudi",
   "Convert and extract PlayStation disc images for PSP with POP-FE.": "Conversione ed estrazione di immagini PlayStation per PSP con POP-FE.",
   "Stop the operation?": "Interrompere l’operazione?",
