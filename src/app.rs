@@ -937,10 +937,10 @@ fn convert_page(
                 .and_then(|ext| ext.to_str())
                 .unwrap_or_default()
                 .to_ascii_lowercase();
-            if !["bin", "img", "iso", "cue", "chd", "ccd"].contains(&extension.as_str()) {
+            if !["bin", "img", "iso", "cue", "chd", "ccd", "zip"].contains(&extension.as_str()) {
                 fields_for_create
                     .status
-                    .set_text(&tr("Select CUE, CCD, CHD, ISO or raw BIN/IMG images"));
+                    .set_text(&tr("Select CUE, CCD, CHD, ISO, ZIP or raw BIN/IMG images"));
                 return;
             }
         }

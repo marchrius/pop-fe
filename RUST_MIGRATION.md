@@ -12,7 +12,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    implementati per l'analisi iniziale. La materializzazione CHD con `chdman`
    e il calcolo MD5 rispondono alla cancellazione quando si sostituisce o
    rimuove l'immagine in analisi; anche la lettura dei download artwork viene
-   interrotta ai confini dei blocchi ricevuti.
+   interrotta ai confini dei blocchi ricevuti. L'analisi iniziale mostra un
+   indicatore di attività ed è annullabile; l'app attende il worker annullato
+   prima di terminare.
 3. Estrazione delle sezioni PBP, immagini PSISO compresse, ISO, CUE e tracce AEA:
    implementata. L'ISO viene ricostruito dai settori dati Mode 1/Mode 2 Form 1.
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
@@ -21,7 +23,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    pubblicati nella cartella scelta solo a operazione completata; annullamento
    o errori durante la decodifica non lasciano immagini parziali.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
-   di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE, CCD e CHD con tracce dati e audio.
+   di 32 dischi; accetta BIN/IMG raw, ISO 2048, CUE, CCD, CHD e archivi ZIP con
+   tracce dati e audio.
    BIN/IMG e ISO usano una CUE sintetica per calcolare la TOC in settori CD,
    mantenendo corretto il lead-out PSISO anche per input senza CUE fornita;
    gli indirizzi traccia e il frame di lead-out seguono la convenzione POP-FE.
@@ -65,12 +68,12 @@ riferimento di comportamento. Il crate non è ancora un sostituto completo:
 La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
 esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
 gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
-LibCrypt `lcp`. Perciò la copertura LibCrypt è limitata alle patch PPF archiviate
-nel repository: il database locale descrive 230 ID protetti e contiene PPF
-statiche per 74 di essi. Se trova `lcp` nel PATH (o in `POPFE_LCP`), il backend
-Rust lo usa come fallback per identificare e patchare gli altri casi; i pacchetti
-non lo includono ancora. Il port indipendente richiede di migrare il catalogo
-upstream e associare i boot file agli ID.
+LibCrypt `lcp`. Il database descrive 230 ID protetti; 227 hanno una patch PPF
+statica associata automaticamente tramite i dati del repository e il mapping
+upstream incluso. Gli altri 3 casi restano revision-specifici e richiedono
+`lcp`, se disponibile nel PATH o in `POPFE_LCP`; i pacchetti non lo includono.
+Il port indipendente richiede di migrare il catalogo upstream e associare i
+boot file alle revisioni.
 Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
 finché non sarà validato su immagini e hardware reali. La decifratura DES dei
 manuali PS3 PGD e la conversione in `DOCUMENT.DAT` non sono ancora state

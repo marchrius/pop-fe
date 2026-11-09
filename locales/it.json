@@ -131,7 +131,7 @@
   "Wait for theme artwork to finish loading": "Attendi il caricamento delle immagini del tema",
   "This procedural theme is not ported yet": "Questo tema generativo non è ancora stato portato",
   "Select between one and 32 disc images": "Seleziona da una a 32 immagini disco",
-  "Select CUE, CCD, CHD, ISO or raw BIN/IMG images": "Seleziona immagini CUE, CCD, CHD, ISO o BIN/IMG raw",
+  "Select CUE, CCD, CHD, ISO, ZIP or raw BIN/IMG images": "Seleziona immagini CUE, CCD, CHD, ISO, ZIP o BIN/IMG raw",
   "This option is not ported yet": "Questa opzione non è ancora stata portata",
   "Override {name}": "Sostituisci {name}",
   "Select Asset File": "Seleziona il file dell’asset",
