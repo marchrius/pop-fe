@@ -366,8 +366,11 @@ pub fn create_from_image_with_progress_and_warnings(
         };
         let disc_len = disc.metadata()?.len();
         let psiso = TempFile::new("psiso")?;
-        let mut psp_config = crate::database::Database::embedded()
+        let database = crate::database::Database::embedded();
+        let external_config = image_path.with_extension("pspconfig");
+        let mut psp_config = database
             .psp_config(&disc_id)
+            .or_else(|| fs::read(external_config).ok())
             .unwrap_or_else(|| EMPTY_PSP_CONFIG.to_vec());
         if config.use_cdda {
             if psp_config.len() > 0x09 {
