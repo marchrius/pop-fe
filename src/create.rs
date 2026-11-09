@@ -213,9 +213,11 @@ pub fn create_from_image_with_progress_and_warnings(
         let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
             None
         } else {
-            libcrypt_revision
-                .clone()
-                .unwrap_or_else(|| database.libcrypt_patch(&disc_id))
+            match libcrypt_revision.clone() {
+                Some(patch) => patch,
+                None if database.has_libcrypt_revision_data(&disc_id) => None,
+                None => database.libcrypt_patch(&disc_id),
+            }
         };
         let lcp = if config.disable_libcrypt_patching
             || !ppf_compatible

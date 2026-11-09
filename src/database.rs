@@ -197,6 +197,10 @@ impl Database {
         self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
     }
 
+    pub fn has_libcrypt_revision_data(&self, id: &str) -> bool {
+        self.libcrypt_hash_patches.contains_key(id)
+    }
+
     /// Returns `Some(None)` when a known image revision intentionally needs no patch.
     pub fn libcrypt_patch_for_hash(&self, id: &str, md5: &str) -> Option<Option<Vec<u8>>> {
         let path = self.libcrypt_hash_patches.get(id)?.get(md5)?;
