@@ -182,6 +182,38 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
     }
 }
 
+pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
+    let Some(game) = Database::embedded().games.get(game_id) else {
+        return PbpAssets::default();
+    };
+    let directory = cache_directory().join("assets");
+    let pic1 = cached_image_path(&directory, game_id, "pic1", (480, 272));
+    let pic0_path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
+    let pic0 = Pixbuf::from_file(&pic0_path)
+        .ok()
+        .filter(|image| image.width() == 310 && image.height() == 180)
+        .map(|_| pic0_path);
+    let icon0 = cached_image_path(&directory, game_id, "icon0", (80, 80)).or_else(|| {
+        let source = pic1.as_ref()?;
+        let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
+        normalize_cached(source, &destination, (80, 80)).then_some(destination)
+    });
+    let snd0 = game.snd0.as_deref().and_then(|_| {
+        let path = directory.join(format!("{}-snd0.at3", safe_id(game_id)));
+        fs::read(&path)
+            .ok()
+            .filter(|bytes| valid_snd0(bytes))
+            .map(|_| path)
+    });
+    PbpAssets {
+        icon0,
+        pic0,
+        pic1,
+        snd0,
+        ..PbpAssets::default()
+    }
+}
+
 pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
     load_theme_assets_cancellable(game_id, theme, base, &AtomicBool::new(false))
 }
@@ -254,7 +286,78 @@ pub fn load_theme_assets_cancellable(
 }
 
 pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    procedural_theme_assets(game_id, theme, base)
+    let mut result = load_game_assets_cached(game_id);
+    merge_missing_assets(&mut result, base);
+    let Some(theme_info) = Database::embedded().themes.get(theme) else {
+        return result;
+    };
+    if theme_info.url.is_none() {
+        return procedural_theme_assets(game_id, theme, &result);
+    }
+    let directory = cache_directory().join("themes");
+    for (key, size) in [
+        ("icon0", (80, 80)),
+        ("pic0", (310, 180)),
+        ("pic1", (480, 272)),
+    ] {
+        if let Some(path) = cached_image_path(&directory, &format!("{game_id}-{theme}"), key, size)
+        {
+            match key {
+                "icon0" => result.icon0 = Some(path),
+                "pic0" => result.pic0 = Some(path),
+                "pic1" => result.pic1 = Some(path),
+                _ => {}
+            }
+        }
+    }
+    let audio = directory.join(format!("{}-{}-snd0.wav", safe_id(game_id), safe_id(theme)));
+    if valid_wave_file(&audio) {
+        result.snd0 = Some(audio);
+    }
+    result
+}
+
+fn merge_missing_assets(target: &mut PbpAssets, fallback: &PbpAssets) {
+    if target.icon0.is_none() {
+        target.icon0.clone_from(&fallback.icon0);
+    }
+    if target.icon1.is_none() {
+        target.icon1.clone_from(&fallback.icon1);
+    }
+    if target.pic0.is_none() {
+        target.pic0.clone_from(&fallback.pic0);
+    }
+    if target.pic1.is_none() {
+        target.pic1.clone_from(&fallback.pic1);
+    }
+    if target.snd0.is_none() {
+        target.snd0.clone_from(&fallback.snd0);
+    }
+    if target.logo.is_none() {
+        target.logo.clone_from(&fallback.logo);
+    }
+}
+
+fn cached_image_path(
+    directory: &Path,
+    game_id: &str,
+    name: &str,
+    size: (i32, i32),
+) -> Option<PathBuf> {
+    let path = directory.join(format!("{}-{name}.png", safe_id(game_id)));
+    let image = Pixbuf::from_file(&path).ok()?;
+    (image.width() == size.0 && image.height() == size.1).then_some(path)
+}
+
+fn valid_wave_file(path: &Path) -> bool {
+    let mut header = [0u8; 12];
+    fs::metadata(path).ok().is_some_and(|metadata| {
+        metadata.len() >= 12 && metadata.len() <= MAX_THEME_AUDIO_BYTES as u64
+    }) && fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut header))
+        .is_ok()
+        && &header[..4] == b"RIFF"
+        && &header[8..] == b"WAVE"
 }
 
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {

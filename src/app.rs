@@ -1437,6 +1437,8 @@ fn analyze_first(
                     && !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed)
                 {
                     crate::assets::load_game_assets_cancellable(&metadata.id, &worker_cancellation)
+                } else if !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    crate::assets::load_game_assets_cached(&metadata.id)
                 } else {
                     crate::create::PbpAssets::default()
                 };

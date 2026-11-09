@@ -40,7 +40,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    viene limitato ai vincoli PSP. Le anteprime artwork vengono mostrate nella
    pagina Converti. I config POPS specifici per gioco e i dati
    LibCrypt vengono inclusi automaticamente nel PSISO.
-5. Selezione e preview XMB: caricamento immagini del tema 98DEMAKE e
+5. Selezione e preview XMB: caricamento immagini e SND0 dei temi 98DEMAKE e
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili
    con le dimensioni PSP; non replicano esattamente i filtri OpenCV originali.
