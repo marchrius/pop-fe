@@ -90,6 +90,9 @@ impl CueSheet {
             .as_str()
         {
             "chd" => return Self::parse(&materialize_chd(path, cancelled)?),
+            "zip" => {
+                return Self::open_image_cancellable(&materialize_zip(path, cancelled)?, cancelled);
+            }
             "ccd" => return Self::parse_ccd(path),
             _ => {}
         }
@@ -538,6 +541,155 @@ fn materialize_chd(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
             Err(DiscError::Io(error))
         }
     }
+}
+
+fn materialize_zip(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscError> {
+    static SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    const MAX_ARCHIVE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
+    const MAX_ARCHIVE_ENTRIES: usize = 20_000;
+
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(DiscError::Cancelled);
+    }
+    let metadata = std::fs::metadata(path)?;
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.canonicalize()?.hash(&mut hasher);
+    metadata.len().hash(&mut hasher);
+    metadata.modified().ok().hash(&mut hasher);
+    let key = format!("{:016x}", hasher.finish());
+    let cache_root = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|root| root.is_absolute())
+        .or_else(|| {
+            std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .map(|home| home.join(".cache"))
+        })
+        .unwrap_or_else(std::env::temp_dir)
+        .join("org.popfe.PSPManager/disc-images");
+    std::fs::create_dir_all(&cache_root)?;
+    let cached_dir = cache_root.join(key);
+    if let Some(image) = find_archived_disc(&cached_dir) {
+        return Ok(image);
+    }
+    if cached_dir.exists() {
+        std::fs::remove_dir_all(&cached_dir)?;
+    }
+    let temporary = cache_root.join(format!(
+        "zip-{}-{}",
+        std::process::id(),
+        SEQUENCE.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir(&temporary)?;
+    let result = (|| {
+        let file = File::open(path)?;
+        let mut archive = zip::ZipArchive::new(file)
+            .map_err(|error| DiscError::Cue(format!("invalid ZIP disc image: {error}")))?;
+        if archive.len() > MAX_ARCHIVE_ENTRIES {
+            return Err(DiscError::Cue("ZIP disc image has too many entries".into()));
+        }
+        let mut expanded_size = 0u64;
+        for index in 0..archive.len() {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(DiscError::Cancelled);
+            }
+            let mut entry = archive.by_index(index).map_err(|error| {
+                DiscError::Cue(format!("cannot read ZIP disc image entry: {error}"))
+            })?;
+            expanded_size = expanded_size
+                .checked_add(entry.size())
+                .ok_or_else(|| DiscError::Cue("ZIP disc image size overflow".into()))?;
+            if expanded_size > MAX_ARCHIVE_BYTES {
+                return Err(DiscError::Cue(
+                    "ZIP disc image expands beyond the 4 GiB safety limit".into(),
+                ));
+            }
+            let Some(relative_path) = entry.enclosed_name() else {
+                continue;
+            };
+            if relative_path.as_os_str().is_empty() || entry.is_symlink() {
+                continue;
+            }
+            let output = temporary.join(relative_path);
+            if entry.is_dir() {
+                std::fs::create_dir_all(output)?;
+                continue;
+            }
+            if let Some(parent) = output.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut target = File::create(output)?;
+            let mut buffer = [0u8; 128 * 1024];
+            loop {
+                if cancelled.load(Ordering::Relaxed) {
+                    return Err(DiscError::Cancelled);
+                }
+                let count = entry.read(&mut buffer)?;
+                if count == 0 {
+                    break;
+                }
+                std::io::Write::write_all(&mut target, &buffer[..count])?;
+            }
+        }
+        find_archived_disc(&temporary).ok_or_else(|| {
+            DiscError::Cue("ZIP archive does not contain a supported disc image".into())
+        })?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        let _ = std::fs::remove_dir_all(&temporary);
+        return Err(error);
+    }
+    match std::fs::rename(&temporary, &cached_dir) {
+        Ok(()) => find_archived_disc(&cached_dir).ok_or_else(|| {
+            DiscError::Cue("ZIP archive does not contain a supported disc image".into())
+        }),
+        Err(_) if find_archived_disc(&cached_dir).is_some() => {
+            let _ = std::fs::remove_dir_all(&temporary);
+            Ok(find_archived_disc(&cached_dir).expect("checked above"))
+        }
+        Err(error) => {
+            let _ = std::fs::remove_dir_all(&temporary);
+            Err(DiscError::Io(error))
+        }
+    }
+}
+
+fn find_archived_disc(directory: &Path) -> Option<PathBuf> {
+    fn collect(directory: &Path, found: &mut Vec<PathBuf>) -> std::io::Result<()> {
+        for entry in std::fs::read_dir(directory)? {
+            let path = entry?.path();
+            if path.is_dir() {
+                collect(&path, found)?;
+            } else if path.extension().is_some_and(|extension| {
+                ["cue", "ccd", "iso", "bin", "img"]
+                    .iter()
+                    .any(|supported| extension.eq_ignore_ascii_case(supported))
+            }) {
+                found.push(path);
+            }
+        }
+        Ok(())
+    }
+    let mut found = Vec::new();
+    collect(directory, &mut found).ok()?;
+    found.sort_by_key(|path| {
+        let priority = if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("cue"))
+        {
+            0
+        } else if path
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("ccd"))
+        {
+            1
+        } else {
+            2
+        };
+        (priority, path.clone())
+    });
+    found.into_iter().next()
 }
 
 fn run_chdman_cancellable(command: &mut Command, cancelled: &AtomicBool) -> Result<(), DiscError> {

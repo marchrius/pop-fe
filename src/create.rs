@@ -1156,6 +1156,7 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+#[cfg(feature = "gui")]
 pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Result<String, String> {
     let executable = yt_dlp_executable()
         .ok_or_else(|| crate::i18n::tr("yt-dlp is required to search YouTube"))?;

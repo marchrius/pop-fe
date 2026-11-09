@@ -2,6 +2,8 @@
 
 Entrambi i pacchetti contengono l'applicazione GTK4/libadwaita compilata in Rust, l'encoder ATRAC3 e l'eseguibile ufficiale `yt-dlp` incluso nell'app. Non richiedono il pacchetto `yt-dlp` del sistema. La versione inclusa è verificata con SHA-256; la distribuzione zipimport ufficiale di yt-dlp richiede Python 3.11 o successivo.
 
+La conversione accetta immagini CUE, CCD, CHD, ISO, BIN e IMG, anche contenute in archivi ZIP.
+
 ## Debian
 
 Servono Rust/Cargo, CMake, un compilatore C/C++, GTK 4.10 o superiore, libadwaita 1.5 o superiore, `libsndfile1-dev`, `libssl-dev`, `poppler-utils`, `ffmpeg` e `7zip` (per i manuali PDF/JP2/RAR). Il pacchetto installato richiede Python 3.11+, ma include `yt-dlp` e non dipende dal pacchetto `yt-dlp` del sistema.
