@@ -38,6 +38,7 @@ struct DiscFields {
     disable_snd0: gtk::CheckButton,
     ntsc_u_icon0: gtk::CheckButton,
     status: gtk::Label,
+    log: gtk::TextBuffer,
     analysis_progress: gtk::ProgressBar,
     analysis_cancel_button: gtk::Button,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
@@ -301,6 +302,43 @@ fn section(title: &str) -> (gtk::Frame, gtk::Box) {
     (frame, body)
 }
 
+fn log_panel(buffer: &gtk::TextBuffer) -> gtk::Frame {
+    let (frame, body) = section(&tr("Log"));
+    let clear = gtk::Button::with_label(&tr("Clear Log"));
+    clear.add_css_class("flat");
+    let buffer_to_clear = buffer.clone();
+    clear.connect_clicked(move |_| buffer_to_clear.set_text(""));
+    let actions = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .halign(gtk::Align::End)
+        .build();
+    actions.append(&clear);
+    body.append(&actions);
+    let view = gtk::TextView::with_buffer(buffer);
+    view.set_editable(false);
+    view.set_cursor_visible(false);
+    view.set_monospace(true);
+    view.set_wrap_mode(gtk::WrapMode::WordChar);
+    let scroll = gtk::ScrolledWindow::builder()
+        .min_content_height(112)
+        .max_content_height(220)
+        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .hexpand(true)
+        .child(&view)
+        .build();
+    body.append(&scroll);
+    frame
+}
+
+fn append_log(buffer: &gtk::TextBuffer, message: &str) {
+    let mut end = buffer.end_iter();
+    buffer.insert(&mut end, message);
+    if !message.ends_with('\n') {
+        let mut end = buffer.end_iter();
+        buffer.insert(&mut end, "\n");
+    }
+}
+
 fn convert_page(
     parent: &adw::ApplicationWindow,
     operation_busy: Rc<Cell<bool>>,
@@ -338,6 +376,7 @@ fn convert_page(
     let theme_labels = THEME_NAMES.iter().map(|name| tr(name)).collect::<Vec<_>>();
     let theme_label_refs = theme_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let theme = gtk::DropDown::from_strings(&theme_label_refs);
+    let log = gtk::TextBuffer::new(None);
     let manual_entry = gtk::Entry::builder().hexpand(true).build();
     let theme_generation = Rc::new(Cell::new(0));
     let fields = DiscFields {
@@ -358,6 +397,7 @@ fn convert_page(
         disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
         ntsc_u_icon0: gtk::CheckButton::with_label(&tr("NTSC-U style ICON0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
+        log,
         analysis_progress,
         analysis_cancel_button,
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -953,6 +993,12 @@ fn convert_page(
     fields.status.set_xalign(0.0);
     fields.status.add_css_class("dim-label");
     content.append(&fields.status);
+    let log_for_status = fields.log.clone();
+    fields
+        .status
+        .connect_notify_local(Some("label"), move |status, _| {
+            append_log(&log_for_status, status.label().as_str());
+        });
     let analysis_row = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(8)
@@ -961,6 +1007,7 @@ fn convert_page(
     analysis_row.append(&fields.analysis_progress);
     analysis_row.append(&fields.analysis_cancel_button);
     content.append(&analysis_row);
+    content.append(&log_panel(&fields.log));
     let fields_for_analysis_cancel = fields.clone();
     fields.analysis_cancel_button.connect_clicked(move |_| {
         let mut stopping = false;
@@ -1445,6 +1492,11 @@ fn analyze_first(
                     fields.status.set_text(&tr("Operation stopped"));
                     return gtk::glib::ControlFlow::Break;
                 }
+                append_log(
+                    &fields.log,
+                    &tr("Analysis error: {error}")
+                        .replace("{error}", &crate::i18n::localize_error(&error)),
+                );
                 fields.id.set_text("UNKN00000");
                 *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
                 fields
@@ -1993,6 +2045,12 @@ fn extract_page(
     status.set_xalign(0.0);
     status.add_css_class("dim-label");
     content.append(&status);
+    let log = gtk::TextBuffer::new(None);
+    let log_for_status = log.clone();
+    status.connect_notify_local(Some("label"), move |status, _| {
+        append_log(&log_for_status, status.label().as_str());
+    });
+    content.append(&log_panel(&log));
     let extract_progress = gtk::ProgressBar::new();
     extract_progress.set_show_text(true);
     extract_progress.set_text(Some(&tr("Ready")));

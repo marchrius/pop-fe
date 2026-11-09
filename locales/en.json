@@ -5,6 +5,7 @@
   "Convert": "Convert",
   "Extract": "Extract",
   "Clear Log": "Clear Log",
+  "Analysis error: {error}": "Analysis error: {error}",
   "Help and Shortcuts": "Help and Shortcuts",
   "About POP-FE": "About POP-FE",
   "Quit": "Quit",
