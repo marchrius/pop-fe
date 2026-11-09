@@ -96,6 +96,47 @@ pub fn localize_error(message: &str) -> String {
         return tr("LibCrypt patch unavailable for {id}; install lcp to patch this game")
             .replace("{id}", game_id);
     }
+    for (prefix, key) in [
+        (
+            "malformed FILE entry at line ",
+            "Malformed CUE FILE entry at line {line}",
+        ),
+        (
+            "bad TRACK at line ",
+            "Invalid CUE TRACK entry at line {line}",
+        ),
+        (
+            "missing track mode at line ",
+            "Missing track mode at line {line}",
+        ),
+        (
+            "missing INDEX time at line ",
+            "Missing CUE INDEX time at line {line}",
+        ),
+        (
+            "invalid INDEX time at line ",
+            "Invalid CUE INDEX time at line {line}",
+        ),
+        (
+            "invalid CCD MODE at line ",
+            "Invalid CCD MODE at line {line}",
+        ),
+        (
+            "invalid CCD index at line ",
+            "Invalid CCD index at line {line}",
+        ),
+    ] {
+        if let Some(line) = message.strip_prefix(prefix) {
+            return tr(key).replace("{line}", line);
+        }
+    }
+    if let Some(mode) = message.strip_prefix("unknown track mode ") {
+        return tr("Unknown CUE track mode: {mode}").replace("{mode}", mode);
+    }
+    if let Some(extension) = message.strip_prefix("unsupported image extension .") {
+        return tr("Unsupported disc image extension: .{extension}")
+            .replace("{extension}", extension);
+    }
     let key = match message {
         "operation cancelled" => "Operation stopped",
         "compressed PSISO sector is invalid" => "Compressed PSISO sector is invalid",
@@ -142,7 +183,13 @@ pub fn localize_error(message: &str) -> String {
         "ZIP archive does not contain a supported disc image" => {
             "ZIP archive does not contain a supported disc image"
         }
-        _ => return message.to_owned(),
+        "no tracks found" => "No tracks were found",
+        "CCD contains no tracks" => "CCD contains no tracks",
+        "ISO9660 primary volume descriptor not found" => {
+            "ISO9660 primary volume descriptor not found"
+        }
+        "SYSTEM.CNF not found in ISO9660 root" => "SYSTEM.CNF was not found in the ISO9660 root",
+        _ => return tr(message),
     };
     tr(key)
 }

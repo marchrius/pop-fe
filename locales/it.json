@@ -184,5 +184,18 @@
   "Audio track is out of bounds": "La traccia audio supera i limiti del file",
   "Staged filename is missing": "Nome del file temporaneo mancante",
   "Sector offset overflow": "Overflow dell’offset del settore",
-  "LibCrypt patch unavailable for {id}; install lcp to patch this game": "Patch LibCrypt non disponibile per {id}; installa lcp per applicarla"
+  "LibCrypt patch unavailable for {id}; install lcp to patch this game": "Patch LibCrypt non disponibile per {id}; installa lcp per applicarla",
+  "Malformed CUE FILE entry at line {line}": "Voce FILE del CUE non valida alla riga {line}",
+  "Invalid CUE TRACK entry at line {line}": "Voce TRACK del CUE non valida alla riga {line}",
+  "Missing track mode at line {line}": "Modalità traccia mancante alla riga {line}",
+  "Missing CUE INDEX time at line {line}": "Tempo INDEX del CUE mancante alla riga {line}",
+  "Invalid CUE INDEX time at line {line}": "Tempo INDEX del CUE non valido alla riga {line}",
+  "Invalid CCD MODE at line {line}": "Modalità CCD non valida alla riga {line}",
+  "Invalid CCD index at line {line}": "Indice CCD non valido alla riga {line}",
+  "Unknown CUE track mode: {mode}": "Modalità traccia CUE sconosciuta: {mode}",
+  "Unsupported disc image extension: .{extension}": "Estensione immagine disco non supportata: .{extension}",
+  "No tracks were found": "Non sono state trovate tracce",
+  "CCD contains no tracks": "Il CCD non contiene tracce",
+  "ISO9660 primary volume descriptor not found": "Descrittore volume primario ISO9660 non trovato",
+  "SYSTEM.CNF was not found in the ISO9660 root": "SYSTEM.CNF non trovato nella directory radice ISO9660"
 }

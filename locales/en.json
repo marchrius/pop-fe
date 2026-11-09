@@ -184,5 +184,18 @@
   "Audio track is out of bounds": "Audio track is out of bounds",
   "Staged filename is missing": "Staged filename is missing",
   "Sector offset overflow": "Sector offset overflow",
-  "LibCrypt patch unavailable for {id}; install lcp to patch this game": "LibCrypt patch unavailable for {id}; install lcp to patch this game"
+  "LibCrypt patch unavailable for {id}; install lcp to patch this game": "LibCrypt patch unavailable for {id}; install lcp to patch this game",
+  "Malformed CUE FILE entry at line {line}": "Malformed CUE FILE entry at line {line}",
+  "Invalid CUE TRACK entry at line {line}": "Invalid CUE TRACK entry at line {line}",
+  "Missing track mode at line {line}": "Missing track mode at line {line}",
+  "Missing CUE INDEX time at line {line}": "Missing CUE INDEX time at line {line}",
+  "Invalid CUE INDEX time at line {line}": "Invalid CUE INDEX time at line {line}",
+  "Invalid CCD MODE at line {line}": "Invalid CCD MODE at line {line}",
+  "Invalid CCD index at line {line}": "Invalid CCD index at line {line}",
+  "Unknown CUE track mode: {mode}": "Unknown CUE track mode: {mode}",
+  "Unsupported disc image extension: .{extension}": "Unsupported disc image extension: .{extension}",
+  "No tracks were found": "No tracks were found",
+  "CCD contains no tracks": "CCD contains no tracks",
+  "ISO9660 primary volume descriptor not found": "ISO9660 primary volume descriptor not found",
+  "SYSTEM.CNF was not found in the ISO9660 root": "SYSTEM.CNF was not found in the ISO9660 root"
 }
