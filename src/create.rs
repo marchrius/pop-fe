@@ -1038,6 +1038,8 @@ fn prepare_snd0(
                 "--no-playlist",
                 "--no-progress",
                 "--quiet",
+                "--js-runtimes",
+                "deno",
                 "-f",
                 "bestaudio",
                 "-x",
@@ -1180,6 +1182,8 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
         .args([
             "--quiet",
             "--no-warnings",
+            "--js-runtimes",
+            "deno",
             "--flat-playlist",
             "--print",
             "id",
