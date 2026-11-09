@@ -37,6 +37,7 @@ def main():
     }
     source = runpy.run_path(str(ROOT / "gamedb.py"))
     psp_configs = {}
+    missing_psp_configs = []
     for game_id, game in source["games"].items():
         relative = game.get("pspconfig")
         if not relative:
@@ -44,6 +45,14 @@ def main():
         config_path = ROOT / relative
         if config_path.is_file():
             psp_configs[game_id] = config_path.read_bytes().hex()
+        else:
+            missing_psp_configs.append((game_id, relative))
+    if missing_psp_configs:
+        print(
+            f"warning: {len(missing_psp_configs)} game records reference missing PSP configs:",
+        )
+        for game_id, relative in missing_psp_configs:
+            print(f"  {game_id}: {relative}")
     write("disc_by_md5", discs)
     write("games", json_value(source["games"]))
     write("psp_configs", psp_configs)
