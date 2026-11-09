@@ -39,6 +39,7 @@
   "Manual Xdelta romhack patch failed with ": "Applicazione della patch romhack Xdelta non riuscita con ",
   "Manual Xdelta romhack patch produced no disc image": "La patch romhack Xdelta non ha prodotto un'immagine disco",
   "Manual Xdelta romhack patch": "Patch romhack Xdelta",
+  "PSP compatibility config unavailable for {id}; default settings will be used": "Configurazione di compatibilità PSP non disponibile per {id}; verranno usate le impostazioni predefinite",
   "Remove {name}": "Rimuovi {name}",
   "Remove Image": "Rimuovi immagine",
   "PSP Root Folder": "Root PSP",

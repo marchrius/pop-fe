@@ -114,6 +114,13 @@ pub fn localize_error(message: &str) -> String {
         return tr("LibCrypt patch unavailable for {id}; install lcp to patch this game")
             .replace("{id}", game_id);
     }
+    if let Some(game_id) = message
+        .strip_prefix("PSP compatibility config unavailable for ")
+        .and_then(|value| value.strip_suffix("; default settings will be used"))
+    {
+        return tr("PSP compatibility config unavailable for {id}; default settings will be used")
+            .replace("{id}", game_id);
+    }
     for (prefix, key) in [
         (
             "malformed FILE entry at line ",

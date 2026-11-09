@@ -368,9 +368,21 @@ pub fn create_from_image_with_progress_and_warnings(
         let psiso = TempFile::new("psiso")?;
         let database = crate::database::Database::embedded();
         let external_config = image_path.with_extension("pspconfig");
-        let mut psp_config = database
-            .psp_config(&disc_id)
-            .or_else(|| fs::read(external_config).ok())
+        let sidecar_config = fs::read(&external_config).ok();
+        let embedded_config = database.psp_config(&disc_id);
+        if embedded_config.is_none()
+            && sidecar_config.is_none()
+            && database
+                .games
+                .get(&disc_id)
+                .is_some_and(|record| record.pspconfig.is_some())
+        {
+            warning(format!(
+                "PSP compatibility config unavailable for {disc_id}; default settings will be used"
+            ));
+        }
+        let mut psp_config = embedded_config
+            .or(sidecar_config)
             .unwrap_or_else(|| EMPTY_PSP_CONFIG.to_vec());
         if config.use_cdda {
             if psp_config.len() > 0x09 {
