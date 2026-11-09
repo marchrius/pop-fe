@@ -163,6 +163,7 @@ pub fn activate(application: &adw::Application) {
         .tooltip_text(tr("Main Menu"))
         .popover(&gtk::PopoverMenu::from_model(Some(&menu)))
         .build();
+    menu_button.update_property(&[gtk::accessible::Property::Label(&tr("Main Menu"))]);
     header.pack_end(&menu_button);
 
     let about = gio::SimpleAction::new("about", None);
@@ -1326,6 +1327,14 @@ fn refresh_disc_list(
         let remove = gtk::Button::from_icon_name("list-remove-symbolic");
         remove.add_css_class("flat");
         remove.set_tooltip_text(Some(&tr("Remove Image")));
+        let accessible_label = tr("Remove {name}").replace(
+            "{name}",
+            path.file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .as_ref(),
+        );
+        remove.update_property(&[gtk::accessible::Property::Label(&accessible_label)]);
         let path_to_remove = path.clone();
         let files = files.clone();
         let list_for_remove = list.clone();
