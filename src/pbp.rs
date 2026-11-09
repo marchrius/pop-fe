@@ -115,6 +115,16 @@ impl Pbp {
             "DATA.PSP",
         ];
         let mut written = Vec::new();
+        let header_path = staging_dir.join("HEADER.DAT");
+        copy_range(
+            &mut source,
+            0,
+            PBP_HEADER_SIZE as u64,
+            &header_path,
+            cancelled,
+            &mut reporter,
+        )?;
+        written.push(header_path);
         for (index, name) in names.iter().enumerate() {
             let start = self.sections[index] as u64;
             let end = self.sections[index + 1] as u64;
@@ -185,6 +195,16 @@ impl Pbp {
                 }
                 offset = (offset + extent + 15) & !15;
             } else if &magic[..8] == b"STARTDAT" {
+                let startdat = staging_dir.join("STARTDAT.DAT");
+                copy_range(
+                    &mut source,
+                    offset,
+                    self.file_size - offset,
+                    &startdat,
+                    cancelled,
+                    &mut reporter,
+                )?;
+                written.push(startdat);
                 break;
             } else {
                 offset = offset.saturating_add(16);
@@ -203,7 +223,8 @@ impl Pbp {
             .sections
             .windows(2)
             .map(|pair| pair[1].saturating_sub(pair[0]) as u64)
-            .sum::<u64>();
+            .sum::<u64>()
+            .saturating_add(PBP_HEADER_SIZE as u64);
         let mut source = File::open(&self.path)?;
         let mut offset = self.sections[7] as u64;
         while offset + 16 <= self.file_size {
@@ -254,6 +275,7 @@ impl Pbp {
                 }
                 offset = (offset + extent + 15) & !15;
             } else if &magic[..8] == b"STARTDAT" {
+                work = work.saturating_add(self.file_size - offset);
                 break;
             } else {
                 offset += 16;
