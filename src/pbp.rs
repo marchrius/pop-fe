@@ -1,4 +1,5 @@
 //! PBP container inspection and PSISOIMG disc extraction.
+use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
@@ -101,7 +102,7 @@ impl Pbp {
         };
         progress(0.0);
         fs::create_dir_all(output)?;
-        let staging = ExtractionStage::new(output)?;
+        let mut staging = ExtractionStage::new(output)?;
         let staging_dir = staging.path.as_path();
         let mut source = File::open(&self.path)?;
         let names = [
@@ -407,6 +408,7 @@ impl Pbp {
 struct ExtractionStage {
     path: PathBuf,
     output: PathBuf,
+    cleanup: bool,
 }
 
 impl ExtractionStage {
@@ -419,6 +421,7 @@ impl ExtractionStage {
                     return Ok(Self {
                         path,
                         output: output.to_path_buf(),
+                        cleanup: true,
                     });
                 }
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
@@ -427,23 +430,121 @@ impl ExtractionStage {
         }
     }
 
-    fn publish(&self, staged_files: Vec<PathBuf>) -> Result<Vec<PathBuf>, PbpError> {
-        let mut output_files = Vec::with_capacity(staged_files.len());
+    fn publish(&mut self, staged_files: Vec<PathBuf>) -> Result<Vec<PathBuf>, PbpError> {
+        let mut names = HashSet::with_capacity(staged_files.len());
+        let mut files = Vec::with_capacity(staged_files.len());
         for staged in staged_files {
             let name = staged
                 .file_name()
                 .ok_or_else(|| PbpError::Invalid("staged filename is missing".into()))?;
+            if staged.parent() != Some(self.path.as_path()) || !names.insert(name.to_os_string()) {
+                return Err(PbpError::Invalid(
+                    "staged extraction files are invalid or have duplicate names".into(),
+                ));
+            }
+            if !fs::symlink_metadata(&staged)?.file_type().is_file() {
+                return Err(PbpError::Invalid(
+                    "staged extraction entry is not a regular file".into(),
+                ));
+            }
             let destination = self.output.join(name);
-            fs::rename(staged, &destination)?;
-            output_files.push(destination);
+            match fs::symlink_metadata(&destination) {
+                Ok(metadata) if !metadata.file_type().is_file() => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::AlreadyExists,
+                        format!(
+                            "extraction destination is not a regular file: {}",
+                            destination.display()
+                        ),
+                    )
+                    .into());
+                }
+                Ok(_) => {}
+                Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            files.push((staged, destination));
         }
-        Ok(output_files)
+
+        let backup_dir = loop {
+            let sequence = EXTRACTION_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = self
+                .path
+                .join(format!(".backup-{}-{sequence}", std::process::id()));
+            match fs::create_dir(&path) {
+                Ok(()) => break path,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error.into()),
+            }
+        };
+        let mut backups = Vec::new();
+        for (_, destination) in &files {
+            if !destination.exists() {
+                continue;
+            }
+            let backup = backup_dir.join(destination.file_name().expect("checked filename"));
+            if let Err(error) = fs::rename(destination, &backup) {
+                return self.fail_publication(error, &[], &backups);
+            }
+            backups.push((destination.clone(), backup));
+        }
+
+        let mut published = Vec::new();
+        for (staged, destination) in &files {
+            if let Err(error) = fs::rename(staged, destination) {
+                return self.fail_publication(error, &published, &backups);
+            }
+            published.push(destination.clone());
+        }
+
+        // The backup contains replaced destination files. Publication is
+        // committed now, so discard those originals; Drop removes any
+        // remaining staging data if cleanup itself fails.
+        let _ = fs::remove_dir_all(backup_dir);
+        Ok(published)
+    }
+
+    fn fail_publication(
+        &mut self,
+        cause: io::Error,
+        published: &[PathBuf],
+        backups: &[(PathBuf, PathBuf)],
+    ) -> Result<Vec<PathBuf>, PbpError> {
+        let mut rollback_errors = Vec::new();
+        for destination in published.iter().rev() {
+            if let Err(error) = fs::remove_file(destination) {
+                rollback_errors.push(format!("remove {}: {error}", destination.display()));
+            }
+        }
+        for (destination, backup) in backups.iter().rev() {
+            if let Err(error) = fs::rename(backup, destination) {
+                rollback_errors.push(format!(
+                    "restore {} from {}: {error}",
+                    destination.display(),
+                    backup.display()
+                ));
+            }
+        }
+        if rollback_errors.is_empty() {
+            Err(cause.into())
+        } else {
+            self.cleanup = false;
+            Err(io::Error::other(format!(
+                "{}; rollback was incomplete ({}); recovery files remain in {}",
+                cause,
+                rollback_errors.join("; "),
+                self.path.display()
+            ))
+            .into())
+        }
     }
 }
 
 impl Drop for ExtractionStage {
     fn drop(&mut self) {
-        let _ = fs::remove_dir_all(&self.path);
+        if self.cleanup {
+            let _ = fs::remove_dir_all(&self.path);
+        }
     }
 }
 
