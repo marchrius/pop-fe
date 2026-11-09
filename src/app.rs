@@ -38,6 +38,8 @@ struct DiscFields {
     disable_snd0: gtk::CheckButton,
     ntsc_u_icon0: gtk::CheckButton,
     status: gtk::Label,
+    analysis_progress: gtk::ProgressBar,
+    analysis_cancel_button: gtk::Button,
     assets: Rc<RefCell<crate::create::PbpAssets>>,
     base_assets: Rc<RefCell<crate::create::PbpAssets>>,
     asset_overrides: Rc<RefCell<crate::create::PbpAssets>>,
@@ -306,6 +308,13 @@ fn convert_page(
     let icon_preview = asset_preview(64, 64);
     let pic0_preview = asset_preview(132, 76);
     let pic1_preview = asset_preview(160, 90);
+    let analysis_progress = gtk::ProgressBar::new();
+    analysis_progress.set_show_text(true);
+    analysis_progress.set_text(Some(&tr("Ready")));
+    analysis_progress.set_visible(false);
+    let analysis_cancel_button = gtk::Button::with_label(&tr("Cancel"));
+    analysis_cancel_button.set_sensitive(false);
+    analysis_cancel_button.set_visible(false);
     let theme_labels = THEME_NAMES.iter().map(|name| tr(name)).collect::<Vec<_>>();
     let theme_label_refs = theme_labels.iter().map(String::as_str).collect::<Vec<_>>();
     let theme = gtk::DropDown::from_strings(&theme_label_refs);
@@ -330,6 +339,8 @@ fn convert_page(
         disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
         ntsc_u_icon0: gtk::CheckButton::with_label(&tr("NTSC-U style ICON0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
+        analysis_progress,
+        analysis_cancel_button,
         assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         base_assets: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
         asset_overrides: Rc::new(RefCell::new(crate::create::PbpAssets::default())),
@@ -408,9 +419,16 @@ fn convert_page(
     });
     let fields_for_download_toggle = fields.clone();
     let files_for_download_toggle = files.clone();
+    let busy_for_download_toggle = operation_busy.clone();
+    let cancel_for_download_toggle = cancel_state.clone();
     fields.disable_asset_downloads.connect_toggled(move |_| {
         if !files_for_download_toggle.borrow().is_empty() {
-            analyze_first(&files_for_download_toggle, &fields_for_download_toggle);
+            analyze_first(
+                &files_for_download_toggle,
+                &fields_for_download_toggle,
+                &busy_for_download_toggle,
+                &cancel_for_download_toggle,
+            );
         }
     });
     let fields_for_icon_frame = fields.clone();
@@ -442,6 +460,8 @@ fn convert_page(
     let clear_for_dialog = clear.clone();
     let fields_for_dialog = fields.clone();
     let history_for_dialog = folder_history.clone();
+    let busy_for_dialog = operation_busy.clone();
+    let cancellation_for_dialog = cancel_state.clone();
     add.connect_clicked(move |_| {
         let chooser = gtk::FileDialog::builder()
             .title(&tr("Select Disc Images"))
@@ -454,6 +474,8 @@ fn convert_page(
         let clear = clear_for_dialog.clone();
         let fields = fields_for_dialog.clone();
         let history = history_for_dialog.clone();
+        let busy = busy_for_dialog.clone();
+        let cancellation = cancellation_for_dialog.clone();
         chooser.open_multiple(
             Some(&parent_for_dialog),
             None::<&gio::Cancellable>,
@@ -472,8 +494,8 @@ fn convert_page(
                             }
                         }
                     }
-                    refresh_disc_list(&list, &files, &clear, &fields);
-                    analyze_first(&files, &fields);
+                    refresh_disc_list(&list, &files, &clear, &fields, &busy, &cancellation);
+                    analyze_first(&files, &fields, &busy, &cancellation);
                 }
             },
         );
@@ -482,6 +504,8 @@ fn convert_page(
     let files_for_clear = files.clone();
     let clear_for_clear = clear.clone();
     let fields_for_clear = fields.clone();
+    let busy_for_clear = operation_busy.clone();
+    let cancellation_for_clear = cancel_state.clone();
     clear.connect_clicked(move |_| {
         files_for_clear.borrow_mut().clear();
         refresh_disc_list(
@@ -489,6 +513,8 @@ fn convert_page(
             &files_for_clear,
             &clear_for_clear,
             &fields_for_clear,
+            &busy_for_clear,
+            &cancellation_for_clear,
         );
         reset_disc_fields(&fields_for_clear);
     });
@@ -813,6 +839,24 @@ fn convert_page(
     fields.status.set_xalign(0.0);
     fields.status.add_css_class("dim-label");
     content.append(&fields.status);
+    let analysis_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    fields.analysis_progress.set_hexpand(true);
+    analysis_row.append(&fields.analysis_progress);
+    analysis_row.append(&fields.analysis_cancel_button);
+    content.append(&analysis_row);
+    let fields_for_analysis_cancel = fields.clone();
+    fields.analysis_cancel_button.connect_clicked(move |_| {
+        if let Some(token) = fields_for_analysis_cancel.analysis_cancel.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            fields_for_analysis_cancel
+                .analysis_cancel_button
+                .set_sensitive(false);
+            fields_for_analysis_cancel.status.set_text(&tr("Stopping"));
+        }
+    });
 
     let convert = gtk::Button::with_label(&tr("Create EBOOT.PBP"));
     convert.add_css_class("suggested-action");
@@ -1074,6 +1118,8 @@ fn refresh_disc_list(
     files: &Rc<RefCell<Vec<PathBuf>>>,
     clear: &gtk::Button,
     fields: &DiscFields,
+    operation_busy: &Rc<Cell<bool>>,
+    cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) {
     while let Some(row) = list.first_child() {
         list.remove(&row);
@@ -1103,13 +1149,22 @@ fn refresh_disc_list(
         let list_for_remove = list.clone();
         let clear = clear.clone();
         let fields = fields.clone();
+        let busy = operation_busy.clone();
+        let cancellation = cancel_state.clone();
         remove.connect_clicked(move |_| {
             let removed_first = files.borrow().first() == Some(&path_to_remove);
             files.borrow_mut().retain(|file| file != &path_to_remove);
-            refresh_disc_list(&list_for_remove, &files, &clear, &fields);
+            refresh_disc_list(
+                &list_for_remove,
+                &files,
+                &clear,
+                &fields,
+                &busy,
+                &cancellation,
+            );
             if removed_first {
                 reset_disc_fields(&fields);
-                analyze_first(&files, &fields);
+                analyze_first(&files, &fields, &busy, &cancellation);
             }
         });
         row.append(&remove);
@@ -1141,10 +1196,21 @@ fn store_conversion_preferences(
     let _ = preferences.save();
 }
 
-fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
+fn analyze_first(
+    files: &Rc<RefCell<Vec<PathBuf>>>,
+    fields: &DiscFields,
+    operation_busy: &Rc<Cell<bool>>,
+    cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
+) {
     let Some(path) = files.borrow().first().cloned() else {
         return;
     };
+    if operation_busy.get() && fields.analysis_cancel.borrow().is_none() {
+        fields
+            .status
+            .set_text(&tr("Another operation is in progress"));
+        return;
+    }
     fields
         .status
         .set_text(&tr("Analyzing disc and loading assets"));
@@ -1153,6 +1219,14 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     }
     let cancellation = Arc::new(AtomicBool::new(false));
     *fields.analysis_cancel.borrow_mut() = Some(cancellation.clone());
+    *cancel_state.borrow_mut() = Some(cancellation.clone());
+    operation_busy.set(true);
+    fields.analysis_progress.set_visible(true);
+    fields
+        .analysis_progress
+        .set_text(Some(&tr("Analyzing disc and loading assets")));
+    fields.analysis_cancel_button.set_sensitive(true);
+    fields.analysis_cancel_button.set_visible(true);
     let generation = fields.analysis_generation.get().wrapping_add(1);
     fields.analysis_generation.set(generation);
     fields.id.set_text("");
@@ -1167,15 +1241,16 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
     let download_assets = !fields.disable_asset_downloads.is_active();
+    let worker_cancellation = cancellation.clone();
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
         let result = crate::database::Database::embedded()
-            .analyze_image_cancellable(&path, &cancellation)
+            .analyze_image_cancellable(&path, &worker_cancellation)
             .map(|metadata| {
                 let assets = if download_assets
-                    && !cancellation.load(std::sync::atomic::Ordering::Relaxed)
+                    && !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed)
                 {
-                    crate::assets::load_game_assets_cancellable(&metadata.id, &cancellation)
+                    crate::assets::load_game_assets_cancellable(&metadata.id, &worker_cancellation)
                 } else {
                     crate::create::PbpAssets::default()
                 };
@@ -1184,13 +1259,27 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
         let _ = sender.send(result.map_err(|error| error.to_string()));
     });
     let fields = fields.clone();
+    let operation_busy = operation_busy.clone();
+    let cancel_state = cancel_state.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(80), move || {
-        if fields.analysis_generation.get() != generation {
-            return gtk::glib::ControlFlow::Break;
+        let is_current = fields.analysis_generation.get() == generation;
+        if is_current {
+            fields.analysis_progress.pulse();
         }
         match receiver.try_recv() {
             Ok(Ok((metadata, assets))) => {
-                fields.analysis_cancel.borrow_mut().take();
+                let owns_active =
+                    finish_analysis(&fields, &operation_busy, &cancel_state, &cancellation);
+                if !is_current || !owns_active {
+                    return gtk::glib::ControlFlow::Break;
+                }
+                fields.analysis_progress.set_visible(false);
+                fields.analysis_cancel_button.set_sensitive(false);
+                fields.analysis_cancel_button.set_visible(false);
+                if cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    fields.status.set_text(&tr("Operation stopped"));
+                    return gtk::glib::ControlFlow::Break;
+                }
                 fields.id.set_text(&metadata.id);
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
@@ -1204,8 +1293,19 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
                 fields.status.set_text(&tr("Automatic data loaded"));
                 gtk::glib::ControlFlow::Break
             }
-            Ok(Err(_error)) => {
-                fields.analysis_cancel.borrow_mut().take();
+            Ok(Err(error)) => {
+                let owns_active =
+                    finish_analysis(&fields, &operation_busy, &cancel_state, &cancellation);
+                if !is_current || !owns_active {
+                    return gtk::glib::ControlFlow::Break;
+                }
+                fields.analysis_progress.set_visible(false);
+                fields.analysis_cancel_button.set_sensitive(false);
+                fields.analysis_cancel_button.set_visible(false);
+                if error == "operation cancelled" {
+                    fields.status.set_text(&tr("Operation stopped"));
+                    return gtk::glib::ControlFlow::Break;
+                }
                 fields.id.set_text("UNKN00000");
                 *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
                 fields
@@ -1215,6 +1315,14 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
             }
             Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
             Err(mpsc::TryRecvError::Disconnected) => {
+                let owns_active =
+                    finish_analysis(&fields, &operation_busy, &cancel_state, &cancellation);
+                if !is_current || !owns_active {
+                    return gtk::glib::ControlFlow::Break;
+                }
+                fields.analysis_progress.set_visible(false);
+                fields.analysis_cancel_button.set_sensitive(false);
+                fields.analysis_cancel_button.set_visible(false);
                 fields
                     .status
                     .set_text(&tr("Analysis failed: check the log"));
@@ -1224,10 +1332,38 @@ fn analyze_first(files: &Rc<RefCell<Vec<PathBuf>>>, fields: &DiscFields) {
     });
 }
 
+fn finish_analysis(
+    fields: &DiscFields,
+    operation_busy: &Rc<Cell<bool>>,
+    cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
+    cancellation: &Arc<AtomicBool>,
+) -> bool {
+    let owns_active = cancel_state
+        .borrow()
+        .as_ref()
+        .is_some_and(|active| Arc::ptr_eq(active, cancellation));
+    if owns_active {
+        *cancel_state.borrow_mut() = None;
+        operation_busy.set(false);
+        if fields
+            .analysis_cancel
+            .borrow()
+            .as_ref()
+            .is_some_and(|active| Arc::ptr_eq(active, cancellation))
+        {
+            fields.analysis_cancel.borrow_mut().take();
+        }
+    }
+    owns_active
+}
+
 fn reset_disc_fields(fields: &DiscFields) {
-    if let Some(cancellation) = fields.analysis_cancel.borrow_mut().take() {
+    if let Some(cancellation) = fields.analysis_cancel.borrow().as_ref() {
         cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
     }
+    fields.analysis_progress.set_visible(false);
+    fields.analysis_cancel_button.set_sensitive(false);
+    fields.analysis_cancel_button.set_visible(false);
     fields
         .analysis_generation
         .set(fields.analysis_generation.get().wrapping_add(1));
