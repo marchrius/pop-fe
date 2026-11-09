@@ -53,6 +53,30 @@ def main():
             if old != relative:
                 raise RuntimeError(f"conflicting LibCrypt patches for {game_id}")
 
+    # A single Redump dump can appear under different serial prefixes in the
+    # legacy database. Reuse an upstream patch only when both the Redump URL
+    # and LibCrypt magic word match, and all matching serials resolve to the
+    # same patch. This handles aliases such as SCES02080/SLES02080 without
+    # guessing across regional or disc revisions.
+    libcrypt = json.loads((ROOT / "data/libcrypt.json").read_text(encoding="utf-8"))
+    for game_id, record in libcrypt.items():
+        if game_id in mapping or record.get("ppf"):
+            continue
+        candidates = {
+            other.get("ppf") or mapping.get(other_id)
+            for other_id, other in libcrypt.items()
+            if other_id != game_id
+            and record.get("url")
+            and record.get("url") == other.get("url")
+            and record.get("magic_word") == other.get("magic_word")
+            and (other.get("ppf") or mapping.get(other_id))
+        }
+        candidates = {
+            patch for patch in candidates if (ROOT / patch).is_file()
+        }
+        if len(candidates) == 1:
+            mapping[game_id] = candidates.pop()
+
     destination = ROOT / "libcrypt-upstream"
     destination.mkdir(exist_ok=True)
     copied = 0
