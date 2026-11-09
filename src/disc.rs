@@ -210,7 +210,12 @@ impl CueSheet {
                     })?;
                     match index {
                         Some("00") => track.index00 = Some(frames),
-                        Some("01") => track.index01 = frames,
+                        Some("01") => {
+                            track.index01 = frames;
+                            if track.mode == TrackMode::Audio && track.index00.is_none() {
+                                track.index00 = Some(frames.saturating_sub(150));
+                            }
+                        }
                         _ => {}
                     }
                 }
