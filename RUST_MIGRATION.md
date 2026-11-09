@@ -17,7 +17,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    L'analisi iniziale mostra un
    indicatore di attività ed è annullabile; l'app attende il worker annullato
    prima di terminare.
-3. Estrazione delle sezioni PBP, immagini PSISO compresse, ISO, CUE e tracce AEA:
+3. Estrazione delle sezioni PBP, immagini PSISO compresse, ISO, CUE, TOC e
+   tracce AEA:
    implementata. L'ISO viene ricostruito dai settori dati Mode 1/Mode 2 Form 1;
    la modalità della traccia nel CUE estratto viene dedotta dal primo settore.
    L'estrazione conserva anche HEADER.DAT e STARTDAT.DAT come il dumper

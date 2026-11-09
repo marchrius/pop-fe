@@ -173,7 +173,7 @@ impl Pbp {
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000" {
-                let (image, cue, iso, audio_tracks) = self.extract_disc(
+                let (image, cue, toc, iso, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
                     staging_dir,
@@ -183,6 +183,7 @@ impl Pbp {
                 )?;
                 written.push(image);
                 written.push(cue);
+                written.push(toc);
                 written.extend(iso);
                 written.extend(audio_tracks);
                 disc_index += 1;
@@ -243,6 +244,7 @@ impl Pbp {
                 {
                     break;
                 }
+                work = work.saturating_add(1020);
                 let mut index_pos = offset + INDEX_OFFSET;
                 let mut scanned_sectors = 0usize;
                 while index_pos + 32 <= offset + extent {
@@ -292,7 +294,7 @@ impl Pbp {
         disc: usize,
         cancelled: &AtomicBool,
         reporter: &mut ProgressReporter<'_>,
-    ) -> Result<(PathBuf, PathBuf, Option<PathBuf>, Vec<PathBuf>), PbpError> {
+    ) -> Result<(PathBuf, PathBuf, PathBuf, Option<PathBuf>, Vec<PathBuf>), PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
         source.read_exact(&mut image_size)?;
@@ -307,6 +309,12 @@ impl Pbp {
         }
         let image = output.join(format!("PSISO{disc}.bin"));
         let cue = output.join(format!("PSISO{disc}.cue"));
+        let toc = output.join(format!("PSISO{disc}.toc"));
+        let mut toc_data = [0u8; 1020];
+        source.seek(SeekFrom::Start(base + PSISO_HEADER_SIZE + 0x800))?;
+        source.read_exact(&mut toc_data)?;
+        fs::write(&toc, toc_data)?;
+        reporter.add(toc_data.len() as u64);
         let mut target = File::create(&image)?;
         let mut index_pos = base + INDEX_OFFSET;
         let payload = base + PSISO_HEADER_SIZE;
@@ -368,7 +376,7 @@ impl Pbp {
             index_pos += 32;
         }
         let has_atrac_audio = psiso_has_atrac_tracks(source, base)?;
-        let actual_size = write_cue(&mut *source, base, &cue, &image, total, !has_atrac_audio)?;
+        let actual_size = write_cue(&toc_data, &cue, &image, total, !has_atrac_audio)?;
         target.set_len(actual_size)?;
         let iso = output.join(format!("PSISO{disc}.iso"));
         let iso = extract_iso(&image, &cue, &iso, cancelled, reporter)?.then_some(iso);
@@ -423,7 +431,7 @@ impl Pbp {
             audio_paths.push(audio_path);
             track += 1;
         }
-        Ok((image, cue, iso, audio_paths))
+        Ok((image, cue, toc, iso, audio_paths))
     }
 }
 
@@ -609,8 +617,7 @@ fn copy_range(
 }
 
 fn write_cue(
-    source: &mut File,
-    base: u64,
+    toc: &[u8; 1020],
     cue: &Path,
     image: &Path,
     image_len: u64,
@@ -624,9 +631,6 @@ fn write_cue(
     } else {
         "MODE2/2352"
     };
-    let mut toc = [0u8; 1020];
-    source.seek(SeekFrom::Start(base + PSISO_HEADER_SIZE + 0x800))?;
-    source.read_exact(&mut toc)?;
     let entries: Vec<&[u8]> = toc
         .chunks_exact(10)
         .take_while(|entry| **entry != [0; 10])
