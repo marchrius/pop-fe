@@ -47521,7 +47521,7 @@ games = {
         'pic0': 'https://images.launchbox-app.com/5ec7a40a-22a1-4fcd-a538-4310a10c94ce.png',
         'pic1': 'https://images.launchbox-app.com/3f2b652c-876c-42cd-8494-941294b748fd.jpg',
         'snd0': 'https://www.youtube.com/watch?v=4DfgDQ7ZPQo&list=PLL-sMa2lHYj3Oq6-5ZPZJRp6Pcf5q88Sm&index=1',
-        'pspconfig': 'pspconfigs/CTR - Crash Team Racing/SLPS-10118.bin',
+        'pspconfig': 'pspconfigs/CTR - Crash Team Racing/SCPS-10118.bin',
         'ps3config': 'ps3configs/Crash Team Racing/SCPS-10118.BIN',
     },
     'SCPS91230': {
@@ -57847,7 +57847,7 @@ games = {
     	'id': 'SLPM86926',
 	'title': "KOTOBUKI GRAND PRIX - MEZASE! GENCHARI KING [POKKIRI 1400]",
         'pic0': 'https://images.launchbox-app.com/37898122-ca88-4cf2-b6a7-c815c6d240a9.png',
-        'pspconfig': 'pspconfigs/Kotobuki Grand Prix/SLPS-86926.bin',
+        'pspconfig': 'pspconfigs/Kotobuki Grand Prix/SLPM-86926.bin',
     },
     'SCPS10137': {
         'url': "games/J/K/SCPS-10137.html",
@@ -66982,7 +66982,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/90e66dc7-d332-449d-a3ed-359d11437a69.jpg',
         'snd0': 'https://www.youtube.com/watch?v=Igp2JXYqJlQ',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Rising%20Zan%20-%20The%20Samurai%20Gunman%20%28USA%29_jp2.zip',
-        'pspconfig': 'pspconfigs/Rising Zan - The Samurai Gunman/SLES-01691.bin',
+        'pspconfig': 'pspconfigs/Rising Zan - The Samurai Gunman/SLPS-01691.bin',
     },
     'SLPS01272': {
         'url': "games/J/R/SLPS-01272.html",
