@@ -5,8 +5,9 @@ import argparse
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import tempfile
+
+from yt_dlp_bundle import ensure_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 APP_ID = 'org.popfe.PSPManager'
@@ -164,6 +165,7 @@ def main():
         raise RuntimeError('xdelta3 is required to package automatic Xdelta compatibility fixes')
     xdelta = Path(xdelta)
     arch = host_architecture()
+    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
 
     runtime_ref = f'{RUNTIME}//{RUNTIME_VERSION}'
     runtime_location = find_runtime(runtime_ref)
@@ -184,14 +186,6 @@ def main():
     openssl_legacy = next(Path('/usr/lib').glob('*/ossl-modules/legacy.so'), None)
     if openssl_legacy is None:
         raise RuntimeError('OpenSSL legacy provider is required for encrypted PS3 manuals')
-    yt_dlp = shutil.which('yt-dlp')
-    if not yt_dlp:
-        raise RuntimeError('yt-dlp is required to package YouTube audio search and download')
-    yt_dlp_module = Path(subprocess.check_output(
-        [sys.executable, '-c', 'import pathlib, yt_dlp; print(pathlib.Path(yt_dlp.__file__).parent)'],
-        text=True,
-    ).strip())
-
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='pop-fe-flatpak-') as temporary:
         temporary = Path(temporary)
@@ -211,11 +205,14 @@ def main():
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),
             (ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt',
              app / 'share/licenses/libcrypt-patcher-BSD-3-Clause.txt'),
+            (yt_dlp, app / 'bin/yt-dlp'),
+            (yt_dlp_license, app / 'share/licenses/yt-dlp-LICENSE.txt'),
+            (yt_dlp_third_party, app / 'share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt'),
         ]
         for source, target in install_pairs:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, target)
-            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg') else 0o644)
+            target.chmod(0o755 if target.name in ('pop-fe-psp', 'atracdenc', 'xdelta3', 'chdman', 'pdftoppm', 'ffmpeg', 'yt-dlp') else 0o644)
 
         app_lib = app / 'lib'
         sevenzip_target = app_lib / '7zip/7z'
@@ -229,15 +226,6 @@ def main():
         wrapper.write_text('#!/bin/sh\nexec /app/lib/7zip/7z "$@"\n', encoding='utf-8')
         wrapper.chmod(0o755)
 
-        shutil.copytree(yt_dlp_module, app_lib / 'python3/dist-packages/yt_dlp')
-        yt_dlp_wrapper = app / 'bin/yt-dlp'
-        yt_dlp_wrapper.write_text(
-            '#!/bin/sh\n'
-            'export PYTHONPATH="/app/lib/python3/dist-packages${PYTHONPATH:+:$PYTHONPATH}"\n'
-            'exec /usr/bin/python3 -m yt_dlp "$@"\n',
-            encoding='utf-8',
-        )
-        yt_dlp_wrapper.chmod(0o755)
         legacy_target = app_lib / 'ossl-modules/legacy.so'
         legacy_target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(openssl_legacy, legacy_target)

@@ -1029,7 +1029,7 @@ fn prepare_snd0(
         let target = TempFile::new_ext("snd0-download", "wav")?;
         fs::remove_file(&target.path)?;
         let output = target.path.with_extension("");
-        let yt_dlp = executable_path("POPFE_YT_DLP", "yt-dlp")
+        let yt_dlp = yt_dlp_executable()
             .ok_or_else(|| CreateError::Invalid("YouTube SND0 download needs yt-dlp".into()))?;
         let mut command = Command::new(yt_dlp);
         command
@@ -1134,6 +1134,25 @@ fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
     }
     std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
         .map(|directory| directory.join(name))
+        .find(|path| path.is_file())
+}
+
+pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("POPFE_YT_DLP").map(PathBuf::from)
+        && path.is_file()
+    {
+        return Some(path);
+    }
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let bundled = directory.join("yt-dlp");
+        if bundled.is_file() {
+            return Some(bundled);
+        }
+    }
+    std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|directory| directory.join("yt-dlp"))
         .find(|path| path.is_file())
 }
 

@@ -16,6 +16,9 @@ modules:
     build-commands:
       - install -D pop-fe-psp /app/bin/pop-fe-psp
       - install -D atracdenc /app/bin/atracdenc
+      - install -D ../target/package-tools/yt-dlp/2026.10.26/yt-dlp /app/bin/yt-dlp
+      - install -D ../target/package-tools/yt-dlp/2026.10.26/LICENSE /app/share/licenses/yt-dlp-LICENSE.txt
+      - install -D ../target/package-tools/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt /app/share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt
       - install -D org.popfe.PSPManager.desktop /app/share/applications/org.popfe.PSPManager.desktop
       - install -D org.popfe.PSPManager.svg /app/share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg
     sources:
@@ -23,6 +26,12 @@ modules:
         path: ../target/release/pop-fe-psp
       - type: file
         path: ../atracdenc/src/atracdenc
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/yt-dlp
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/LICENSE
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt
       - type: file
         path: org.popfe.PSPManager.desktop
       - type: file

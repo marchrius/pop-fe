@@ -556,10 +556,7 @@ fn convert_page(
                     busy_for_search.set(true);
                     let (sender, receiver) = mpsc::channel();
                     thread::spawn(move || {
-                        let executable =
-                            std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-                                .map(|directory| directory.join("yt-dlp"))
-                                .find(|path| path.is_file());
+                        let executable = crate::create::yt_dlp_executable();
                         let result = if let Some(executable) = executable {
                             std::process::Command::new(executable)
                                 .args([
