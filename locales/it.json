@@ -208,6 +208,7 @@
   "Invalid CUE INDEX time at line {line}": "Tempo INDEX del CUE non valido alla riga {line}",
   "Unsupported CUE INDEX {index} at line {line}": "Indice INDEX del CUE non supportato ({index}) alla riga {line}",
   "Missing CUE INDEX number at line {line}": "Numero INDEX del CUE mancante alla riga {line}",
+  "Missing CUE INDEX 01 for track {track}": "INDEX 01 del CUE mancante per la traccia {track}",
   "Invalid CCD MODE at line {line}": "Modalità CCD non valida alla riga {line}",
   "Invalid CCD index at line {line}": "Indice CCD non valido alla riga {line}",
   "Unknown CUE track mode: {mode}": "Modalità traccia CUE sconosciuta: {mode}",

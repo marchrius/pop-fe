@@ -172,6 +172,9 @@ pub fn localize_error(message: &str) -> String {
     if let Some(mode) = message.strip_prefix("unknown track mode ") {
         return tr("Unknown CUE track mode: {mode}").replace("{mode}", mode);
     }
+    if let Some(track) = message.strip_prefix("missing INDEX 01 for track ") {
+        return tr("Missing CUE INDEX 01 for track {track}").replace("{track}", track);
+    }
     if let Some(extension) = message.strip_prefix("unsupported image extension .") {
         return tr("Unsupported disc image extension: .{extension}")
             .replace("{extension}", extension);

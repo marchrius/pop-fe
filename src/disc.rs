@@ -150,6 +150,7 @@ impl CueSheet {
         let source = std::fs::read_to_string(path)?;
         let mut current_file: Option<PathBuf> = None;
         let mut tracks: Vec<Track> = Vec::new();
+        let mut has_index01 = Vec::new();
 
         for (line_number, line) in source.lines().enumerate() {
             let line = line.trim();
@@ -193,6 +194,7 @@ impl CueSheet {
                         index01: 0,
                         index00: None,
                     });
+                    has_index01.push(false);
                 }
                 "INDEX" => {
                     let index = words.next();
@@ -212,6 +214,9 @@ impl CueSheet {
                         Some("00") => track.index00 = Some(frames),
                         Some("01") => {
                             track.index01 = frames;
+                            if let Some(seen) = has_index01.last_mut() {
+                                *seen = true;
+                            }
                             if track.mode == TrackMode::Audio && track.index00.is_none() {
                                 track.index00 = Some(frames.saturating_sub(150));
                             }
@@ -237,7 +242,13 @@ impl CueSheet {
         if tracks.is_empty() {
             return Err(DiscError::Cue("no tracks found".into()));
         }
-        for track in &tracks {
+        for (track, has_index01) in tracks.iter().zip(has_index01) {
+            if !has_index01 {
+                return Err(DiscError::Cue(format!(
+                    "missing INDEX 01 for track {}",
+                    track.number
+                )));
+            }
             if !track.path.is_file() {
                 return Err(DiscError::Cue(format!(
                     "missing image file {}",
