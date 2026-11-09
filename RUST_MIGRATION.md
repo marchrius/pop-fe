@@ -53,8 +53,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    dump, compresa la revisione di Mánager de Liga che non richiede patch. La
    casella «Disable LibCrypt Patching» ne consente la disattivazione.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
-   fornito dai pacchetti Debian e Flatpak). Restano gli altri romhack Xdelta e
-   ulteriori opzioni audio. GUI e backend accettano CHD
+   fornito dai pacchetti Debian e Flatpak). GUI e backend accettano CHD
    tramite `chdman` e CCD tramite parsing nativo; i pacchetti includono il
    decoder CHD.
 7. Conversione espone CDDA, Force NTSC, Disc Swapping, watermark, PSX-undither,

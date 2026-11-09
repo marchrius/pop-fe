@@ -17,8 +17,10 @@ modules:
       - install -D pop-fe-psp /app/bin/pop-fe-psp
       - install -D atracdenc /app/bin/atracdenc
       - install -D -m 0755 yt-dlp /app/bin/yt-dlp
+      - install -D -m 0755 deno /app/bin/deno
       - install -D -m 0644 LICENSE /app/share/licenses/yt-dlp-LICENSE.txt
       - install -D -m 0644 THIRD_PARTY_LICENSES.txt /app/share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt
+      - install -D -m 0644 deno-LICENSE.md /app/share/licenses/deno-LICENSE.md
       - install -D org.popfe.PSPManager.desktop /app/share/applications/org.popfe.PSPManager.desktop
       - install -D org.popfe.PSPManager.svg /app/share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg
     sources:
@@ -32,6 +34,26 @@ modules:
         path: ../target/package-tools/yt-dlp/2026.10.26/LICENSE
       - type: file
         path: ../target/package-tools/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt
+      - type: file
+        path: ../target/package-tools/deno/2.9.8/x86_64/deno
+        dest-filename: deno
+        only-arches:
+          - x86_64
+      - type: file
+        path: ../target/package-tools/deno/2.9.8/aarch64/deno
+        dest-filename: deno
+        only-arches:
+          - aarch64
+      - type: file
+        path: ../target/package-tools/deno/2.9.8/x86_64/LICENSE.md
+        dest-filename: deno-LICENSE.md
+        only-arches:
+          - x86_64
+      - type: file
+        path: ../target/package-tools/deno/2.9.8/aarch64/LICENSE.md
+        dest-filename: deno-LICENSE.md
+        only-arches:
+          - aarch64
       - type: file
         path: org.popfe.PSPManager.desktop
       - type: file
