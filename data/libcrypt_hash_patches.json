@@ -1,0 +1,22 @@
+{
+  "SCES01979": {
+    "f0f742fc9323c9843d2b6814a67e48b6": "libcrypt-upstream/SCES_019.79.PPF",
+    "65413be6da1e7f183df29931a02a4216": "libcrypt-upstream/SCES_019.79_BETA_9_9_1999.PPF"
+  },
+  "SCES02431": {
+    "e0be77283fb98986e532d4d90e0c7e07": "libcrypt-upstream/SCES_024.31.PPF",
+    "dd150c0acd2452c3b8d0655d206f032b": "libcrypt-upstream/SCES_024.31_BETA_11_11_1999.PPF"
+  },
+  "SLES02396": {
+    "b4281958aff5ef106a24d28511f19d2b": "libcrypt-upstream/SLES_023.96.PPF",
+    "740413e2d2c66ed1dd7ef20102132911": "libcrypt-upstream/SLES_023.96_ALT.PPF"
+  },
+  "SLES02402": {
+    "6d5b5da0eb1c09e757b2e98ed392d5c7": null,
+    "acd6db11876cc56914923e6ca1b02389": "libcrypt-upstream/SLES_024.02.PPF"
+  },
+  "SLES02975": {
+    "68b0e0f98c6ab95e1501ce03bd918c2e": "libcrypt-upstream/SLES_029.75.PPF",
+    "4ca35c0d14d557c9874eff1e30fc2fe2": "libcrypt-upstream/SLES_029.75_BETA_2_26_2001.PPF"
+  }
+}

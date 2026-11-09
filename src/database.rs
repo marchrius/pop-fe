@@ -64,6 +64,7 @@ pub struct Database {
     pub ppf_fixes: HashMap<String, PatchRecord>,
     ppf_data: HashMap<String, String>,
     libcrypt_patches: HashMap<String, String>,
+    libcrypt_hash_patches: HashMap<String, HashMap<String, Option<String>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -94,6 +95,10 @@ impl Database {
                 .expect("PPF data JSON must be valid"),
             libcrypt_patches: serde_json::from_str(include_str!("../data/libcrypt_patches.json"))
                 .expect("LibCrypt patch map JSON must be valid"),
+            libcrypt_hash_patches: serde_json::from_str(include_str!(
+                "../data/libcrypt_hash_patches.json"
+            ))
+            .expect("LibCrypt revision patch map JSON must be valid"),
         })
     }
 
@@ -190,6 +195,15 @@ impl Database {
             .and_then(|record| record.ppf.as_deref())
             .or_else(|| self.libcrypt_patches.get(id).map(String::as_str))?;
         self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
+    }
+
+    /// Returns `Some(None)` when a known image revision intentionally needs no patch.
+    pub fn libcrypt_patch_for_hash(&self, id: &str, md5: &str) -> Option<Option<Vec<u8>>> {
+        let path = self.libcrypt_hash_patches.get(id)?.get(md5)?;
+        Some(
+            path.as_deref()
+                .and_then(|path| self.ppf_data.get(path).and_then(|hex| decode_hex(hex))),
+        )
     }
 
     pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<Vec<u8>> {

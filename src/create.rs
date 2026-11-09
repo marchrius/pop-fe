@@ -197,14 +197,24 @@ pub fn create_from_image_with_progress_and_warnings(
             .flatten()
             .and_then(|md5| crate::database::Database::embedded().psp_xdelta(&disc_id, md5));
         let database = crate::database::Database::embedded();
+        let libcrypt_revision = if config.disable_libcrypt_patching || !ppf_compatible {
+            None
+        } else {
+            source_md5
+                .as_deref()
+                .and_then(|md5| database.libcrypt_patch_for_hash(&disc_id, md5))
+        };
         let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
             None
         } else {
-            database.libcrypt_patch(&disc_id)
+            libcrypt_revision
+                .clone()
+                .unwrap_or_else(|| database.libcrypt_patch(&disc_id))
         };
         let lcp = if config.disable_libcrypt_patching
             || !ppf_compatible
             || !database.libcrypt.contains_key(&disc_id)
+            || libcrypt_revision.is_some()
             || libcrypt_patch.is_some()
         {
             None
@@ -214,6 +224,7 @@ pub fn create_from_image_with_progress_and_warnings(
         if !config.disable_libcrypt_patching
             && ppf_compatible
             && database.libcrypt.contains_key(&disc_id)
+            && libcrypt_revision.is_none()
             && libcrypt_patch.is_none()
             && lcp.is_none()
         {

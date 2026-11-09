@@ -48,7 +48,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
    Sono incluse anche le patch PPF LibCrypt presenti in `libcrypt/`, applicate
-   automaticamente per i giochi nel cui record è indicato un file PPF; la
+   automaticamente per i giochi nel cui record è indicato un file PPF; le
+   varianti upstream con revisioni note vengono selezionate tramite MD5 del
+   dump, compresa la revisione di Mánager de Liga che non richiede patch. La
    casella «Disable LibCrypt Patching» ne consente la disattivazione.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
    fornito dai pacchetti Debian e Flatpak). Restano gli altri romhack Xdelta e
@@ -65,17 +67,15 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
    sandbox e su PSP resta da verificare.
 
-Durante la migrazione gli script Python restano la versione completa e il
-riferimento di comportamento. Il crate non è ancora un sostituto completo:
+Durante la migrazione gli script Python restano il riferimento di comportamento.
+Il crate non è ancora un sostituto completo:
 La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
 esplicita conserva invece l'audio raw e imposta i flag POPS. Restano da portare
-gli altri romhack Xdelta e il rilevamento e il set completo di patch del patcher
-LibCrypt `lcp`. Il database descrive 230 ID protetti; 227 hanno una patch PPF
-statica associata automaticamente tramite i dati del repository e il mapping
-upstream incluso. Gli altri 3 casi restano revision-specifici e richiedono
-`lcp`, se disponibile nel PATH o in `POPFE_LCP`; i pacchetti non lo includono.
-Il port indipendente richiede di migrare il catalogo upstream e associare i
-boot file alle revisioni.
+la selezione manuale dei romhack da file, disponibile nel CLI Python. Il
+database descrive 230 ID LibCrypt: 229 hanno patch automatiche nel database, o
+sono revisioni note senza protezione, con un caso di Final Fantasy VIII PAL che
+usa ancora un PPF zip esterno. Le revisioni non riconosciute possono usare `lcp`
+se disponibile nel PATH o in `POPFE_LCP`; i pacchetti non lo includono.
 Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
 finché non sarà validato su immagini e hardware reali. La decifratura DES dei
 manuali PS3 PGD e la conversione in `DOCUMENT.DAT` non sono ancora state
