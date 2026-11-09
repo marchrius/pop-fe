@@ -224,6 +224,7 @@
   "Compressed image is too large": "Compressed image is too large",
   "Invalid PSISO audio location": "Invalid PSISO audio location",
   "PSISO audio offset exceeds format limit": "PSISO audio offset exceeds format limit",
+  "PSISO audio offset overflow": "PSISO audio offset overflow",
   "PSISO audio track exceeds format limit": "PSISO audio track exceeds format limit",
   "Too many disc sectors": "Too many disc sectors",
   "Index table is too large": "Index table is too large",

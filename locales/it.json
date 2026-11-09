@@ -224,6 +224,7 @@
   "Compressed image is too large": "Immagine compressa troppo grande",
   "Invalid PSISO audio location": "Posizione audio PSISO non valida",
   "PSISO audio offset exceeds format limit": "L’offset audio PSISO supera il limite del formato",
+  "PSISO audio offset overflow": "Overflow dell’offset audio PSISO",
   "PSISO audio track exceeds format limit": "La traccia audio PSISO supera il limite del formato",
   "Too many disc sectors": "Numero di settori del disco eccessivo",
   "Index table is too large": "Tabella degli indici troppo grande",

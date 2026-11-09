@@ -398,10 +398,19 @@ impl Pbp {
             if audio_offset == 0 || audio_length == 0 {
                 break;
             }
-            let start = base + audio_offset + PSISO_HEADER_SIZE;
-            if start
-                .checked_add(audio_length)
-                .is_none_or(|end| end > self.file_size)
+            let payload_start = base
+                .checked_add(PSISO_HEADER_SIZE)
+                .ok_or_else(|| PbpError::Invalid("PSISO audio offset overflow".into()))?;
+            let start = payload_start
+                .checked_add(audio_offset)
+                .ok_or_else(|| PbpError::Invalid("PSISO audio offset overflow".into()))?;
+            let psiso_end = base
+                .checked_add(image_size)
+                .ok_or_else(|| PbpError::Invalid("PSISO audio offset overflow".into()))?;
+            if start < payload_start
+                || start
+                    .checked_add(audio_length)
+                    .is_none_or(|end| end > psiso_end || end > self.file_size)
             {
                 return Err(PbpError::Invalid("audio track is out of bounds".into()));
             }

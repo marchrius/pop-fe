@@ -217,6 +217,7 @@ pub fn localize_error(message: &str) -> String {
         "CUE audio offset overflow" => "CUE audio offset overflow",
         "compressed image is too large" => "Compressed image is too large",
         "invalid PSISO audio location" => "Invalid PSISO audio location",
+        "PSISO audio offset overflow" => "PSISO audio offset overflow",
         "PSISO audio offset exceeds format limit" => "PSISO audio offset exceeds format limit",
         "PSISO audio track exceeds format limit" => "PSISO audio track exceeds format limit",
         "too many disc sectors" => "Too many disc sectors",
