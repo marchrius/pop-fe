@@ -65,6 +65,7 @@ const THEME_NAMES: [&str; 7] = [
 
 pub fn activate(application: &adw::Application) {
     let operation_busy = Rc::new(Cell::new(false));
+    let active_cancellation: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
     let window = adw::ApplicationWindow::builder()
         .application(application)
         .title("POP-FE PSP Manager")
@@ -78,12 +79,12 @@ pub fn activate(application: &adw::Application) {
         .vexpand(true)
         .build();
     stack.add_titled(
-        &convert_page(&window, operation_busy.clone()),
+        &convert_page(&window, operation_busy.clone(), active_cancellation.clone()),
         Some("convert"),
         &tr("Convert"),
     );
     stack.add_titled(
-        &extract_page(&window, operation_busy.clone()),
+        &extract_page(&window, operation_busy.clone(), active_cancellation.clone()),
         Some("extract"),
         &tr("Extract"),
     );
@@ -182,6 +183,51 @@ pub fn activate(application: &adw::Application) {
     application.set_accels_for_action("win.help", &["F1"]);
     application.set_accels_for_action("win.quit", &["<Primary>q"]);
 
+    let close_pending = Rc::new(Cell::new(false));
+    let busy_for_close = operation_busy.clone();
+    let cancellation_for_close = active_cancellation.clone();
+    let pending_for_close = close_pending.clone();
+    window.connect_close_request(move |window| {
+        if !busy_for_close.get() || pending_for_close.get() {
+            return gtk::glib::Propagation::Proceed;
+        }
+        let dialog = adw::AlertDialog::new(
+            Some(&tr("Stop the operation?")),
+            Some(&tr("An operation is running. Quitting will stop it.")),
+        );
+        dialog.add_response("continue", &tr("Continue"));
+        dialog.add_response("quit", &tr("Stop and Quit"));
+        dialog.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("continue"));
+        dialog.set_close_response("continue");
+        let dialog_parent = window.clone();
+        let window_to_close = dialog_parent.clone();
+        let busy = busy_for_close.clone();
+        let cancellation = cancellation_for_close.clone();
+        let pending = pending_for_close.clone();
+        dialog.connect_response(None, move |_, response| {
+            if response != "quit" {
+                return;
+            }
+            pending.set(true);
+            if let Some(token) = cancellation.borrow().as_ref() {
+                token.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            let window = window_to_close.clone();
+            let busy = busy.clone();
+            gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+                if busy.get() {
+                    gtk::glib::ControlFlow::Continue
+                } else {
+                    window.close();
+                    gtk::glib::ControlFlow::Break
+                }
+            });
+        });
+        dialog.present(Some(&dialog_parent));
+        gtk::glib::Propagation::Stop
+    });
+
     let toolbar = adw::ToolbarView::new();
     toolbar.add_top_bar(&header);
     toolbar.set_content(Some(&stack));
@@ -239,6 +285,7 @@ fn section(title: &str) -> (gtk::Frame, gtk::Box) {
 fn convert_page(
     parent: &adw::ApplicationWindow,
     operation_busy: Rc<Cell<bool>>,
+    cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Convert PSX Images to EBOOT.PBP"),
@@ -831,7 +878,6 @@ fn convert_page(
     let progress_for_create = progress.clone();
     let cancel = gtk::Button::with_label(&tr("Cancel"));
     cancel.set_sensitive(false);
-    let cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
     let state_for_cancel = cancel_state.clone();
     let fields_for_cancel = fields.clone();
     cancel.connect_clicked(move |_| {
@@ -1526,6 +1572,7 @@ fn set_picture(picture: &gtk::Picture, path: Option<&std::path::Path>) {
 fn extract_page(
     parent: &adw::ApplicationWindow,
     operation_busy: Rc<Cell<bool>>,
+    extract_cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
@@ -1622,7 +1669,6 @@ fn extract_page(
     let progress_for_extract = extract_progress.clone();
     let extract_cancel = gtk::Button::with_label(&tr("Cancel"));
     extract_cancel.set_sensitive(false);
-    let extract_cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
     let state_on_cancel = extract_cancel_state.clone();
     let status_on_cancel = status.clone();
     extract_cancel.connect_clicked(move |_| {
