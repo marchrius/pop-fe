@@ -57,8 +57,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    automaticamente per i giochi mappati nel database. Gli alias con lo stesso
    URL Redump e la stessa magic word condividono la patch upstream solo quando
    la corrispondenza è univoca. Le varianti con revisioni note vengono
-   selezionate tramite MD5 del dump, compresa la revisione di Mánager de Liga
-   che non richiede patch. La
+   selezionate tramite MD5 del dump e firme byte/offset per le revisioni
+   coperte da upstream, compresa la revisione di Mánager de Liga che non
+   richiede patch. La
    casella «Disable LibCrypt Patching» ne consente la disattivazione.
    È portato anche il fix Xdelta registrato per Septentrion (richiede `xdelta3`,
    fornito dai pacchetti Debian e Flatpak). GUI e backend accettano CHD
@@ -84,9 +85,11 @@ Il crate non è ancora un sostituto completo:
 La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
 esplicita conserva invece l'audio raw e imposta i flag POPS. Il
 database descrive 230 ID LibCrypt: ora tutti hanno una patch automatica inclusa
-oppure una revisione identificata che non richiede patch. Le revisioni non
-riconosciute possono usare `lcp` se disponibile nel PATH o in `POPFE_LCP`; i
-pacchetti non lo includono.
+oppure una revisione identificata che non richiede patch. Per le quattro
+famiglie con firme upstream il backend Rust riconosce le revisioni senza
+dipendere da `lcp`; per le revisioni ancora sconosciute può usare `lcp` se
+disponibile nel PATH o in `POPFE_LCP`, altrimenti non applica una patch
+predefinita potenzialmente errata. I pacchetti non includono `lcp`.
 Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
 finché non sarà validato su immagini e hardware reali. La decifratura DES dei
 manuali PS3 PGD e la conversione in `DOCUMENT.DAT` non sono ancora state

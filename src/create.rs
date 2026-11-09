@@ -206,9 +206,13 @@ pub fn create_from_image_with_progress_and_warnings(
         let libcrypt_revision = if config.disable_libcrypt_patching || !ppf_compatible {
             None
         } else {
-            source_md5
+            let hash_revision = source_md5
                 .as_deref()
-                .and_then(|md5| database.libcrypt_patch_for_hash(&disc_id, md5))
+                .and_then(|md5| database.libcrypt_patch_for_hash(&disc_id, md5));
+            match hash_revision {
+                Some(revision) => Some(revision),
+                None => database.libcrypt_patch_for_signature(&disc_id, &disc)?,
+            }
         };
         let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
             None

@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::fs::File;
+use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicBool;
 
@@ -41,6 +43,15 @@ pub struct LibCryptRecord {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+struct LibCryptRevisionSignature {
+    offset: u64,
+    old_byte: u8,
+    old_patch: Option<String>,
+    new_byte: u8,
+    new_patch: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct ThemeRecord {
     pub url: Option<String>,
     pub description: Option<String>,
@@ -65,6 +76,7 @@ pub struct Database {
     ppf_data: HashMap<String, String>,
     libcrypt_patches: HashMap<String, String>,
     libcrypt_hash_patches: HashMap<String, HashMap<String, Option<String>>>,
+    libcrypt_revision_signatures: HashMap<String, LibCryptRevisionSignature>,
 }
 
 #[derive(Clone, Debug)]
@@ -99,6 +111,10 @@ impl Database {
                 "../data/libcrypt_hash_patches.json"
             ))
             .expect("LibCrypt revision patch map JSON must be valid"),
+            libcrypt_revision_signatures: serde_json::from_str(include_str!(
+                "../data/libcrypt_revision_signatures.json"
+            ))
+            .expect("LibCrypt revision signatures JSON must be valid"),
         })
     }
 
@@ -199,6 +215,36 @@ impl Database {
 
     pub fn has_libcrypt_revision_data(&self, id: &str) -> bool {
         self.libcrypt_hash_patches.contains_key(id)
+            || self.libcrypt_revision_signatures.contains_key(id)
+    }
+
+    /// Returns `Some(None)` when the signature identifies a revision that needs no patch.
+    pub fn libcrypt_patch_for_signature(
+        &self,
+        id: &str,
+        image: &File,
+    ) -> io::Result<Option<Option<Vec<u8>>>> {
+        let Some(signature) = self.libcrypt_revision_signatures.get(id) else {
+            return Ok(None);
+        };
+        let mut image = image.try_clone()?;
+        image.seek(SeekFrom::Start(signature.offset))?;
+        let mut byte = [0u8; 1];
+        match image.read_exact(&mut byte) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => return Ok(None),
+            Err(error) => return Err(error),
+        }
+        let patch_path = if byte[0] == signature.old_byte {
+            &signature.old_patch
+        } else if byte[0] == signature.new_byte {
+            &signature.new_patch
+        } else {
+            return Ok(None);
+        };
+        Ok(Some(patch_path.as_deref().and_then(|path| {
+            self.ppf_data.get(path).and_then(|hex| decode_hex(hex))
+        })))
     }
 
     /// Returns `Some(None)` when a known image revision intentionally needs no patch.
