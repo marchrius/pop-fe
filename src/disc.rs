@@ -477,7 +477,9 @@ fn companion_cue(image: &Path) -> Option<PathBuf> {
         .find(|candidate| {
             candidate
                 .file_stem()
-                .is_some_and(|candidate_stem| candidate_stem == stem)
+                .and_then(|candidate_stem| candidate_stem.to_str())
+                .zip(stem.to_str())
+                .is_some_and(|(candidate_stem, stem)| candidate_stem.eq_ignore_ascii_case(stem))
                 && candidate
                     .extension()
                     .and_then(|extension| extension.to_str())
