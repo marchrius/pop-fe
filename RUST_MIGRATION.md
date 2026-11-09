@@ -43,6 +43,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Gli effetti sono implementazioni Rust leggere e compatibili
    con le dimensioni PSP; non replicano esattamente i filtri OpenCV originali.
+   Il caricamento del tema può essere annullato, si interrompe prima di caricare
+   la nuova selezione e la chiusura dell'app attende la terminazione del worker.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
    BIN/IMG raw e sui CUE raw a traccia singola quando ID/hash corrispondono.
    Sono incluse anche le patch PPF LibCrypt presenti in `libcrypt/`, applicate

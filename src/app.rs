@@ -50,6 +50,7 @@ struct DiscFields {
     analysis_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>>,
     theme_generation: Rc<Cell<u64>>,
     theme_loading: Rc<Cell<bool>>,
+    theme_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>>,
     icon_preview: gtk::Picture,
     pic0_preview: gtk::Picture,
     pic1_preview: gtk::Picture,
@@ -68,6 +69,8 @@ const THEME_NAMES: [&str; 7] = [
 pub fn activate(application: &adw::Application) {
     let operation_busy = Rc::new(Cell::new(false));
     let active_cancellation: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
+    let theme_loading = Rc::new(Cell::new(false));
+    let theme_cancellation: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
     let window = adw::ApplicationWindow::builder()
         .application(application)
         .title("POP-FE PSP Manager")
@@ -81,7 +84,13 @@ pub fn activate(application: &adw::Application) {
         .vexpand(true)
         .build();
     stack.add_titled(
-        &convert_page(&window, operation_busy.clone(), active_cancellation.clone()),
+        &convert_page(
+            &window,
+            operation_busy.clone(),
+            active_cancellation.clone(),
+            theme_loading.clone(),
+            theme_cancellation.clone(),
+        ),
         Some("convert"),
         &tr("Convert"),
     );
@@ -188,9 +197,11 @@ pub fn activate(application: &adw::Application) {
     let close_pending = Rc::new(Cell::new(false));
     let busy_for_close = operation_busy.clone();
     let cancellation_for_close = active_cancellation.clone();
+    let theme_busy_for_close = theme_loading.clone();
+    let theme_cancellation_for_close = theme_cancellation.clone();
     let pending_for_close = close_pending.clone();
     window.connect_close_request(move |window| {
-        if !busy_for_close.get() || pending_for_close.get() {
+        if (!busy_for_close.get() && !theme_busy_for_close.get()) || pending_for_close.get() {
             return gtk::glib::Propagation::Proceed;
         }
         let dialog = adw::AlertDialog::new(
@@ -206,6 +217,8 @@ pub fn activate(application: &adw::Application) {
         let window_to_close = dialog_parent.clone();
         let busy = busy_for_close.clone();
         let cancellation = cancellation_for_close.clone();
+        let theme_busy = theme_busy_for_close.clone();
+        let theme_cancellation = theme_cancellation_for_close.clone();
         let pending = pending_for_close.clone();
         dialog.connect_response(None, move |_, response| {
             if response != "quit" {
@@ -215,10 +228,14 @@ pub fn activate(application: &adw::Application) {
             if let Some(token) = cancellation.borrow().as_ref() {
                 token.store(true, std::sync::atomic::Ordering::Relaxed);
             }
+            if let Some(token) = theme_cancellation.borrow().as_ref() {
+                token.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             let window = window_to_close.clone();
             let busy = busy.clone();
+            let theme_busy = theme_busy.clone();
             gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
-                if busy.get() {
+                if busy.get() || theme_busy.get() {
                     gtk::glib::ControlFlow::Continue
                 } else {
                     window.close();
@@ -288,6 +305,8 @@ fn convert_page(
     parent: &adw::ApplicationWindow,
     operation_busy: Rc<Cell<bool>>,
     cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>>,
+    theme_loading: Rc<Cell<bool>>,
+    theme_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Convert PSX Images to EBOOT.PBP"),
@@ -320,7 +339,6 @@ fn convert_page(
     let theme = gtk::DropDown::from_strings(&theme_label_refs);
     let manual_entry = gtk::Entry::builder().hexpand(true).build();
     let theme_generation = Rc::new(Cell::new(0));
-    let theme_loading = Rc::new(Cell::new(false));
     let fields = DiscFields {
         id,
         title,
@@ -351,6 +369,7 @@ fn convert_page(
         analysis_cancel: Rc::new(RefCell::new(None)),
         theme_generation,
         theme_loading,
+        theme_cancel,
         icon_preview,
         pic0_preview,
         pic1_preview,
@@ -849,8 +868,16 @@ fn convert_page(
     content.append(&analysis_row);
     let fields_for_analysis_cancel = fields.clone();
     fields.analysis_cancel_button.connect_clicked(move |_| {
+        let mut stopping = false;
         if let Some(token) = fields_for_analysis_cancel.analysis_cancel.borrow().as_ref() {
             token.store(true, std::sync::atomic::Ordering::Relaxed);
+            stopping = true;
+        }
+        if let Some(token) = fields_for_analysis_cancel.theme_cancel.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            stopping = true;
+        }
+        if stopping {
             fields_for_analysis_cancel
                 .analysis_cancel_button
                 .set_sensitive(false);
@@ -1234,7 +1261,11 @@ fn analyze_first(
     fields
         .theme_generation
         .set(fields.theme_generation.get().wrapping_add(1));
-    fields.theme_loading.set(false);
+    if let Some(cancellation) = fields.theme_cancel.borrow().as_ref() {
+        cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
+    } else {
+        fields.theme_loading.set(false);
+    }
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
     set_picture(&fields.icon_preview, None);
@@ -1375,7 +1406,11 @@ fn reset_disc_fields(fields: &DiscFields) {
     fields
         .theme_generation
         .set(fields.theme_generation.get().wrapping_add(1));
-    fields.theme_loading.set(false);
+    if let Some(cancellation) = fields.theme_cancel.borrow().as_ref() {
+        cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
+    } else {
+        fields.theme_loading.set(false);
+    }
     *fields.assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.base_assets.borrow_mut() = crate::create::PbpAssets::default();
     *fields.asset_overrides.borrow_mut() = crate::create::PbpAssets::default();
@@ -1390,15 +1425,19 @@ fn reset_disc_fields(fields: &DiscFields) {
 
 fn refresh_theme_art(fields: &DiscFields) {
     let game_id = fields.id.text().to_string();
-    if game_id.is_empty() {
+    if game_id.is_empty() || game_id == "UNKN00000" {
         return;
     }
     let selected = fields.theme.selected() as usize;
     let base = fields.base_assets.borrow().clone();
     let generation = fields.theme_generation.get().wrapping_add(1);
     fields.theme_generation.set(generation);
-    fields.theme_loading.set(false);
+    if let Some(cancellation) = fields.theme_cancel.borrow().as_ref() {
+        cancellation.store(true, std::sync::atomic::Ordering::Relaxed);
+        return;
+    }
     if selected == 0 || selected >= THEME_NAMES.len() {
+        fields.theme_loading.set(false);
         let mut assets = base;
         apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
         *fields.assets.borrow_mut() = assets;
@@ -1407,12 +1446,26 @@ fn refresh_theme_art(fields: &DiscFields) {
     }
     fields.theme_loading.set(true);
     fields.status.set_text(&tr("Loading theme artwork"));
+    fields.analysis_progress.set_visible(true);
+    fields
+        .analysis_progress
+        .set_text(Some(&tr("Loading theme artwork")));
+    fields.analysis_cancel_button.set_sensitive(true);
+    fields.analysis_cancel_button.set_visible(true);
+    let cancellation = Arc::new(AtomicBool::new(false));
+    *fields.theme_cancel.borrow_mut() = Some(cancellation.clone());
     let theme_name = THEME_NAMES[selected].to_string();
     let allow_downloads = !fields.disable_asset_downloads.is_active();
     let (sender, receiver) = mpsc::channel();
+    let worker_cancellation = cancellation.clone();
     thread::spawn(move || {
         let assets = if allow_downloads {
-            crate::assets::load_theme_assets(&game_id, &theme_name, &base)
+            crate::assets::load_theme_assets_cancellable(
+                &game_id,
+                &theme_name,
+                &base,
+                &worker_cancellation,
+            )
         } else {
             crate::assets::load_theme_assets_offline(&game_id, &theme_name, &base)
         };
@@ -1420,25 +1473,60 @@ fn refresh_theme_art(fields: &DiscFields) {
     });
     let fields = fields.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+        fields.analysis_progress.pulse();
         match receiver.try_recv() {
-            Ok(mut assets) if fields.theme_generation.get() == generation => {
+            Ok(mut assets) => {
+                let is_current = fields.theme_generation.get() == generation;
+                let owns_active = finish_theme_art(&fields, &cancellation);
+                if !owns_active {
+                    return gtk::glib::ControlFlow::Break;
+                }
+                if !is_current {
+                    refresh_theme_art(&fields);
+                    return gtk::glib::ControlFlow::Break;
+                }
+                if cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    fields.status.set_text(&tr("Operation stopped"));
+                    return gtk::glib::ControlFlow::Break;
+                }
                 apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
-                fields.theme_loading.set(false);
                 *fields.assets.borrow_mut() = assets;
                 refresh_asset_previews(&fields);
                 fields.status.set_text(&tr("Theme artwork loaded"));
                 gtk::glib::ControlFlow::Break
             }
-            Ok(_) => gtk::glib::ControlFlow::Break,
             Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
             Err(mpsc::TryRecvError::Disconnected) => {
-                if fields.theme_generation.get() == generation {
-                    fields.theme_loading.set(false);
+                let is_current = fields.theme_generation.get() == generation;
+                if finish_theme_art(&fields, &cancellation) && !is_current {
+                    refresh_theme_art(&fields);
+                } else if is_current {
+                    fields
+                        .status
+                        .set_text(&tr("Analysis failed: check the log"));
                 }
                 gtk::glib::ControlFlow::Break
             }
         }
     });
+}
+
+fn finish_theme_art(fields: &DiscFields, cancellation: &Arc<AtomicBool>) -> bool {
+    let owns_active = fields
+        .theme_cancel
+        .borrow()
+        .as_ref()
+        .is_some_and(|active| Arc::ptr_eq(active, cancellation));
+    if owns_active {
+        fields.theme_cancel.borrow_mut().take();
+        fields.theme_loading.set(false);
+        if fields.analysis_cancel.borrow().is_none() {
+            fields.analysis_progress.set_visible(false);
+            fields.analysis_cancel_button.set_sensitive(false);
+            fields.analysis_cancel_button.set_visible(false);
+        }
+    }
+    owns_active
 }
 
 fn set_asset_override(fields: &DiscFields, key: &str, path: Option<PathBuf>) {
