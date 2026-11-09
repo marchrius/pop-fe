@@ -182,6 +182,18 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
 }
 
 pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+    load_theme_assets_cancellable(game_id, theme, base, &AtomicBool::new(false))
+}
+
+pub fn load_theme_assets_cancellable(
+    game_id: &str,
+    theme: &str,
+    base: &PbpAssets,
+    cancelled: &AtomicBool,
+) -> PbpAssets {
+    if cancelled.load(Ordering::Relaxed) {
+        return base.clone();
+    }
     let Some(theme_info) = Database::embedded().themes.get(theme) else {
         return base.clone();
     };
@@ -219,7 +231,7 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
             &format!("{game_id}-{theme}"),
             key,
             size,
-            None,
+            Some(cancelled),
         ) {
             match key {
                 "pic0" => result.pic0 = Some(path),
@@ -227,6 +239,9 @@ pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAss
                 "icon0" => result.icon0 = Some(path),
                 _ => {}
             }
+        }
+        if cancelled.load(Ordering::Relaxed) {
+            return base.clone();
         }
     }
     result

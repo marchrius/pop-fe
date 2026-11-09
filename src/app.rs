@@ -588,6 +588,7 @@ fn convert_page(
                 let title_for_search = fields.title.clone();
                 let status_for_search = fields.status.clone();
                 let busy_for_search = operation_busy.clone();
+                let cancel_state_for_search = cancel_state.clone();
                 search.connect_clicked(move |button| {
                     if busy_for_search.get() {
                         status_for_search.set_text(&tr("Another operation is in progress"));
@@ -601,48 +602,18 @@ fn convert_page(
                     status_for_search.set_text(&tr("Searching YouTube for game audio"));
                     button.set_sensitive(false);
                     busy_for_search.set(true);
+                    let cancellation = Arc::new(AtomicBool::new(false));
+                    *cancel_state_for_search.borrow_mut() = Some(cancellation.clone());
                     let (sender, receiver) = mpsc::channel();
                     thread::spawn(move || {
-                        let executable = crate::create::yt_dlp_executable();
-                        let result = if let Some(executable) = executable {
-                            std::process::Command::new(executable)
-                                .args([
-                                    "--quiet",
-                                    "--no-warnings",
-                                    "--flat-playlist",
-                                    "--print",
-                                    "id",
-                                ])
-                                .arg(format!("ytsearch1:{title} ps1 ost"))
-                                .output()
-                                .map_err(|error| error.to_string())
-                                .and_then(|output| {
-                                    if !output.status.success() {
-                                        return Err(String::from_utf8_lossy(&output.stderr)
-                                            .trim()
-                                            .to_string());
-                                    }
-                                    let id = String::from_utf8_lossy(&output.stdout)
-                                        .lines()
-                                        .next()
-                                        .unwrap_or_default()
-                                        .trim()
-                                        .to_string();
-                                    if id.is_empty() {
-                                        Err(tr("No YouTube audio result was found"))
-                                    } else {
-                                        Ok(format!("https://www.youtube.com/watch?v={id}"))
-                                    }
-                                })
-                        } else {
-                            Err(tr("yt-dlp is required to search YouTube"))
-                        };
+                        let result = crate::create::search_youtube_audio(&title, &cancellation);
                         let _ = sender.send(result);
                     });
                     let entry = entry_for_search.clone();
                     let status = status_for_search.clone();
                     let busy = busy_for_search.clone();
                     let button = button.clone();
+                    let cancel_state = cancel_state_for_search.clone();
                     gtk::glib::timeout_add_local(
                         Duration::from_millis(100),
                         move || match receiver.try_recv() {
@@ -651,15 +622,21 @@ fn convert_page(
                                 status.set_text(&tr("YouTube audio selected"));
                                 button.set_sensitive(true);
                                 busy.set(false);
+                                *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
                             }
                             Ok(Err(error)) => {
-                                status.set_text(
-                                    &tr("YouTube search failed: {error}")
-                                        .replace("{error}", &error),
-                                );
+                                if error == "operation cancelled" {
+                                    status.set_text(&tr("Operation stopped"));
+                                } else {
+                                    status.set_text(
+                                        &tr("YouTube search failed: {error}")
+                                            .replace("{error}", &error),
+                                    );
+                                }
                                 button.set_sensitive(true);
                                 busy.set(false);
+                                *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
                             }
                             Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
@@ -670,6 +647,7 @@ fn convert_page(
                                 );
                                 button.set_sensitive(true);
                                 busy.set(false);
+                                *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
                             }
                         },
@@ -813,8 +791,14 @@ fn convert_page(
     let preview_parent = parent.clone();
     let preview_fields = fields.clone();
     let preview_busy = operation_busy.clone();
+    let preview_cancellation = cancel_state.clone();
     preview_button.connect_clicked(move |_| {
-        show_xmb_preview(&preview_parent, &preview_fields, &preview_busy)
+        show_xmb_preview(
+            &preview_parent,
+            &preview_fields,
+            &preview_busy,
+            &preview_cancellation,
+        )
     });
     theme_row.append(&preview_button);
     artwork_body.append(&theme_row);
@@ -1417,6 +1401,7 @@ fn show_xmb_preview(
     parent: &adw::ApplicationWindow,
     fields: &DiscFields,
     operation_busy: &Rc<Cell<bool>>,
+    cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) {
     if operation_busy.get() {
         fields
@@ -1501,18 +1486,33 @@ fn show_xmb_preview(
     caption.add_css_class("dim-label");
     content.append(&caption);
     window.set_child(Some(&content));
+    let cancellation_for_close = cancel_state.clone();
+    window.connect_close_request(move |_| {
+        if let Some(token) = cancellation_for_close.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
+        gtk::glib::Propagation::Proceed
+    });
     window.present();
     if fields.theme.selected() > 0 {
         operation_busy.set(true);
+        let cancellation = Arc::new(AtomicBool::new(false));
+        *cancel_state.borrow_mut() = Some(cancellation.clone());
         let base = fields.base_assets.borrow().clone();
         let id = game_id.clone();
         let selected_theme = theme_name.to_string();
         let allow_downloads = !fields.disable_asset_downloads.is_active();
         let overrides = fields.asset_overrides.borrow().clone();
+        let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
             let mut assets = if allow_downloads {
-                crate::assets::load_theme_assets(&id, &selected_theme, &base)
+                crate::assets::load_theme_assets_cancellable(
+                    &id,
+                    &selected_theme,
+                    &base,
+                    &worker_cancellation,
+                )
             } else {
                 crate::assets::load_theme_assets_offline(&id, &selected_theme, &base)
             };
@@ -1525,6 +1525,7 @@ fn show_xmb_preview(
         let disable_pic0 = disable_pic0;
         let disable_pic1 = disable_pic1;
         let operation_busy = operation_busy.clone();
+        let cancel_state = cancel_state.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(assets) => {
@@ -1540,11 +1541,13 @@ fn show_xmb_preview(
                     );
                     detail.set_visible(!disable_pic0 && assets.pic0.is_some());
                     operation_busy.set(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
                 Err(mpsc::TryRecvError::Disconnected) => {
                     operation_busy.set(false);
+                    *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
             }

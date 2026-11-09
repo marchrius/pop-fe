@@ -1156,6 +1156,88 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
+pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Result<String, String> {
+    let executable = yt_dlp_executable()
+        .ok_or_else(|| crate::i18n::tr("yt-dlp is required to search YouTube"))?;
+    let mut child = Command::new(executable)
+        .args([
+            "--quiet",
+            "--no-warnings",
+            "--flat-playlist",
+            "--print",
+            "id",
+        ])
+        .arg(format!("ytsearch1:{title} ps1 ost"))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let mut stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "failed to capture yt-dlp error output".to_string())?;
+    let stderr_reader = std::thread::spawn(move || {
+        const MAX_BYTES: usize = 16 * 1024;
+        let mut output = Vec::new();
+        let mut buffer = [0u8; 4096];
+        loop {
+            let count = match stderr.read(&mut buffer) {
+                Ok(0) | Err(_) => break,
+                Ok(count) => count,
+            };
+            output.extend_from_slice(&buffer[..count]);
+            if output.len() > MAX_BYTES {
+                let excess = output.len() - MAX_BYTES;
+                output.drain(..excess);
+            }
+        }
+        output
+    });
+
+    let status = loop {
+        if cancelled.load(Ordering::Relaxed) {
+            let _ = child.kill();
+            let _ = child.wait();
+            let _ = stderr_reader.join();
+            return Err("operation cancelled".into());
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => std::thread::sleep(std::time::Duration::from_millis(50)),
+            Err(error) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stderr_reader.join();
+                return Err(error.to_string());
+            }
+        }
+    };
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
+    let error = String::from_utf8_lossy(&stderr_reader.join().unwrap_or_default())
+        .trim()
+        .to_owned();
+    if !status.success() {
+        return Err(if error.is_empty() {
+            format!("yt-dlp search failed with {status}")
+        } else {
+            error
+        });
+    }
+    let id = String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_owned();
+    if id.is_empty() {
+        Err(crate::i18n::tr("No YouTube audio result was found"))
+    } else {
+        Ok(format!("https://www.youtube.com/watch?v={id}"))
+    }
+}
+
 fn run_cancellable(
     command: &mut Command,
     cancelled: &AtomicBool,
