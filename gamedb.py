@@ -2914,7 +2914,7 @@ games = {
 	'title': "V-RALLY - CHAMPIONSHIP EDITION",
         'pic0': 'https://images.launchbox-app.com/154a88a3-3e50-402f-ad46-79d1df13031c.png',
         'snd0': 'https://www.youtube.com/watch?v=pXuuROdpHk0&list=PL0543FCACF475E1A6&index=1',
-        'pspconfig': 'pspconfigs/V - Rally/SLPS-01449.bin',
+        'pspconfig': 'pspconfigs/V - Rally/SLPS-01149.bin',
     },
     'SLPS91099': {
         'url': "games/J/V/SLPS-91099.html",
@@ -49002,7 +49002,7 @@ games = {
         'pic0': 'https://images.launchbox-app.com/e5f82695-2df4-4734-9439-af0de63bb853.png',
         'pic1': 'https://images.launchbox-app.com/c44a031c-1be6-46fd-82c5-5ed1a4beb6f6.jpg',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Disney%27s%20Donald%20Duck%20-%20Goin%27%20Quackers%20%28USA%29_jp2.zip',
-        'pspconfig': "pspconfigs/Disneys Donald Duck - Goin Quackers/SLPM88502.bin",
+        'pspconfig': "pspconfigs/Disneys Donald Duck - Goin Quackers/SLPM-88502.bin",
     },
     'SLPS03460': {
         'url': "games/J/D/SLPS-03460.html",
