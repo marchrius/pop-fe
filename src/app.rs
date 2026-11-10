@@ -2020,36 +2020,23 @@ fn show_xmb_preview(
     background.set_visible(!disable_pic1);
     stage.set_child(Some(&background));
 
-    let tile = gtk::Box::builder()
-        .orientation(gtk::Orientation::Horizontal)
-        .spacing(14)
-        .margin_start(28)
-        .margin_end(28)
-        .margin_top(18)
-        .margin_bottom(18)
-        .halign(gtk::Align::Center)
-        .valign(gtk::Align::Center)
-        .build();
-    tile.add_css_class("card");
     let icon = asset_preview(68, 68);
     set_picture(&icon, assets.icon0.as_deref());
-    tile.append(&icon);
-    let title = gtk::Label::new(Some(fields.title.text().as_str()));
-    title.add_css_class("title-3");
-    title.set_wrap(true);
-    title.set_max_width_chars(24);
-    tile.append(&title);
-    stage.add_overlay(&tile);
+    icon.set_halign(gtk::Align::Start);
+    icon.set_valign(gtk::Align::Start);
+    icon.set_margin_start(45);
+    icon.set_margin_top(102);
+    stage.add_overlay(&icon);
 
     let detail = asset_preview(264, 158);
     set_picture(
         &detail,
         (!disable_pic0).then_some(assets.pic0.as_deref()).flatten(),
     );
-    detail.set_halign(gtk::Align::End);
-    detail.set_valign(gtk::Align::End);
-    detail.set_margin_end(16);
-    detail.set_margin_bottom(18);
+    detail.set_halign(gtk::Align::Start);
+    detail.set_valign(gtk::Align::Start);
+    detail.set_margin_start(186);
+    detail.set_margin_top(99);
     detail.set_visible(!disable_pic0 && assets.pic0.is_some());
     stage.add_overlay(&detail);
     content.append(&stage);
