@@ -187,6 +187,18 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
     }
 }
 
+pub fn load_game_assets_for_image_cancellable(
+    game_id: &str,
+    image_path: &Path,
+    cancelled: &AtomicBool,
+) -> PbpAssets {
+    let mut assets = load_game_assets_cancellable(game_id, cancelled);
+    if !cancelled.load(Ordering::Relaxed) {
+        apply_local_sidecars(game_id, image_path, &mut assets, cancelled);
+    }
+    assets
+}
+
 pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
     let Some(game) = Database::embedded().games.get(game_id) else {
         return PbpAssets::default();
@@ -222,6 +234,96 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
         snd0,
         ..PbpAssets::default()
     }
+}
+
+pub fn load_game_assets_cached_for_image(game_id: &str, image_path: &Path) -> PbpAssets {
+    let mut assets = load_game_assets_cached(game_id);
+    apply_local_sidecars(game_id, image_path, &mut assets, &AtomicBool::new(false));
+    assets
+}
+
+fn apply_local_sidecars(
+    game_id: &str,
+    image_path: &Path,
+    assets: &mut PbpAssets,
+    cancelled: &AtomicBool,
+) {
+    let Some(stem) = image_path.file_stem().map(|stem| stem.to_string_lossy()) else {
+        return;
+    };
+    let sibling = |suffix: &str| image_path.with_file_name(format!("{stem}_{suffix}.png"));
+    let icon = sibling("cover");
+    if let Some(path) = local_artwork_png(&icon, game_id, "local-icon0", cancelled) {
+        assets.icon0 = Some(path);
+    }
+    if cancelled.load(Ordering::Relaxed) {
+        return;
+    }
+    let pic0_source = sibling("pic0");
+    if pic0_source.is_file() {
+        let game = Database::embedded().games.get(game_id);
+        let scaling = game.and_then(|record| record.pic0_scaling).unwrap_or(0.9);
+        let offset = game
+            .and_then(|record| record.pic0_offset)
+            .unwrap_or((0.1, 0.1));
+        if let Some(path) = render_pic0_layout(&pic0_source, game_id, scaling, offset) {
+            assets.pic0_source = Some(pic0_source);
+            assets.pic0 = Some(path);
+        }
+    }
+    if cancelled.load(Ordering::Relaxed) {
+        return;
+    }
+    let pic1 = sibling("pic1");
+    if let Some(path) = local_artwork_png(&pic1, game_id, "local-pic1", cancelled) {
+        assets.pic1 = Some(path);
+    }
+}
+
+fn local_artwork_png(
+    source: &Path,
+    game_id: &str,
+    role: &str,
+    cancelled: &AtomicBool,
+) -> Option<PathBuf> {
+    if cancelled.load(Ordering::Relaxed) {
+        return None;
+    }
+    let metadata = fs::metadata(source).ok()?;
+    if !metadata.is_file() || metadata.len() == 0 || metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return None;
+    }
+    let bytes = fs::read(source).ok()?;
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
+        return None;
+    }
+    let digest = Md5::digest(&bytes)
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let pixbuf = Pixbuf::from_read(Cursor::new(bytes)).ok()?;
+    if pixbuf.width() <= 0
+        || pixbuf.height() <= 0
+        || pixbuf.width() > 8000
+        || pixbuf.height() > 8000
+        || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
+    {
+        return None;
+    }
+    let directory = cache_directory().join("assets");
+    fs::create_dir_all(&directory).ok()?;
+    let path = directory.join(format!("{}-{role}-{digest}.png", safe_id(game_id)));
+    if path.is_file() {
+        return Some(path);
+    }
+    let png = pixbuf.save_to_bufferv("png", &[]).ok()?;
+    if cancelled.load(Ordering::Relaxed) {
+        return None;
+    }
+    let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary, png).ok()?;
+    fs::rename(&temporary, &path).ok()?;
+    Some(path)
 }
 
 pub fn load_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {

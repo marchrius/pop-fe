@@ -1568,9 +1568,13 @@ fn analyze_first(
                 let assets = if download_assets
                     && !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed)
                 {
-                    crate::assets::load_game_assets_cancellable(&metadata.id, &worker_cancellation)
+                    crate::assets::load_game_assets_for_image_cancellable(
+                        &metadata.id,
+                        &path,
+                        &worker_cancellation,
+                    )
                 } else if !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
-                    crate::assets::load_game_assets_cached(&metadata.id)
+                    crate::assets::load_game_assets_cached_for_image(&metadata.id, &path)
                 } else {
                     crate::create::PbpAssets::default()
                 };
