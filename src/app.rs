@@ -76,6 +76,7 @@ pub fn activate(application: &adw::Application) {
     let active_cancellation: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
     let theme_loading = Rc::new(Cell::new(false));
     let theme_cancellation: Rc<RefCell<Option<Arc<AtomicBool>>>> = Rc::default();
+    let folder_history = Rc::new(RefCell::new(FolderHistory::load()));
     let window = adw::ApplicationWindow::builder()
         .application(application)
         .title("POP-FE PSP Manager")
@@ -95,12 +96,18 @@ pub fn activate(application: &adw::Application) {
             active_cancellation.clone(),
             theme_loading.clone(),
             theme_cancellation.clone(),
+            folder_history.clone(),
         ),
         Some("convert"),
         &tr("Convert"),
     );
     stack.add_titled(
-        &extract_page(&window, operation_busy.clone(), active_cancellation.clone()),
+        &extract_page(
+            &window,
+            operation_busy.clone(),
+            active_cancellation.clone(),
+            folder_history.clone(),
+        ),
         Some("extract"),
         &tr("Extract"),
     );
@@ -350,6 +357,7 @@ fn convert_page(
     cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>>,
     theme_loading: Rc<Cell<bool>>,
     theme_cancel: Rc<RefCell<Option<Arc<AtomicBool>>>>,
+    folder_history: Rc<RefCell<FolderHistory>>,
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Convert PSX Images to EBOOT.PBP"),
@@ -357,7 +365,6 @@ fn convert_page(
     );
     let files: Rc<RefCell<Vec<PathBuf>>> = Rc::default();
     let romhack_patches: Rc<RefCell<Vec<(PathBuf, PathBuf)>>> = Rc::default();
-    let folder_history = Rc::new(RefCell::new(FolderHistory::load()));
     let conversion_preferences = Rc::new(RefCell::new(crate::paths::ConversionPreferences::load()));
     let saved_preferences = conversion_preferences.borrow().clone();
     let (settings, settings_body) = section(&tr("Game Details"));
@@ -2136,6 +2143,7 @@ fn extract_page(
     parent: &adw::ApplicationWindow,
     operation_busy: Rc<Cell<bool>>,
     extract_cancel_state: Rc<RefCell<Option<Arc<AtomicBool>>>>,
+    history: Rc<RefCell<FolderHistory>>,
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
@@ -2144,7 +2152,6 @@ fn extract_page(
     let (inputs, input_body) = section(&tr("Extraction"));
     let pbp_path = append_entry(&input_body, &tr("PBP File"), "");
     let output_path = append_entry(&input_body, &tr("Output Folder"), "");
-    let history = Rc::new(RefCell::new(FolderHistory::load()));
     let choose_pbp = gtk::Button::with_label(&tr("Browse…"));
     let parent_for_pbp = parent.clone();
     let entry_for_pbp = pbp_path.clone();
