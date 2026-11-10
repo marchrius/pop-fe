@@ -59,7 +59,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    1000×560 è quello effettivamente incluso nel PBP. Per SND0 usa l'audio del tema quando
    disponibile, altrimenti il cache upstream dei file ATRAC3 già pronti; l'audio
    viene limitato ai vincoli PSP; se YouTube risponde HTTP 403, il download
-   riprova automaticamente tramite IPv4. Le anteprime artwork vengono mostrate nella
+   riprova automaticamente tramite IPv4 e abilita i componenti EJS remoti di
+   yt-dlp tramite Deno per risolvere le challenge JavaScript di YouTube. Le
+   anteprime artwork vengono mostrate nella
    pagina Converti. I config POPS specifici per gioco e i dati
    LibCrypt vengono inclusi automaticamente nel PSISO.
 5. Selezione e preview XMB: caricamento immagini e SND0 dei temi 98DEMAKE e
@@ -96,7 +98,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.54
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.55
    includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
    runtime da Python, yt-dlp o Deno di sistema. L'avvio della GUI nel sandbox e
    la compatibilità degli EBOOT su PSP reale restano da verificare.

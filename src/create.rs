@@ -1168,6 +1168,8 @@ fn prepare_snd0(
                 "--quiet",
                 "--js-runtimes",
                 "deno",
+                "--remote-components",
+                "ejs:npm",
             ]);
             if force_ipv4 {
                 command.arg("--force-ipv4").arg("--force-overwrites");
@@ -1337,6 +1339,8 @@ pub(crate) fn search_youtube_audio(
         "--no-warnings",
         "--js-runtimes",
         "deno",
+        "--remote-components",
+        "ejs:npm",
         "--flat-playlist",
         "--print",
         "id",
