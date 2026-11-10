@@ -154,10 +154,35 @@ impl Pbp {
         source.seek(SeekFrom::Start(psar))?;
         let mut marker = [0; 16];
         source.read_exact(&mut marker)?;
+        let mut listed_psiso_offsets = HashSet::new();
         if &marker == b"PSTITLEIMG000000" {
             let mut title = [0u8; 1024];
             source.seek(SeekFrom::Start(psar))?;
             source.read_exact(&mut title)?;
+            // PSTITLEIMG stores PSISO positions relative to the PSAR start.
+            // Prefer those positions so arbitrary PSAR payload bytes that
+            // happen to contain "PSISOIMG0000" are not treated as discs.
+            for entry in title[0x200..0x280].chunks_exact(4) {
+                let relative = u32::from_le_bytes(entry.try_into().unwrap()) as u64;
+                if relative == 0 {
+                    break;
+                }
+                let Some(position) = psar.checked_add(relative) else {
+                    continue;
+                };
+                if position
+                    .checked_add(12)
+                    .is_none_or(|end| end > self.file_size)
+                {
+                    continue;
+                }
+                source.seek(SeekFrom::Start(position))?;
+                let mut psiso_marker = [0u8; 12];
+                source.read_exact(&mut psiso_marker)?;
+                if &psiso_marker == b"PSISOIMG0000" {
+                    listed_psiso_offsets.insert(position);
+                }
+            }
             let file = staging_dir.join("PSTITLEIMG.DAT");
             fs::write(&file, title)?;
             reporter.add(1024);
@@ -172,7 +197,9 @@ impl Pbp {
             source.seek(SeekFrom::Start(offset))?;
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
-            if &magic == b"PSISOIMG0000" {
+            if &magic == b"PSISOIMG0000"
+                && (listed_psiso_offsets.is_empty() || listed_psiso_offsets.contains(&offset))
+            {
                 let (image, cue, toc, iso, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
