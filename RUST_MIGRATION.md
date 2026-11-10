@@ -98,7 +98,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.61
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.62
    includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
    runtime da Python, yt-dlp o Deno di sistema. L'avvio della GUI nel sandbox e
    la compatibilità degli EBOOT su PSP reale restano da verificare.
