@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::OnceLock;
@@ -17,6 +17,7 @@ pub struct DiscRecord {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct GameRecord {
+    pub url: Option<String>,
     pub id: Option<String>,
     pub title: Option<String>,
     pub icon0: Option<String>,
@@ -69,6 +70,7 @@ pub struct PatchRecord {
 pub struct Database {
     pub discs: HashMap<String, DiscRecord>,
     pub games: HashMap<String, GameRecord>,
+    game_fields: HashMap<String, HashSet<String>>,
     psp_configs: HashMap<String, String>,
     pub libcrypt: HashMap<String, LibCryptRecord>,
     pub themes: HashMap<String, ThemeRecord>,
@@ -92,32 +94,57 @@ pub struct DiscMetadata {
 impl Database {
     pub fn embedded() -> &'static Self {
         static DATABASE: OnceLock<Database> = OnceLock::new();
-        DATABASE.get_or_init(|| Self {
-            discs: serde_json::from_str(include_str!("../data/disc_by_md5.json"))
-                .expect("disc database JSON must be valid"),
-            games: serde_json::from_str(include_str!("../data/games.json"))
-                .expect("game database JSON must be valid"),
-            psp_configs: serde_json::from_str(include_str!("../data/psp_configs.json"))
-                .expect("PSP config database JSON must be valid"),
-            libcrypt: serde_json::from_str(include_str!("../data/libcrypt.json"))
-                .expect("LibCrypt database JSON must be valid"),
-            themes: serde_json::from_str(include_str!("../data/themes.json"))
-                .expect("theme database JSON must be valid"),
-            ppf_fixes: serde_json::from_str(include_str!("../data/ppf_fixes.json"))
-                .expect("PPF database JSON must be valid"),
-            ppf_data: serde_json::from_str(include_str!("../data/ppf_data.json"))
-                .expect("PPF data JSON must be valid"),
-            libcrypt_patches: serde_json::from_str(include_str!("../data/libcrypt_patches.json"))
+        DATABASE.get_or_init(|| {
+            let games_json = include_str!("../data/games.json");
+            let games: HashMap<String, GameRecord> =
+                serde_json::from_str(games_json).expect("game database JSON must be valid");
+            let game_fields: HashMap<String, HashSet<String>> =
+                serde_json::from_str::<HashMap<String, serde_json::Value>>(games_json)
+                    .expect("game database JSON must be valid")
+                    .into_iter()
+                    .map(|(id, record)| {
+                        let fields = record
+                            .as_object()
+                            .map(|object| object.keys().cloned().collect())
+                            .unwrap_or_default();
+                        (id, fields)
+                    })
+                    .collect();
+            Self {
+                discs: serde_json::from_str(include_str!("../data/disc_by_md5.json"))
+                    .expect("disc database JSON must be valid"),
+                games,
+                game_fields,
+                psp_configs: serde_json::from_str(include_str!("../data/psp_configs.json"))
+                    .expect("PSP config database JSON must be valid"),
+                libcrypt: serde_json::from_str(include_str!("../data/libcrypt.json"))
+                    .expect("LibCrypt database JSON must be valid"),
+                themes: serde_json::from_str(include_str!("../data/themes.json"))
+                    .expect("theme database JSON must be valid"),
+                ppf_fixes: serde_json::from_str(include_str!("../data/ppf_fixes.json"))
+                    .expect("PPF database JSON must be valid"),
+                ppf_data: serde_json::from_str(include_str!("../data/ppf_data.json"))
+                    .expect("PPF data JSON must be valid"),
+                libcrypt_patches: serde_json::from_str(include_str!(
+                    "../data/libcrypt_patches.json"
+                ))
                 .expect("LibCrypt patch map JSON must be valid"),
-            libcrypt_hash_patches: serde_json::from_str(include_str!(
-                "../data/libcrypt_hash_patches.json"
-            ))
-            .expect("LibCrypt revision patch map JSON must be valid"),
-            libcrypt_revision_signatures: serde_json::from_str(include_str!(
-                "../data/libcrypt_revision_signatures.json"
-            ))
-            .expect("LibCrypt revision signatures JSON must be valid"),
+                libcrypt_hash_patches: serde_json::from_str(include_str!(
+                    "../data/libcrypt_hash_patches.json"
+                ))
+                .expect("LibCrypt revision patch map JSON must be valid"),
+                libcrypt_revision_signatures: serde_json::from_str(include_str!(
+                    "../data/libcrypt_revision_signatures.json"
+                ))
+                .expect("LibCrypt revision signatures JSON must be valid"),
+            }
         })
+    }
+
+    pub fn game_has_field(&self, game_id: &str, field: &str) -> bool {
+        self.game_fields
+            .get(game_id)
+            .is_some_and(|fields| fields.contains(field))
     }
 
     pub fn identify(&self, cue: &CueSheet) -> Result<String, DiscError> {

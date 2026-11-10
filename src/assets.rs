@@ -2,6 +2,7 @@
 use std::fs;
 use std::io::{Cursor, Read};
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
@@ -130,10 +131,12 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
         Ok(client) => client,
         Err(_) => return PbpAssets::default(),
     };
-    let pic1 = game.pic1.as_deref().and_then(|url| {
-        cached_image(
+    let database = Database::embedded();
+    let mut pic1 = game.pic1.as_deref().and_then(|url| {
+        let candidates = [popfe_asset_cache_url("pic1", url), url.to_owned()];
+        cached_image_candidates(
             &client,
-            url,
+            &candidates,
             &directory,
             game_id,
             "pic1",
@@ -144,10 +147,40 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
     if cancelled.load(Ordering::Relaxed) {
         return PbpAssets::default();
     }
-    let pic0 = game
+    let mut pic0 = game
         .pic0
         .as_deref()
         .and_then(|url| cached_pic0(&client, url, &directory, game_id, game, Some(cancelled)));
+    let mut psx_page = None;
+    if pic0.is_none() && (game.pic0.is_some() || !database.game_has_field(game_id, "pic0")) {
+        psx_page = cached_psx_page(&client, game, game_id, &directory, Some(cancelled));
+        if let Some(path) = psx_page.as_deref().and_then(first_psx_screenshot) {
+            pic0 = cached_pic0(
+                &client,
+                &format!("https://psxdatacenter.com/{path}"),
+                &directory,
+                game_id,
+                game,
+                Some(cancelled),
+            );
+        }
+    }
+    if pic1.is_none() && (game.pic1.is_some() || !database.game_has_field(game_id, "pic1")) {
+        if psx_page.is_none() {
+            psx_page = cached_psx_page(&client, game, game_id, &directory, Some(cancelled));
+        }
+        if let Some(path) = psx_page.as_deref().and_then(first_psx_screenshot) {
+            pic1 = cached_image(
+                &client,
+                &format!("https://psxdatacenter.com/{path}"),
+                &directory,
+                game_id,
+                "pic1",
+                (480, 272),
+                Some(cancelled),
+            );
+        }
+    }
     let pic0_source = pic0.as_ref().and_then(|_| {
         let path = directory.join(format!("{}-pic0-source.png", safe_id(game_id)));
         path.is_file().then_some(path)
@@ -156,7 +189,7 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
         return PbpAssets::default();
     }
     let icon_url = game.icon0.as_deref();
-    let icon0 = icon_url
+    let mut icon0 = icon_url
         .and_then(|url| {
             cached_image(
                 &client,
@@ -173,6 +206,22 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
             let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
             normalize_cached(source, &destination, (80, 80)).then_some(destination)
         });
+    if icon0.is_none() && icon_url.is_none() && !database.game_has_field(game_id, "icon0") {
+        if psx_page.is_none() {
+            psx_page = cached_psx_page(&client, game, game_id, &directory, Some(cancelled));
+        }
+        if let Some(path) = psx_page.as_deref().and_then(first_psx_cover) {
+            icon0 = cached_image(
+                &client,
+                &format!("https://psxdatacenter.com/{path}"),
+                &directory,
+                game_id,
+                "icon0-psx",
+                (80, 80),
+                Some(cancelled),
+            );
+        }
+    }
     let snd0 = game
         .snd0
         .as_deref()
@@ -700,9 +749,99 @@ fn write_png(surface: ImageSurface, path: &Path) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
+fn cached_psx_page(
+    client: &Client,
+    game: &crate::database::GameRecord,
+    game_id: &str,
+    directory: &Path,
+    cancelled: Option<&AtomicBool>,
+) -> Option<String> {
+    const MAX_PAGE_BYTES: usize = 4 * 1024 * 1024;
+    if is_cancelled(cancelled) {
+        return None;
+    }
+    let relative = game.url.as_deref()?;
+    if !relative.starts_with("games/") || relative.contains("..") {
+        return None;
+    }
+    let cache = directory.join(format!("{}-psxdatacenter.html", safe_id(game_id)));
+    let bytes = if cache.is_file() {
+        fs::read(&cache)
+            .ok()
+            .filter(|bytes| bytes.len() <= MAX_PAGE_BYTES)?
+    } else {
+        let response = client
+            .get(format!("https://psxdatacenter.com/{relative}"))
+            .send()
+            .ok()?
+            .error_for_status()
+            .ok()?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_PAGE_BYTES as u64)
+        {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        read_response(response, MAX_PAGE_BYTES, cancelled, &mut bytes)?;
+        if bytes.is_empty() || bytes.len() > MAX_PAGE_BYTES {
+            return None;
+        }
+        let temporary = cache.with_extension(format!("{}.tmp", std::process::id()));
+        fs::write(&temporary, &bytes).ok()?;
+        fs::rename(temporary, &cache).ok()?;
+        bytes
+    };
+    Some(String::from_utf8_lossy(&bytes).into_owned())
+}
+
+fn first_psx_cover(page: &str) -> Option<&str> {
+    static PATTERN: OnceLock<regex::Regex> = OnceLock::new();
+    PATTERN
+        .get_or_init(|| regex::Regex::new(r"images/covers/./.*/.*\.jpg").unwrap())
+        .find(page)
+        .map(|matched| matched.as_str())
+}
+
+fn first_psx_screenshot(page: &str) -> Option<&str> {
+    static PATTERN: OnceLock<regex::Regex> = OnceLock::new();
+    PATTERN
+        .get_or_init(|| regex::Regex::new(r"images/screens/./.*/.*/ss..jpg").unwrap())
+        .find(page)
+        .map(|matched| matched.as_str())
+}
+
+fn popfe_asset_cache_url(asset: &str, source_url: &str) -> String {
+    let digest = Md5::digest(source_url.as_bytes())
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("https://github.com/sahlberg/pop-fe-assets/raw/master/{asset}/{digest}")
+}
+
 fn cached_image(
     client: &Client,
     url: &str,
+    directory: &Path,
+    game_id: &str,
+    name: &str,
+    size: (i32, i32),
+    cancelled: Option<&AtomicBool>,
+) -> Option<PathBuf> {
+    cached_image_candidates(
+        client,
+        &[url.to_owned()],
+        directory,
+        game_id,
+        name,
+        size,
+        cancelled,
+    )
+}
+
+fn cached_image_candidates(
+    client: &Client,
+    urls: &[String],
     directory: &Path,
     game_id: &str,
     name: &str,
@@ -716,27 +855,47 @@ fn cached_image(
     if path.is_file() {
         return Some(path);
     }
-    let response = client.get(url).send().ok()?.error_for_status().ok()?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
-    {
-        return None;
+    for url in urls {
+        if is_cancelled(cancelled) {
+            return None;
+        }
+        let Some(response) = client
+            .get(url)
+            .send()
+            .ok()
+            .and_then(|r| r.error_for_status().ok())
+        else {
+            continue;
+        };
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+        {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        if read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes).is_none()
+            || bytes.is_empty()
+            || bytes.len() > MAX_IMAGE_BYTES
+        {
+            continue;
+        }
+        let Ok(pixbuf) = Pixbuf::from_read(Cursor::new(bytes)) else {
+            continue;
+        };
+        if pixbuf.width() <= 0
+            || pixbuf.height() <= 0
+            || pixbuf.width() > 8000
+            || pixbuf.height() > 8000
+            || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
+        {
+            continue;
+        }
+        if save_scaled(&pixbuf, &path, size).is_ok() {
+            return Some(path);
+        }
     }
-    let mut bytes = Vec::new();
-    read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes)?;
-    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
-        return None;
-    }
-    let pixbuf = Pixbuf::from_read(Cursor::new(bytes)).ok()?;
-    if pixbuf.width() > 8000
-        || pixbuf.height() > 8000
-        || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
-    {
-        return None;
-    }
-    save_scaled(&pixbuf, &path, size).ok()?;
-    Some(path.to_path_buf())
+    None
 }
 
 fn cached_pic0(
@@ -766,21 +925,39 @@ fn cached_pic0(
             game.pic0_offset.unwrap_or((0.1, 0.1)),
         );
     }
-    let response = client.get(url).send().ok()?.error_for_status().ok()?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
-    {
-        return None;
+    let candidates = [popfe_asset_cache_url("pic0", url), url.to_owned()];
+    let mut source = None;
+    for candidate in candidates {
+        let Some(response) = client
+            .get(candidate)
+            .send()
+            .ok()
+            .and_then(|response| response.error_for_status().ok())
+        else {
+            continue;
+        };
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+        {
+            continue;
+        }
+        let mut bytes = Vec::new();
+        if read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes).is_none()
+            || bytes.is_empty()
+            || bytes.len() > MAX_IMAGE_BYTES
+        {
+            continue;
+        }
+        if let Some(pixbuf) = Pixbuf::from_read(Cursor::new(bytes))
+            .ok()
+            .and_then(|pixbuf| pixbuf.apply_embedded_orientation())
+        {
+            source = Some(pixbuf);
+            break;
+        }
     }
-    let mut bytes = Vec::new();
-    read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes)?;
-    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES {
-        return None;
-    }
-    let source = Pixbuf::from_read(Cursor::new(bytes))
-        .ok()?
-        .apply_embedded_orientation()?;
+    let source = source?;
     let (width, height) = (source.width(), source.height());
     if width <= 0
         || height <= 0
