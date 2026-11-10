@@ -39,6 +39,7 @@ pub struct PbpAssets {
     pub icon0: Option<PathBuf>,
     pub icon1: Option<PathBuf>,
     pub pic0: Option<PathBuf>,
+    pub pic0_source: Option<PathBuf>,
     pub pic1: Option<PathBuf>,
     pub snd0: Option<PathBuf>,
     pub logo: Option<PathBuf>,

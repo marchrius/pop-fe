@@ -319,5 +319,12 @@
   "Select YouTube cookies file": "Seleziona il file cookie di YouTube",
   "YouTube cookies file does not exist": "Il file dei cookie di YouTube non esiste",
   "YouTube denied the download (HTTP 403). Select a Netscape-format cookies.txt file in the SND0 options and try again. ": "YouTube ha rifiutato il download (HTTP 403). Seleziona un file cookies.txt in formato Netscape nelle opzioni SND0 e riprova. ",
-  "YouTube search was denied (HTTP 403). Select a cookies.txt file in the SND0 options and try again.": "YouTube ha rifiutato la ricerca (HTTP 403). Seleziona un file cookies.txt nelle opzioni SND0 e riprova."
+  "YouTube search was denied (HTTP 403). Select a cookies.txt file in the SND0 options and try again.": "YouTube ha rifiutato la ricerca (HTTP 403). Seleziona un file cookies.txt nelle opzioni SND0 e riprova.",
+  "PIC0 layout": "Layout PIC0",
+  "Scale": "Scala",
+  "X offset": "Offset X",
+  "Y offset": "Offset Y",
+  "Change PIC0 scale; database value is loaded for each disc.": "Modifica la scala PIC0; il valore del database viene caricato per ogni disco.",
+  "Move PIC0 horizontally in the XMB preview.": "Sposta PIC0 orizzontalmente nell’anteprima XMB.",
+  "Move PIC0 vertically in the XMB preview.": "Sposta PIC0 verticalmente nell’anteprima XMB."
 }

@@ -31,6 +31,9 @@ struct DiscFields {
     disable_title_image: gtk::CheckButton,
     disable_pic0: gtk::CheckButton,
     disable_pic1: gtk::CheckButton,
+    pic0_scaling: gtk::SpinButton,
+    pic0_x_offset: gtk::SpinButton,
+    pic0_y_offset: gtk::SpinButton,
     use_pic1_logo: gtk::CheckButton,
     watermark: gtk::CheckButton,
     psx_undither: gtk::CheckButton,
@@ -392,6 +395,9 @@ fn convert_page(
         disable_title_image: gtk::CheckButton::with_label(&tr("Disable PSTITLEIMG")),
         disable_pic0: gtk::CheckButton::with_label(&tr("Disable PIC0")),
         disable_pic1: gtk::CheckButton::with_label(&tr("Disable PIC1")),
+        pic0_scaling: gtk::SpinButton::with_range(0.1, 3.0, 0.05),
+        pic0_x_offset: gtk::SpinButton::with_range(-1.0, 2.0, 0.05),
+        pic0_y_offset: gtk::SpinButton::with_range(-1.0, 2.0, 0.05),
         use_pic1_logo: gtk::CheckButton::with_label(&tr("Use PIC1 as Logo")),
         watermark: gtk::CheckButton::with_label(&tr("Watermark")),
         psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
@@ -438,6 +444,12 @@ fn convert_page(
     fields
         .disable_pic1
         .set_active(saved_preferences.disable_pic1);
+    fields.pic0_scaling.set_digits(2);
+    fields.pic0_scaling.set_value(0.9);
+    fields.pic0_x_offset.set_digits(2);
+    fields.pic0_x_offset.set_value(0.1);
+    fields.pic0_y_offset.set_digits(2);
+    fields.pic0_y_offset.set_value(0.1);
     fields
         .use_pic1_logo
         .set_active(saved_preferences.use_pic1_logo);
@@ -460,6 +472,14 @@ fn convert_page(
     fields
         .theme
         .set_selected(saved_preferences.theme.min((THEME_NAMES.len() - 1) as u32));
+    for control in [
+        fields.pic0_scaling.clone(),
+        fields.pic0_x_offset.clone(),
+        fields.pic0_y_offset.clone(),
+    ] {
+        let fields = fields.clone();
+        control.connect_value_changed(move |_| apply_pic0_layout(&fields));
+    }
     for check in [
         fields.cdda.clone(),
         fields.disable_libcrypt_patching.clone(),
@@ -930,6 +950,39 @@ fn convert_page(
             },
         );
     });
+
+    let pic0_layout = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let pic0_layout_label = gtk::Label::new(Some(&tr("PIC0 layout")));
+    pic0_layout_label.set_xalign(0.0);
+    pic0_layout_label.set_width_chars(22);
+    pic0_layout.append(&pic0_layout_label);
+    for (label, control) in [
+        ("Scale", &fields.pic0_scaling),
+        ("X offset", &fields.pic0_x_offset),
+        ("Y offset", &fields.pic0_y_offset),
+    ] {
+        let item = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(4)
+            .build();
+        item.append(&gtk::Label::new(Some(&tr(label))));
+        control.set_width_chars(5);
+        item.append(control);
+        pic0_layout.append(&item);
+    }
+    fields.pic0_scaling.set_tooltip_text(Some(&tr(
+        "Change PIC0 scale; database value is loaded for each disc.",
+    )));
+    fields
+        .pic0_x_offset
+        .set_tooltip_text(Some(&tr("Move PIC0 horizontally in the XMB preview.")));
+    fields
+        .pic0_y_offset
+        .set_tooltip_text(Some(&tr("Move PIC0 vertically in the XMB preview.")));
+    artwork_body.append(&pic0_layout);
 
     let manual_row = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
@@ -1549,6 +1602,9 @@ fn analyze_first(
                         .set_text(metadata.manual.as_deref().unwrap_or(""));
                 }
                 *fields.base_assets.borrow_mut() = assets;
+                fields.pic0_scaling.set_value(metadata.pic0_scaling);
+                fields.pic0_x_offset.set_value(metadata.pic0_offset.0);
+                fields.pic0_y_offset.set_value(metadata.pic0_offset.1);
                 refresh_theme_art(&fields);
                 fields.status.set_text(&tr("Automatic data loaded"));
                 gtk::glib::ControlFlow::Break
@@ -1776,6 +1832,15 @@ fn set_asset_override(fields: &DiscFields, key: &str, path: Option<PathBuf>) {
     *target = path.clone();
     drop(overrides);
 
+    if key == "pic0" {
+        if path.is_some() {
+            apply_pic0_layout(fields);
+        } else if !fields.id.text().is_empty() {
+            refresh_theme_art(fields);
+        }
+        return;
+    }
+
     if let Some(path) = path {
         let mut assets = fields.assets.borrow_mut();
         match key {
@@ -1791,6 +1856,45 @@ fn set_asset_override(fields: &DiscFields, key: &str, path: Option<PathBuf>) {
     } else if !fields.id.text().is_empty() {
         refresh_theme_art(fields);
     }
+}
+
+fn apply_pic0_layout(fields: &DiscFields) {
+    if fields.id.text().is_empty() {
+        return;
+    }
+    let custom_source = fields
+        .asset_override_entries
+        .borrow()
+        .get(1)
+        .map(|entry| entry.text().to_string())
+        .filter(|path| !path.is_empty())
+        .map(PathBuf::from)
+        .filter(|path| path.is_file());
+    let source = custom_source
+        .clone()
+        .or_else(|| fields.base_assets.borrow().pic0_source.clone());
+    let Some(source) = source else {
+        return;
+    };
+    let offset = (fields.pic0_x_offset.value(), fields.pic0_y_offset.value());
+    let Some(pic0) = crate::assets::render_pic0_layout(
+        &source,
+        &fields.id.text(),
+        fields.pic0_scaling.value(),
+        offset,
+    ) else {
+        return;
+    };
+    if custom_source.is_some() {
+        fields.asset_overrides.borrow_mut().pic0 = Some(pic0.clone());
+        fields.assets.borrow_mut().pic0 = Some(pic0);
+    } else {
+        fields.base_assets.borrow_mut().pic0 = Some(pic0.clone());
+        if fields.theme.selected() == 0 {
+            fields.assets.borrow_mut().pic0 = Some(pic0);
+        }
+    }
+    refresh_asset_previews(fields);
 }
 
 fn apply_asset_overrides(

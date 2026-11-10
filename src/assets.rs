@@ -148,6 +148,10 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
         .pic0
         .as_deref()
         .and_then(|url| cached_pic0(&client, url, &directory, game_id, game, Some(cancelled)));
+    let pic0_source = pic0.as_ref().and_then(|_| {
+        let path = directory.join(format!("{}-pic0-source.png", safe_id(game_id)));
+        path.is_file().then_some(path)
+    });
     if cancelled.load(Ordering::Relaxed) {
         return PbpAssets::default();
     }
@@ -176,6 +180,7 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
     PbpAssets {
         icon0,
         pic0,
+        pic0_source,
         pic1,
         snd0,
         ..PbpAssets::default()
@@ -193,6 +198,10 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
         .ok()
         .filter(|image| image.width() == 310 && image.height() == 180)
         .map(|_| pic0_path);
+    let pic0_source = directory
+        .join(format!("{}-pic0-source.png", safe_id(game_id)))
+        .is_file()
+        .then(|| directory.join(format!("{}-pic0-source.png", safe_id(game_id))));
     let icon0 = cached_image_path(&directory, game_id, "icon0", (80, 80)).or_else(|| {
         let source = pic1.as_ref()?;
         let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
@@ -208,6 +217,7 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
     PbpAssets {
         icon0,
         pic0,
+        pic0_source,
         pic1,
         snd0,
         ..PbpAssets::default()
@@ -334,6 +344,9 @@ fn merge_missing_assets(target: &mut PbpAssets, fallback: &PbpAssets) {
     }
     if target.pic0.is_none() {
         target.pic0.clone_from(&fallback.pic0);
+    }
+    if target.pic0_source.is_none() {
+        target.pic0_source.clone_from(&fallback.pic0_source);
     }
     if target.pic1.is_none() {
         target.pic1.clone_from(&fallback.pic1);
@@ -626,7 +639,7 @@ fn cached_image(
         return None;
     }
     save_scaled(&pixbuf, &path, size).ok()?;
-    Some(path)
+    Some(path.to_path_buf())
 }
 
 fn cached_pic0(
@@ -641,8 +654,20 @@ fn cached_pic0(
         return None;
     }
     let path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
-    if path.is_file() {
-        return Some(path);
+    let source_path = directory.join(format!("{}-pic0-source.png", safe_id(game_id)));
+    if source_path.is_file() {
+        if path.is_file() {
+            return Some(path);
+        }
+        let source = Pixbuf::from_file(&source_path)
+            .ok()?
+            .apply_embedded_orientation()?;
+        return render_pic0_pixbuf(
+            &source,
+            &path,
+            game.pic0_scaling.unwrap_or(0.9),
+            game.pic0_offset.unwrap_or((0.1, 0.1)),
+        );
     }
     let response = client.get(url).send().ok()?.error_for_status().ok()?;
     if response
@@ -668,9 +693,66 @@ fn cached_pic0(
     {
         return None;
     }
-    let fit_scale = (560.0 / height as f64).min(1000.0 / width as f64);
-    let scale = fit_scale * game.pic0_scaling.unwrap_or(0.9).clamp(0.1, 3.0);
-    let offset = game.pic0_offset.unwrap_or((0.1, 0.1));
+    let source_png = source.save_to_bufferv("png", &[]).ok()?;
+    let temporary_source = source_path.with_extension(format!("{}.tmp", std::process::id()));
+    fs::write(&temporary_source, source_png).ok()?;
+    fs::rename(temporary_source, &source_path).ok()?;
+    render_pic0_pixbuf(
+        &source,
+        &path,
+        game.pic0_scaling.unwrap_or(0.9),
+        game.pic0_offset.unwrap_or((0.1, 0.1)),
+    )
+}
+
+pub fn render_pic0_layout(
+    source_path: &Path,
+    game_id: &str,
+    scaling: f64,
+    offset: (f64, f64),
+) -> Option<PathBuf> {
+    let metadata = fs::metadata(source_path).ok()?;
+    if metadata.len() == 0 || metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return None;
+    }
+    let source = Pixbuf::from_file(source_path)
+        .ok()?
+        .apply_embedded_orientation()?;
+    if source.width() <= 0
+        || source.height() <= 0
+        || source.width() > 8000
+        || source.height() > 8000
+        || source.width() as i64 * source.height() as i64 > 50_000_000
+    {
+        return None;
+    }
+    let bytes = fs::read(source_path).ok()?;
+    let mut key = Md5::new();
+    key.update(&bytes);
+    let layout = format!("{scaling:.4}:{:.4}:{:.4}", offset.0, offset.1);
+    key.update(layout.as_bytes());
+    let digest = key
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    let directory = cache_directory().join("assets");
+    fs::create_dir_all(&directory).ok()?;
+    let output = directory.join(format!("{}-pic0-{digest}.png", safe_id(game_id)));
+    if output.is_file() {
+        return Some(output);
+    }
+    render_pic0_pixbuf(&source, &output, scaling, offset)
+}
+
+fn render_pic0_pixbuf(
+    source: &Pixbuf,
+    path: &Path,
+    scaling: f64,
+    offset: (f64, f64),
+) -> Option<PathBuf> {
+    let fit_scale = (560.0 / source.height() as f64).min(1000.0 / source.width() as f64);
+    let scale = fit_scale * scaling.clamp(0.1, 3.0);
     let canvas = Pixbuf::new(gdk_pixbuf::Colorspace::Rgb, true, 8, 1000, 560)?;
     canvas.fill(0);
     source.composite(
@@ -691,7 +773,7 @@ fn cached_pic0(
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, encoded).ok()?;
     fs::rename(temporary, &path).ok()?;
-    Some(path)
+    Some(path.to_path_buf())
 }
 
 fn cached_snd0(

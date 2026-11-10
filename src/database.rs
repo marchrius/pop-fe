@@ -85,6 +85,8 @@ pub struct DiscMetadata {
     pub title: String,
     pub manual: Option<String>,
     pub use_cdda: bool,
+    pub pic0_scaling: f64,
+    pub pic0_offset: (f64, f64),
 }
 
 impl Database {
@@ -166,6 +168,13 @@ impl Database {
             manual: local_manual_for_image(path)
                 .or_else(|| game.and_then(|record| record.manual.clone())),
             use_cdda: game.and_then(|record| record.psp_use_cdda).unwrap_or(false),
+            pic0_scaling: game
+                .and_then(|record| record.pic0_scaling)
+                .unwrap_or(0.9)
+                .clamp(0.1, 3.0),
+            pic0_offset: game
+                .and_then(|record| record.pic0_offset)
+                .unwrap_or((0.1, 0.1)),
         })
     }
 
