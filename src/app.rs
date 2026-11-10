@@ -2288,9 +2288,11 @@ fn extract_page(
         let cancel_button = cancel_button_for_extract.clone();
         let cancel_state = state_for_extract.clone();
         let operation_busy = operation_busy_for_extract.clone();
+        let mut has_progress = false;
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
+                    has_progress |= fraction > 0.0;
                     progress.set_fraction(fraction);
                     progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
                     gtk::glib::ControlFlow::Continue
@@ -2329,7 +2331,12 @@ fn extract_page(
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Empty) => {
+                    if !has_progress {
+                        progress.pulse();
+                    }
+                    gtk::glib::ControlFlow::Continue
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
                     operation_busy.set(false);
                     status.set_text(&tr("Extraction failed"));
