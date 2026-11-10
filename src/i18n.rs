@@ -233,9 +233,9 @@ pub fn localize_error(message: &str) -> String {
         "manual Xdelta romhack patch produced no disc image" => {
             "Manual Xdelta romhack patch produced no disc image"
         }
-        "failed to capture command error output" => "Failed to capture command error output",
-        "failed to capture atracdenc error output" => "Failed to capture atracdenc error output",
-        "failed to capture yt-dlp error output" => "Failed to capture yt-dlp error output",
+        "failed to capture command error output" => "failed to capture command error output",
+        "failed to capture atracdenc error output" => "failed to capture atracdenc error output",
+        "failed to capture yt-dlp error output" => "failed to capture yt-dlp error output",
         "manual Xdelta romhack patch" => "Manual Xdelta romhack patch",
         "manual operation cancelled" => "Operation stopped",
         "PBP section offset overflow" => "PBP section offset overflow",

@@ -1,5 +1,7 @@
 {
   "failed to capture atracdenc error output": "Impossibile acquisire l'output di errore di atracdenc",
+  "failed to capture command error output": "Impossibile acquisire l'output di errore del comando",
+  "failed to capture yt-dlp error output": "Impossibile acquisire l'output di errore di yt-dlp",
   "Game": "Gioco",
   "Main Menu": "Menu principale",
   "Open Images or PBP…": "Apri immagini o PBP…",

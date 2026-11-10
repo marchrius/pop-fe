@@ -1,5 +1,7 @@
 {
   "failed to capture atracdenc error output": "Failed to capture atracdenc error output",
+  "failed to capture command error output": "Failed to capture command error output",
+  "failed to capture yt-dlp error output": "Failed to capture yt-dlp error output",
   "Game": "Game",
   "Main Menu": "Main Menu",
   "Open Images or PBP…": "Open Images or PBP…",
