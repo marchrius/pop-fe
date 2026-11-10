@@ -623,6 +623,8 @@ fn pdf_pages(
     let mut command = Command::new("pdftoppm");
     command
         .arg("-png")
+        .arg("-l")
+        .arg(MAX_MANUAL_PAGES.to_string())
         .arg("-scale-to")
         .arg("960")
         .arg(&input)
@@ -638,6 +640,21 @@ fn pdf_pages(
             crate::process::terminate(&mut child);
             let _ = child.wait();
             return Err(ManualError::Cancelled);
+        }
+        let (rendered_pages, rendered_bytes) = match pdf_render_usage(temporary, unique) {
+            Ok(usage) => usage,
+            Err(error) => {
+                crate::process::terminate(&mut child);
+                let _ = child.wait();
+                return Err(error);
+            }
+        };
+        if rendered_pages > MAX_MANUAL_PAGES || rendered_bytes > MAX_MANUAL_BYTES as u64 {
+            crate::process::terminate(&mut child);
+            let _ = child.wait();
+            return Err(ManualError::Invalid(
+                "rendered manual exceeds extraction limits".into(),
+            ));
         }
         match child.try_wait() {
             Ok(Some(status)) => {
@@ -685,6 +702,28 @@ fn pdf_pages(
         }
     }
     Ok(pages)
+}
+
+fn pdf_render_usage(temporary: &Path, unique: u64) -> Result<(usize, u64), ManualError> {
+    let prefix = format!("render-{unique}-");
+    let mut pages = 0usize;
+    let mut bytes = 0u64;
+    for entry in fs::read_dir(temporary)? {
+        let entry = entry?;
+        let name = entry.file_name();
+        if !name.to_string_lossy().starts_with(&prefix)
+            || entry
+                .path()
+                .extension()
+                .is_none_or(|extension| extension != "png")
+            || !entry.file_type()?.is_file()
+        {
+            continue;
+        }
+        pages += 1;
+        bytes = bytes.saturating_add(entry.metadata()?.len());
+    }
+    Ok((pages, bytes))
 }
 
 fn decode_image(

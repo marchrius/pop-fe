@@ -292,6 +292,7 @@
   "truncated integer": "Intero troncato nella patch PPF",
   "invalid integer": "Intero non valido nella patch PPF",
   "manual exceeds size limit": "Il manuale supera il limite di dimensione",
+  "rendered manual exceeds extraction limits": "Le pagine generate superano i limiti di estrazione",
   "manual is too large": "Il manuale è troppo grande",
   "invalid manual metadata": "Metadati del manuale non validi",
   "invalid PS3 PGD manual header": "Intestazione del manuale PS3 PGD non valida",

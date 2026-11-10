@@ -292,6 +292,7 @@
   "truncated integer": "truncated integer",
   "invalid integer": "invalid integer",
   "manual exceeds size limit": "manual exceeds size limit",
+  "rendered manual exceeds extraction limits": "rendered manual exceeds extraction limits",
   "manual is too large": "manual is too large",
   "invalid manual metadata": "invalid manual metadata",
   "invalid PS3 PGD manual header": "invalid PS3 PGD manual header",
