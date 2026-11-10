@@ -728,19 +728,14 @@ fn write_cue(
 }
 
 fn psiso_has_atrac_tracks(source: &mut File, base: u64) -> Result<bool, PbpError> {
-    for track in 0..98u64 {
-        let table = base + 0xc00 + track * 16;
-        let mut entry = [0u8; 8];
-        source.seek(SeekFrom::Start(table))?;
-        source.read_exact(&mut entry)?;
-        let offset = u32::from_le_bytes(entry[..4].try_into().unwrap());
-        let length = u32::from_le_bytes(entry[4..8].try_into().unwrap());
-        if offset == 0 || length == 0 {
-            return Ok(false);
-        }
-        return Ok(true);
-    }
-    Ok(false)
+    // The audio table is terminated by its first empty entry, so its first
+    // slot alone determines whether ATRAC tracks are present.
+    let mut entry = [0u8; 8];
+    source.seek(SeekFrom::Start(base + 0xc00))?;
+    source.read_exact(&mut entry)?;
+    let offset = u32::from_le_bytes(entry[..4].try_into().unwrap());
+    let length = u32::from_le_bytes(entry[4..8].try_into().unwrap());
+    Ok(offset != 0 && length != 0)
 }
 
 fn extract_iso(
