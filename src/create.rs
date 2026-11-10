@@ -571,7 +571,9 @@ pub fn create_from_image_with_progress_and_warnings(
             let read_len = buffer.len().min(remaining as usize);
             let count = psiso_reader.read(&mut buffer[..read_len])?;
             if count == 0 {
-                break;
+                return Err(CreateError::Invalid(
+                    "temporary PSISO image ended before its declared length".into(),
+                ));
             }
             output.write_all(&buffer[..count])?;
             remaining -= count as u64;
