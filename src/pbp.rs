@@ -163,18 +163,12 @@ impl Pbp {
         }
         let mut offset = psar;
         let mut disc_index = 0;
-        while offset + 12 <= self.file_size {
-            if cancelled.load(Ordering::Relaxed) {
-                return Err(PbpError::Cancelled);
-            }
-            source.seek(SeekFrom::Start(offset))?;
-            let mut magic = [0u8; 12];
-            source.read_exact(&mut magic)?;
-            if &magic == b"PSISOIMG0000"
-                && title_directory
-                    .as_ref()
-                    .is_none_or(|(_, allowed)| allowed.contains(&offset))
-            {
+        let allowed = title_directory.as_ref().map(|(_, offsets)| offsets);
+        while let Some((found, magic)) =
+            find_next_psar_record(&mut source, offset, self.file_size, allowed, cancelled)?
+        {
+            offset = found;
+            if &magic[..12] == b"PSISOIMG0000" {
                 let (image, cue, toc, iso, audio_tracks) = self.extract_disc(
                     &mut source,
                     offset,
@@ -197,7 +191,7 @@ impl Pbp {
                     break;
                 }
                 offset = (offset + extent + 15) & !15;
-            } else if &magic[..8] == b"STARTDAT" {
+            } else {
                 let startdat = staging_dir.join("STARTDAT.DAT");
                 copy_range(
                     &mut source,
@@ -209,8 +203,6 @@ impl Pbp {
                 )?;
                 written.push(startdat);
                 break;
-            } else {
-                offset = offset.saturating_add(16);
             }
         }
         if cancelled.load(Ordering::Relaxed) {
@@ -234,18 +226,12 @@ impl Pbp {
         if title_directory.is_some() {
             work = work.saturating_add(1024);
         }
-        while offset + 16 <= self.file_size {
-            if cancelled.load(Ordering::Relaxed) {
-                return Err(PbpError::Cancelled);
-            }
-            source.seek(SeekFrom::Start(offset))?;
-            let mut magic = [0u8; 16];
-            source.read_exact(&mut magic)?;
-            if &magic[..12] == b"PSISOIMG0000"
-                && title_directory
-                    .as_ref()
-                    .is_none_or(|(_, allowed)| allowed.contains(&offset))
-            {
+        let allowed = title_directory.as_ref().map(|(_, offsets)| offsets);
+        while let Some((found, magic)) =
+            find_next_psar_record(&mut source, offset, self.file_size, allowed, cancelled)?
+        {
+            offset = found;
+            if &magic[..12] == b"PSISOIMG0000" {
                 let extent = u32::from_le_bytes(magic[12..16].try_into().unwrap()) as u64;
                 if extent < PSISO_HEADER_SIZE
                     || offset
@@ -286,11 +272,9 @@ impl Pbp {
                     work = work.saturating_add(length);
                 }
                 offset = (offset + extent + 15) & !15;
-            } else if &magic[..8] == b"STARTDAT" {
+            } else {
                 work = work.saturating_add(self.file_size - offset);
                 break;
-            } else {
-                offset += 16;
             }
         }
         Ok(work)
@@ -497,6 +481,41 @@ fn read_psar_title_directory(
         }
     }
     Ok(Some((title, allowed)))
+}
+
+fn find_next_psar_record(
+    source: &mut File,
+    start: u64,
+    file_size: u64,
+    allowed_psiso: Option<&HashSet<u64>>,
+    cancelled: &AtomicBool,
+) -> Result<Option<(u64, [u8; 16])>, PbpError> {
+    const SCAN_BLOCK_SIZE: usize = 1024 * 1024;
+    let mut buffer = vec![0u8; SCAN_BLOCK_SIZE];
+    let mut offset = start;
+    while offset.checked_add(16).is_some_and(|end| end <= file_size) {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(PbpError::Cancelled);
+        }
+        let length = (file_size - offset).min(SCAN_BLOCK_SIZE as u64) as usize & !15;
+        if length == 0 {
+            break;
+        }
+        source.seek(SeekFrom::Start(offset))?;
+        source.read_exact(&mut buffer[..length])?;
+        for index in (0..length).step_by(16) {
+            let record_offset = offset + index as u64;
+            let record = &buffer[index..index + 16];
+            if (&record[..12] == b"PSISOIMG0000"
+                && allowed_psiso.is_none_or(|allowed| allowed.contains(&record_offset)))
+                || &record[..8] == b"STARTDAT"
+            {
+                return Ok(Some((record_offset, record.try_into().unwrap())));
+            }
+        }
+        offset += length as u64;
+    }
+    Ok(None)
 }
 
 struct ExtractionStage {
