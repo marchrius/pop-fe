@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use flate2::Decompress;
 use flate2::FlushDecompress;
+use sha1::{Digest, Sha1};
 use thiserror::Error;
 
 use crate::disc::CueSheet;
@@ -374,6 +375,12 @@ impl Pbp {
             };
             if sector.len() != SECTOR_SIZE {
                 return Err(PbpError::Compression);
+            }
+            let digest = Sha1::digest(&sector);
+            if digest[..16] != entry[8..24] {
+                return Err(PbpError::Invalid(
+                    "PSISO sector SHA-1 checksum mismatch".into(),
+                ));
             }
             target.write_all(&sector)?;
             total += sector.len() as u64;
