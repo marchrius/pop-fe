@@ -62,6 +62,7 @@
   "No YouTube audio result was found": "No YouTube audio result was found",
   "yt-dlp is required to search YouTube": "yt-dlp is required to search YouTube",
   "Disable LibCrypt Patching": "Disable LibCrypt Patching",
+  "Skip the automatic LibCrypt sector patch when one is available": "Skip the automatic LibCrypt sector patch when one is available",
   "Use CDDA": "Use CDDA",
   "Store CD audio as raw CDDA tracks instead of ATRAC3": "Store CD audio as raw CDDA tracks instead of ATRAC3",
   "PSX-undither": "PSX-undither",
