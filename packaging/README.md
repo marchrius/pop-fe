@@ -10,7 +10,7 @@ Servono Rust/Cargo, CMake, un compilatore C/C++, GTK 4.10 o superiore, libadwait
 
 ```sh
 python3 packaging/build_deb.py --offline
-sudo apt install ./dist/pop-fe-psp_0.1.51_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.52_amd64.deb
 ```
 
 Al primo build, esegui il comando senza `--offline` per scaricare e verificare yt-dlp e Deno nelle rispettive cache sotto `target/package-tools/`. In seguito puoi usare `--offline` anche per i build Cargo. Lo script compila `atracdenc` se manca, compila l'app Rust in release e crea il `.deb` in `dist/` senza privilegi di root.

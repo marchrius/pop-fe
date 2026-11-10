@@ -151,38 +151,11 @@ impl Pbp {
             progress(1.0);
             return Ok(output_files);
         }
-        source.seek(SeekFrom::Start(psar))?;
-        let mut marker = [0; 16];
-        source.read_exact(&mut marker)?;
-        let mut listed_psiso_offsets = HashSet::new();
-        if &marker == b"PSTITLEIMG000000" {
-            let mut title = [0u8; 1024];
-            source.seek(SeekFrom::Start(psar))?;
-            source.read_exact(&mut title)?;
+        let title_directory = read_psar_title_directory(&mut source, psar, self.file_size)?;
+        if let Some((title, _)) = &title_directory {
             // PSTITLEIMG stores PSISO positions relative to the PSAR start.
             // Prefer those positions so arbitrary PSAR payload bytes that
             // happen to contain "PSISOIMG0000" are not treated as discs.
-            for entry in title[0x200..0x280].chunks_exact(4) {
-                let relative = u32::from_le_bytes(entry.try_into().unwrap()) as u64;
-                if relative == 0 {
-                    break;
-                }
-                let Some(position) = psar.checked_add(relative) else {
-                    continue;
-                };
-                if position
-                    .checked_add(12)
-                    .is_none_or(|end| end > self.file_size)
-                {
-                    continue;
-                }
-                source.seek(SeekFrom::Start(position))?;
-                let mut psiso_marker = [0u8; 12];
-                source.read_exact(&mut psiso_marker)?;
-                if &psiso_marker == b"PSISOIMG0000" {
-                    listed_psiso_offsets.insert(position);
-                }
-            }
             let file = staging_dir.join("PSTITLEIMG.DAT");
             fs::write(&file, title)?;
             reporter.add(1024);
@@ -198,7 +171,9 @@ impl Pbp {
             let mut magic = [0u8; 12];
             source.read_exact(&mut magic)?;
             if &magic == b"PSISOIMG0000"
-                && (listed_psiso_offsets.is_empty() || listed_psiso_offsets.contains(&offset))
+                && title_directory
+                    .as_ref()
+                    .is_none_or(|(_, allowed)| allowed.contains(&offset))
             {
                 let (image, cue, toc, iso, audio_tracks) = self.extract_disc(
                     &mut source,
@@ -255,6 +230,10 @@ impl Pbp {
             .saturating_add(PBP_HEADER_SIZE as u64);
         let mut source = File::open(&self.path)?;
         let mut offset = self.sections[7] as u64;
+        let title_directory = read_psar_title_directory(&mut source, offset, self.file_size)?;
+        if title_directory.is_some() {
+            work = work.saturating_add(1024);
+        }
         while offset + 16 <= self.file_size {
             if cancelled.load(Ordering::Relaxed) {
                 return Err(PbpError::Cancelled);
@@ -262,7 +241,11 @@ impl Pbp {
             source.seek(SeekFrom::Start(offset))?;
             let mut magic = [0u8; 16];
             source.read_exact(&mut magic)?;
-            if &magic[..12] == b"PSISOIMG0000" {
+            if &magic[..12] == b"PSISOIMG0000"
+                && title_directory
+                    .as_ref()
+                    .is_none_or(|(_, allowed)| allowed.contains(&offset))
+            {
                 let extent = u32::from_le_bytes(magic[12..16].try_into().unwrap()) as u64;
                 if extent < PSISO_HEADER_SIZE
                     || offset
@@ -471,6 +454,49 @@ impl Pbp {
         }
         Ok((image, cue, toc, iso, audio_paths))
     }
+}
+
+fn read_psar_title_directory(
+    source: &mut File,
+    psar: u64,
+    file_size: u64,
+) -> Result<Option<([u8; 1024], HashSet<u64>)>, PbpError> {
+    if psar >= file_size {
+        return Ok(None);
+    }
+    if psar.checked_add(16).is_none_or(|end| end > file_size) {
+        return Err(PbpError::Invalid("PSAR marker is truncated".into()));
+    }
+    source.seek(SeekFrom::Start(psar))?;
+    let mut marker = [0u8; 16];
+    source.read_exact(&mut marker)?;
+    if &marker != b"PSTITLEIMG000000" {
+        return Ok(None);
+    }
+
+    let mut title = [0u8; 1024];
+    source.seek(SeekFrom::Start(psar))?;
+    source.read_exact(&mut title)?;
+    let mut allowed = HashSet::new();
+    for entry in title[0x200..0x280].chunks_exact(4) {
+        let relative = u32::from_le_bytes(entry.try_into().unwrap()) as u64;
+        if relative == 0 {
+            break;
+        }
+        let Some(position) = psar.checked_add(relative) else {
+            continue;
+        };
+        if position.checked_add(12).is_none_or(|end| end > file_size) {
+            continue;
+        }
+        source.seek(SeekFrom::Start(position))?;
+        let mut psiso_marker = [0u8; 12];
+        source.read_exact(&mut psiso_marker)?;
+        if &psiso_marker == b"PSISOIMG0000" {
+            allowed.insert(position);
+        }
+    }
+    Ok(Some((title, allowed)))
 }
 
 struct ExtractionStage {
