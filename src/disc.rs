@@ -887,7 +887,11 @@ fn cue_time_to_frames(value: &str) -> Option<u64> {
     if parts.next().is_some() || seconds >= 60 || frames >= 75 {
         return None;
     }
-    Some((minutes * 60 + seconds) * 75 + frames)
+    minutes
+        .checked_mul(60)?
+        .checked_add(seconds)?
+        .checked_mul(75)?
+        .checked_add(frames)
 }
 
 pub fn game_id_from_system_cnf(system_cnf: &[u8], known_ids: &[String]) -> Option<String> {
