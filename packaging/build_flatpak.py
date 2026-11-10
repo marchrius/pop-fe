@@ -166,7 +166,7 @@ def main():
         raise RuntimeError('xdelta3 is required to package automatic Xdelta compatibility fixes')
     xdelta = Path(xdelta)
     arch = host_architecture()
-    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
+    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(arch, offline=args.offline)
     deno, deno_license = ensure_deno_bundle(arch, offline=args.offline)
 
     runtime_ref = f'{RUNTIME}//{RUNTIME_VERSION}'

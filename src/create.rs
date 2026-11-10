@@ -1306,11 +1306,6 @@ fn expose_bundled_tools(command: &mut Command, executable: &std::path::Path) {
 }
 
 pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
-    if let Some(path) = std::env::var_os("POPFE_YT_DLP").map(PathBuf::from)
-        && path.is_file()
-    {
-        return Some(path);
-    }
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
@@ -1319,7 +1314,9 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
             return Some(bundled);
         }
     }
-    None
+    std::env::var_os("POPFE_YT_DLP")
+        .map(PathBuf::from)
+        .filter(|path| path.is_file())
 }
 
 #[cfg(feature = "gui")]

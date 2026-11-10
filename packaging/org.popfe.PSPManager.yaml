@@ -29,11 +29,33 @@ modules:
       - type: file
         path: ../atracdenc/src/atracdenc
       - type: file
-        path: ../target/package-tools/yt-dlp/2026.10.26/yt-dlp
+        path: ../target/package-tools/yt-dlp/2026.10.26/x86_64/yt-dlp
+        only-arches:
+          - x86_64
       - type: file
-        path: ../target/package-tools/yt-dlp/2026.10.26/LICENSE
+        path: ../target/package-tools/yt-dlp/2026.10.26/aarch64/yt-dlp
+        only-arches:
+          - aarch64
       - type: file
-        path: ../target/package-tools/yt-dlp/2026.10.26/THIRD_PARTY_LICENSES.txt
+        path: ../target/package-tools/yt-dlp/2026.10.26/x86_64/LICENSE
+        dest-filename: LICENSE
+        only-arches:
+          - x86_64
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/aarch64/LICENSE
+        dest-filename: LICENSE
+        only-arches:
+          - aarch64
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/x86_64/THIRD_PARTY_LICENSES.txt
+        dest-filename: THIRD_PARTY_LICENSES.txt
+        only-arches:
+          - x86_64
+      - type: file
+        path: ../target/package-tools/yt-dlp/2026.10.26/aarch64/THIRD_PARTY_LICENSES.txt
+        dest-filename: THIRD_PARTY_LICENSES.txt
+        only-arches:
+          - aarch64
       - type: file
         path: ../target/package-tools/deno/2.9.8/x86_64/deno
         dest-filename: deno

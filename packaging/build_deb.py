@@ -47,7 +47,7 @@ def main():
     if not binary.is_file():
         parser.error('Cargo did not produce target/release/pop-fe-psp')
     arch = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
-    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(offline=args.offline)
+    yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(arch, offline=args.offline)
     deno, deno_license = ensure_deno_bundle(arch, offline=args.offline)
     output = ROOT / 'dist'
     output.mkdir(exist_ok=True)
@@ -81,7 +81,7 @@ def main():
         control.parent.mkdir()
         depends = [
             'libc6', 'libstdc++6', 'libsndfile1', 'xdelta3', 'mame-tools',
-            'poppler-utils', 'ffmpeg', '7zip', 'python3 (>= 3.11)',
+            'poppler-utils', 'ffmpeg', '7zip',
             'libssl3 | libssl3t64',
             'libgtk-4-1 (>= 4.10.0)', 'libadwaita-1-0 (>= 1.5.0)',
             'libgdk-pixbuf-2.0-0',
