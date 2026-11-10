@@ -273,6 +273,22 @@ impl CueSheet {
                     track.path.display()
                 )));
             }
+            if track.index00.is_some_and(|index| index > track.index01) {
+                return Err(DiscError::Cue(format!(
+                    "track {} INDEX 00 is after INDEX 01",
+                    track.number
+                )));
+            }
+            let image_size = track.path.metadata()?.len();
+            let sector_count = image_size / track.mode.sector_size();
+            if track.index01 >= sector_count
+                || track.index00.is_some_and(|index| index >= sector_count)
+            {
+                return Err(DiscError::Cue(format!(
+                    "track {} index lies beyond the image file",
+                    track.number
+                )));
+            }
         }
         Ok(Self { tracks })
     }
@@ -371,6 +387,7 @@ impl CueSheet {
         }
         if tracks.iter().any(|track| {
             track.index01 >= image_size / 2352
+                || track.index00.is_some_and(|index| index > track.index01)
                 || track
                     .index00
                     .is_some_and(|index| index >= image_size / 2352)

@@ -686,16 +686,27 @@ fn normalize_image(
     }
     let mut source = File::open(&track.path)?;
     let sector_size = track.mode.sector_size();
-    let start = track.index01.saturating_mul(sector_size);
-    let end = sheet
+    let start = track
+        .index01
+        .checked_mul(sector_size)
+        .ok_or_else(|| CreateError::Invalid("CUE data track offset overflow".into()))?;
+    let next_track = sheet
         .tracks
         .iter()
         .skip_while(|next| next.number != track.number)
         .skip(1)
-        .find(|next| next.path == track.path)
-        .map(|next| next.index00.unwrap_or(next.index01) * next.mode.sector_size())
-        .unwrap_or(source.metadata()?.len());
-    let length = end.saturating_sub(start);
+        .find(|next| next.path == track.path);
+    let end = if let Some(next) = next_track {
+        next.index00
+            .unwrap_or(next.index01)
+            .checked_mul(next.mode.sector_size())
+            .ok_or_else(|| CreateError::Invalid("CUE next track offset overflow".into()))?
+    } else {
+        source.metadata()?.len()
+    };
+    let length = end
+        .checked_sub(start)
+        .ok_or_else(|| CreateError::Invalid("CUE data track indexes are out of order".into()))?;
     source.seek(SeekFrom::Start(start))?;
     match track.mode {
         TrackMode::Mode1_2048 => {
@@ -992,18 +1003,25 @@ fn prepare_audio_tracks(
             .checked_mul(sector_size)
             .ok_or_else(|| CreateError::Invalid("CUE audio offset overflow".into()))?;
         let source = File::open(&track.path)?;
-        let end = sheet
+        let next_track = sheet
             .tracks
             .iter()
             .skip(index + 1)
-            .find(|next| next.path == track.path)
-            .map(|next| {
-                next.index00
-                    .unwrap_or(next.index01)
-                    .saturating_mul(next.mode.sector_size())
-            })
-            .unwrap_or(source.metadata()?.len());
-        let length = end.saturating_sub(start);
+            .find(|next| next.path == track.path);
+        let end = if let Some(next) = next_track {
+            next.index00
+                .unwrap_or(next.index01)
+                .checked_mul(next.mode.sector_size())
+                .ok_or_else(|| CreateError::Invalid("CUE next audio offset overflow".into()))?
+        } else {
+            source.metadata()?.len()
+        };
+        let length = end.checked_sub(start).ok_or_else(|| {
+            CreateError::Invalid(format!(
+                "CUE audio track {} indexes are out of order",
+                track.number
+            ))
+        })?;
         let length = length - length % 2352;
         if length == 0 {
             return Err(CreateError::Invalid(format!(
