@@ -399,7 +399,11 @@ impl CueSheet {
             .first()
             .ok_or_else(|| DiscError::Cue("no tracks found".into()))?;
         let mut file = File::open(&track.path)?;
-        let offset = track.index01 * track.mode.sector_size();
+        let sector_size = track.mode.sector_size();
+        let offset = track
+            .index01
+            .checked_mul(sector_size)
+            .ok_or_else(|| DiscError::Cue("first track offset overflows the image".into()))?;
         file.seek(SeekFrom::Start(offset))?;
         let file_end = file.metadata()?.len();
         let end_sector = self
@@ -409,9 +413,20 @@ impl CueSheet {
             .find(|next| next.path == track.path)
             .map(|next| next.index01)
             .unwrap_or_else(|| file_end / track.mode.sector_size());
-        let byte_count = end_sector
-            .saturating_sub(track.index01)
-            .saturating_mul(track.mode.sector_size());
+        let sectors = end_sector
+            .checked_sub(track.index01)
+            .ok_or_else(|| DiscError::Cue("first track indexes are out of order".into()))?;
+        let byte_count = sectors
+            .checked_mul(sector_size)
+            .ok_or_else(|| DiscError::Cue("first track length overflows the image".into()))?;
+        if offset
+            .checked_add(byte_count)
+            .is_none_or(|end| end > file_end)
+        {
+            return Err(DiscError::Cue(
+                "first track indexes extend beyond the image file".into(),
+            ));
+        }
         let mut digest = Md5::new();
         let mut buffer = [0u8; 1024 * 1024];
         let mut remaining = byte_count;
@@ -422,7 +437,9 @@ impl CueSheet {
             let read_length = buffer.len().min(remaining as usize);
             let count = file.read(&mut buffer[..read_length])?;
             if count == 0 {
-                break;
+                return Err(DiscError::Cue(
+                    "first track ended before its declared CUE indexes".into(),
+                ));
             }
             digest.update(&buffer[..count]);
             remaining -= count as u64;
@@ -849,7 +866,10 @@ fn read_iso_extent(
     let mut data = Vec::with_capacity(size);
     let sectors = size.div_ceil(2048);
     for sector in 0..sectors {
-        let bytes = read_user_sector(file, track, lba + sector as u64)?;
+        let sector_lba = lba
+            .checked_add(sector as u64)
+            .ok_or_else(|| DiscError::Cue("ISO extent sector overflows the image".into()))?;
+        let bytes = read_user_sector(file, track, sector_lba)?;
         let remaining = size - data.len();
         data.extend_from_slice(&bytes[..bytes.len().min(remaining)]);
     }
@@ -857,8 +877,14 @@ fn read_iso_extent(
 }
 
 fn read_user_sector(file: &mut File, track: &Track, lba: u64) -> Result<Vec<u8>, DiscError> {
-    let physical_sector = track.index01 + lba;
-    let offset = physical_sector * track.mode.sector_size() + track.mode.data_offset() as u64;
+    let physical_sector = track
+        .index01
+        .checked_add(lba)
+        .ok_or_else(|| DiscError::Cue("sector index overflows the image".into()))?;
+    let offset = physical_sector
+        .checked_mul(track.mode.sector_size())
+        .and_then(|offset| offset.checked_add(track.mode.data_offset() as u64))
+        .ok_or_else(|| DiscError::Cue("sector offset overflows the image".into()))?;
     file.seek(SeekFrom::Start(offset))?;
     let mut sector = vec![0u8; 2048];
     file.read_exact(&mut sector)?;
