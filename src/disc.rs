@@ -314,6 +314,18 @@ impl CueSheet {
                             line_number + 1
                         ))
                     })?;
+                    if !(1..=99).contains(&number) {
+                        return Err(DiscError::Cue(format!(
+                            "CCD track number must be between 1 and 99 at line {}",
+                            line_number + 1
+                        )));
+                    }
+                    if parsed.contains_key(&number) {
+                        return Err(DiscError::Cue(format!(
+                            "duplicate CCD track {number} at line {}",
+                            line_number + 1
+                        )));
+                    }
                     parsed.insert(
                         number,
                         Track {
@@ -370,6 +382,15 @@ impl CueSheet {
         let tracks: Vec<Track> = parsed.into_values().collect();
         if tracks.is_empty() {
             return Err(DiscError::Cue("CCD contains no tracks".into()));
+        }
+        if tracks
+            .iter()
+            .enumerate()
+            .any(|(index, track)| track.number as usize != index + 1)
+        {
+            return Err(DiscError::Cue(
+                "CCD track numbers must be consecutive starting at 1".into(),
+            ));
         }
         if tracks
             .iter()
