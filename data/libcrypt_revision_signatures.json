@@ -13,6 +13,13 @@
     "new_byte": 63,
     "new_patch": "libcrypt-upstream/SCES_024.31_BETA_11_11_1999.PPF"
   },
+  "SCES02835": {
+    "offset": 37831,
+    "old_byte": 9,
+    "old_patch": "libcrypt-upstream/SCES_028.35_REV_0.PPF",
+    "new_byte": 10,
+    "new_patch": "libcrypt-upstream/SCES_028.35_REV_1.PPF"
+  },
   "SLES02396": {
     "offset": 171816,
     "old_byte": 83,
@@ -26,5 +33,19 @@
     "old_patch": null,
     "new_byte": 241,
     "new_patch": "libcrypt-upstream/SLES_024.02.PPF"
+  },
+  "SLES02975": {
+    "offset": 561398904,
+    "old_byte": 129,
+    "old_patch": "libcrypt-upstream/SLES_029.75.PPF",
+    "new_byte": 163,
+    "new_patch": "libcrypt-upstream/SLES_029.75_BETA_2_26_2001.PPF"
+  },
+  "SLES11879": {
+    "offset": 37736,
+    "old_byte": 248,
+    "old_patch": "libcrypt-upstream/SLES_X18.79.PPF",
+    "new_byte": 247,
+    "new_patch": null
   }
 }

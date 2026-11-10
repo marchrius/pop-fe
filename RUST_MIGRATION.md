@@ -101,7 +101,7 @@ Il crate non è ancora un sostituto completo:
 La conversione standard ricodifica le tracce audio in ATRAC3; la modalità CDDA
 esplicita conserva invece l'audio raw e imposta i flag POPS. Il
 database descrive 230 ID LibCrypt: ora tutti hanno una patch automatica inclusa
-oppure una revisione identificata che non richiede patch. Per le quattro
+oppure una revisione identificata che non richiede patch. Per le sette
 famiglie con firme upstream il backend Rust riconosce le revisioni senza
 dipendere da `lcp`; per le revisioni ancora sconosciute può usare `lcp` se
 disponibile nel PATH o in `POPFE_LCP`, altrimenti non applica una patch
