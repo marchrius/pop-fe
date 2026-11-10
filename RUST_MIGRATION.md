@@ -52,7 +52,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
    PIC1 e ICON0 quando gli URL sono disponibili; PIC0 rispetta anche scala e
    offset definiti per gioco nel database, modificabili dalla GUI con anteprima
-   aggiornata in tempo reale. Per SND0 usa l'audio del tema quando
+   aggiornata in tempo reale; il PIC0 a 1000×560 è quello effettivamente incluso
+   nel PBP. Per SND0 usa l'audio del tema quando
    disponibile, altrimenti il cache upstream dei file ATRAC3 già pronti; l'audio
    viene limitato ai vincoli PSP; se YouTube risponde HTTP 403, il download
    riprova automaticamente tramite IPv4. Le anteprime artwork vengono mostrate nella

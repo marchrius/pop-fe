@@ -193,10 +193,10 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
     };
     let directory = cache_directory().join("assets");
     let pic1 = cached_image_path(&directory, game_id, "pic1", (480, 272));
-    let pic0_path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
+    let pic0_path = directory.join(format!("{}-pic0-layout-v3.png", safe_id(game_id)));
     let pic0 = Pixbuf::from_file(&pic0_path)
         .ok()
-        .filter(|image| image.width() == 310 && image.height() == 180)
+        .filter(|image| image.width() == 1000 && image.height() == 560)
         .map(|_| pic0_path);
     let pic0_source = directory
         .join(format!("{}-pic0-source.png", safe_id(game_id)))
@@ -258,7 +258,7 @@ pub fn load_theme_assets_cancellable(
     let mut result = base.clone();
     for (key, file, size) in [
         ("icon0", "ICON0.PNG", (80, 80)),
-        ("pic0", "PIC0.PNG", (310, 180)),
+        ("pic0-v3", "PIC0.PNG", (1000, 560)),
         ("pic1", "PIC1.PNG", (480, 272)),
     ] {
         let lowercase = file.to_ascii_lowercase();
@@ -285,7 +285,7 @@ pub fn load_theme_assets_cancellable(
         }
         if let Some(path) = loaded {
             match key {
-                "pic0" => result.pic0 = Some(path),
+                "pic0-v3" => result.pic0 = Some(path),
                 "pic1" => result.pic1 = Some(path),
                 "icon0" => result.icon0 = Some(path),
                 _ => {}
@@ -315,14 +315,14 @@ pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -
     let directory = cache_directory().join("themes");
     for (key, size) in [
         ("icon0", (80, 80)),
-        ("pic0", (310, 180)),
+        ("pic0-v3", (1000, 560)),
         ("pic1", (480, 272)),
     ] {
         if let Some(path) = cached_image_path(&directory, &format!("{game_id}-{theme}"), key, size)
         {
             match key {
                 "icon0" => result.icon0 = Some(path),
-                "pic0" => result.pic0 = Some(path),
+                "pic0-v3" => result.pic0 = Some(path),
                 "pic1" => result.pic1 = Some(path),
                 _ => {}
             }
@@ -382,7 +382,7 @@ fn valid_wave_file(path: &Path) -> bool {
 }
 
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    let directory = cache_directory().join("themes").join("generated-v3");
+    let directory = cache_directory().join("themes").join("generated-v4");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
     }
@@ -413,8 +413,9 @@ fn render_theme_pic0(
     title: &str,
     theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let surface = ImageSurface::create(Format::ARgb32, 250, 140)?;
+    let surface = ImageSurface::create(Format::ARgb32, 1000, 560)?;
     let context = Context::new(&surface)?;
+    context.scale(4.0, 4.0);
     context.set_operator(cairo::Operator::Source);
     context.set_source_rgba(0.0, 0.0, 0.0, 0.0);
     context.paint()?;
@@ -460,15 +461,9 @@ fn render_theme_pic0(
     context.set_source_rgb(r, g, b);
     draw_text("##############################", origin, y)?;
 
-    let mut source_png = Vec::new();
-    surface.write_to_png(&mut source_png)?;
-    let enlarged = Pixbuf::from_read(Cursor::new(source_png))?
-        .scale_simple(1000, 560, InterpType::Nearest)
-        .ok_or("could not enlarge procedural theme PIC0")?;
-    let normalized = enlarged
-        .scale_simple(310, 180, InterpType::Hyper)
-        .ok_or("could not normalize procedural theme PIC0")?;
-    fs::write(path, normalized.save_to_bufferv("png", &[])?)?;
+    let mut png = Vec::new();
+    surface.write_to_png(&mut png)?;
+    fs::write(path, png)?;
     Ok(())
 }
 
@@ -653,7 +648,7 @@ fn cached_pic0(
     if is_cancelled(cancelled) {
         return None;
     }
-    let path = directory.join(format!("{}-pic0-layout-v2.png", safe_id(game_id)));
+    let path = directory.join(format!("{}-pic0-layout-v3.png", safe_id(game_id)));
     let source_path = directory.join(format!("{}-pic0-source.png", safe_id(game_id)));
     if source_path.is_file() {
         if path.is_file() {
@@ -768,8 +763,7 @@ fn render_pic0_pixbuf(
         InterpType::Hyper,
         255,
     );
-    let resized = canvas.scale_simple(310, 180, InterpType::Hyper)?;
-    let encoded = resized.save_to_bufferv("png", &[]).ok()?;
+    let encoded = canvas.save_to_bufferv("png", &[]).ok()?;
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, encoded).ok()?;
     fs::rename(temporary, &path).ok()?;
