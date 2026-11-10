@@ -311,7 +311,9 @@ impl Pbp {
         let cue = output.join(format!("PSISO{disc}.cue"));
         let toc = output.join(format!("PSISO{disc}.toc"));
         let mut toc_data = [0u8; 1020];
-        source.seek(SeekFrom::Start(base + PSISO_HEADER_SIZE + 0x800))?;
+        // The TOC lives in the PSISO header at offset 0x800. The 0x100000
+        // payload boundary is only for compressed disc sectors and audio.
+        source.seek(SeekFrom::Start(base + 0x800))?;
         source.read_exact(&mut toc_data)?;
         fs::write(&toc, toc_data)?;
         reporter.add(toc_data.len() as u64);
