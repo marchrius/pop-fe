@@ -1,6 +1,7 @@
 //! Native PBP and PSISOIMG writer for normalized PlayStation disc images.
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
@@ -53,6 +54,8 @@ pub struct PbpCreateConfig {
     pub title: String,
     pub manual_source: Option<String>,
     pub assets: PbpAssets,
+    /// Optional Netscape-format cookies file used for YouTube SND0 downloads.
+    pub youtube_cookies: Option<PathBuf>,
     pub include_title_image: bool,
     pub use_cdda: bool,
     pub disable_libcrypt_patching: bool,
@@ -453,7 +456,12 @@ pub fn create_from_image_with_progress_and_warnings(
         });
     }
     let snd0 = match config.assets.snd0.as_deref() {
-        Some(path) => prepare_snd0(path, cancelled, |fraction| progress(0.74 + 0.06 * fraction))?,
+        Some(path) => prepare_snd0(
+            path,
+            config.youtube_cookies.as_deref(),
+            cancelled,
+            |fraction| progress(0.74 + 0.06 * fraction),
+        )?,
         None => Vec::new(),
     };
     assets.push(snd0);
@@ -1129,6 +1137,7 @@ fn atracdenc_path() -> Option<PathBuf> {
 
 fn prepare_snd0(
     source: &std::path::Path,
+    youtube_cookies: Option<&Path>,
     cancelled: &AtomicBool,
     progress: impl Fn(f64),
 ) -> Result<Vec<u8>, CreateError> {
@@ -1139,6 +1148,11 @@ fn prepare_snd0(
     let source = if source.to_str().is_some_and(|value| {
         value.starts_with("https://www.youtube.com/") || value.starts_with("https://youtu.be/")
     }) {
+        if youtube_cookies.is_some_and(|path| !path.is_file()) {
+            return Err(CreateError::Invalid(
+                "YouTube cookies file does not exist".into(),
+            ));
+        }
         let target = TempFile::new_ext("snd0-download", "wav")?;
         fs::remove_file(&target.path)?;
         let output = target.path.with_extension("");
@@ -1157,6 +1171,9 @@ fn prepare_snd0(
             if force_ipv4 {
                 command.arg("--force-ipv4").arg("--force-overwrites");
             }
+            if let Some(cookies) = youtube_cookies {
+                command.arg("--cookies").arg(cookies);
+            }
             command
                 .args(["-f", "bestaudio", "-x", "--audio-format", "wav", "-o"])
                 .arg(&output)
@@ -1167,7 +1184,20 @@ fn prepare_snd0(
             Ok(()) => {}
             Err(error) if error.to_string().contains("HTTP Error 403: Forbidden") => {
                 let mut command = make_command(true);
-                run_cancellable(&mut command, cancelled, "YouTube SND0 IPv4 retry")?;
+                if let Err(retry_error) =
+                    run_cancellable(&mut command, cancelled, "YouTube SND0 IPv4 retry")
+                {
+                    if retry_error
+                        .to_string()
+                        .contains("HTTP Error 403: Forbidden")
+                        && youtube_cookies.is_none()
+                    {
+                        return Err(CreateError::Invalid(format!(
+                            "YouTube denied the download (HTTP 403). Select a Netscape-format cookies.txt file in the SND0 options and try again. {retry_error}"
+                        )));
+                    }
+                    return Err(retry_error);
+                }
             }
             Err(error) => return Err(error),
         }
@@ -1292,21 +1322,31 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
 }
 
 #[cfg(feature = "gui")]
-pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Result<String, String> {
+pub(crate) fn search_youtube_audio(
+    title: &str,
+    cookies: Option<&Path>,
+    cancelled: &AtomicBool,
+) -> Result<String, String> {
     let executable = yt_dlp_executable()
         .ok_or_else(|| crate::i18n::tr("yt-dlp is required to search YouTube"))?;
+    if cookies.is_some_and(|path| !path.is_file()) {
+        return Err(crate::i18n::tr("YouTube cookies file does not exist"));
+    }
     let mut command = Command::new(&executable);
     expose_bundled_tools(&mut command, &executable);
+    command.args([
+        "--quiet",
+        "--no-warnings",
+        "--js-runtimes",
+        "deno",
+        "--flat-playlist",
+        "--print",
+        "id",
+    ]);
+    if let Some(cookies) = cookies {
+        command.arg("--cookies").arg(cookies);
+    }
     command
-        .args([
-            "--quiet",
-            "--no-warnings",
-            "--js-runtimes",
-            "deno",
-            "--flat-playlist",
-            "--print",
-            "id",
-        ])
         .arg(format!("ytsearch1:{title} ps1 ost"))
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -1360,6 +1400,11 @@ pub(crate) fn search_youtube_audio(title: &str, cancelled: &AtomicBool) -> Resul
         .trim()
         .to_owned();
     if !status.success() {
+        if error.contains("HTTP Error 403: Forbidden") && cookies.is_none() {
+            return Err(crate::i18n::tr(
+                "YouTube search was denied (HTTP 403). Select a cookies.txt file in the SND0 options and try again.",
+            ));
+        }
         return Err(if error.is_empty() {
             format!("yt-dlp search failed with {status}")
         } else {

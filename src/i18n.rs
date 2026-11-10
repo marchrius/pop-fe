@@ -101,6 +101,10 @@ pub fn localize_error(message: &str) -> String {
             return format!("{}{}", tr(translation_key), localize_error(detail));
         }
     }
+    const YOUTUBE_403: &str = "YouTube denied the download (HTTP 403). Select a Netscape-format cookies.txt file in the SND0 options and try again. ";
+    if let Some(detail) = message.strip_prefix(YOUTUBE_403) {
+        return format!("{}{}", tr(YOUTUBE_403), localize_error(detail));
+    }
     if let Some(index) = message
         .strip_prefix("section ")
         .and_then(|value| value.strip_suffix(" is out of bounds"))

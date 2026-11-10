@@ -313,5 +313,11 @@
   "too many disc images": "too many disc images",
   "CUE audio track {track} is empty": "CUE audio track {track} is empty",
   "atracdenc failed on audio track {track}: {detail}": "atracdenc failed on audio track {track}: {detail}",
-  "atracdenc produced an empty track {track}": "atracdenc produced an empty track {track}"
+  "atracdenc produced an empty track {track}": "atracdenc produced an empty track {track}",
+  "Optional YouTube cookies.txt": "Optional YouTube cookies.txt",
+  "YouTube cookies (optional)": "YouTube cookies (optional)",
+  "Select YouTube cookies file": "Select YouTube cookies file",
+  "YouTube cookies file does not exist": "YouTube cookies file does not exist",
+  "YouTube denied the download (HTTP 403). Select a Netscape-format cookies.txt file in the SND0 options and try again. ": "YouTube denied the download (HTTP 403). Select a Netscape-format cookies.txt file in the SND0 options and try again. ",
+  "YouTube search was denied (HTTP 403). Select a cookies.txt file in the SND0 options and try again.": "YouTube search was denied (HTTP 403). Select a cookies.txt file in the SND0 options and try again."
 }

@@ -18,6 +18,7 @@ pub struct ConversionPreferences {
     pub psx_undither: bool,
     pub disable_asset_downloads: bool,
     pub disable_snd0: bool,
+    pub youtube_cookies: String,
     pub ntsc_u_icon0: bool,
     pub theme: u32,
     pub psp_root: String,

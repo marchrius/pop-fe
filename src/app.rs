@@ -36,6 +36,7 @@ struct DiscFields {
     psx_undither: gtk::CheckButton,
     disable_asset_downloads: gtk::CheckButton,
     disable_snd0: gtk::CheckButton,
+    youtube_cookies: gtk::Entry,
     ntsc_u_icon0: gtk::CheckButton,
     status: gtk::Label,
     log: gtk::TextBuffer,
@@ -396,6 +397,10 @@ fn convert_page(
         psx_undither: gtk::CheckButton::with_label(&tr("PSX-undither")),
         disable_asset_downloads: gtk::CheckButton::with_label(&tr("Disable Asset Downloads")),
         disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
+        youtube_cookies: gtk::Entry::builder()
+            .hexpand(true)
+            .placeholder_text(&tr("Optional YouTube cookies.txt"))
+            .build(),
         ntsc_u_icon0: gtk::CheckButton::with_label(&tr("NTSC-U style ICON0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
         log,
@@ -447,6 +452,9 @@ fn convert_page(
         .disable_snd0
         .set_active(saved_preferences.disable_snd0);
     fields
+        .youtube_cookies
+        .set_text(&saved_preferences.youtube_cookies);
+    fields
         .ntsc_u_icon0
         .set_active(saved_preferences.ntsc_u_icon0);
     fields
@@ -477,6 +485,11 @@ fn convert_page(
     let fields_for_root = fields.clone();
     fields.psp_root.connect_changed(move |_| {
         store_conversion_preferences(&preferences_for_root, &fields_for_root);
+    });
+    let preferences_for_cookies = conversion_preferences.clone();
+    let fields_for_cookies = fields.clone();
+    fields.youtube_cookies.connect_changed(move |_| {
+        store_conversion_preferences(&preferences_for_cookies, &fields_for_cookies);
     });
     let fields_for_download_toggle = fields.clone();
     let files_for_download_toggle = files.clone();
@@ -767,6 +780,7 @@ fn convert_page(
                 row.append(&search);
                 let entry_for_search = entry.clone();
                 let title_for_search = fields.title.clone();
+                let fields_for_search = fields.clone();
                 let status_for_search = fields.status.clone();
                 let busy_for_search = operation_busy.clone();
                 let cancel_state_for_search = cancel_state.clone();
@@ -776,6 +790,8 @@ fn convert_page(
                         return;
                     }
                     let title = title_for_search.text().to_string();
+                    let cookies_text = fields_for_search.youtube_cookies.text().to_string();
+                    let cookies = (!cookies_text.is_empty()).then(|| PathBuf::from(cookies_text));
                     if title.is_empty() {
                         status_for_search.set_text(&tr("Load a disc before searching for audio"));
                         return;
@@ -787,7 +803,11 @@ fn convert_page(
                     *cancel_state_for_search.borrow_mut() = Some(cancellation.clone());
                     let (sender, receiver) = mpsc::channel();
                     thread::spawn(move || {
-                        let result = crate::create::search_youtube_audio(&title, &cancellation);
+                        let result = crate::create::search_youtube_audio(
+                            &title,
+                            cookies.as_deref(),
+                            &cancellation,
+                        );
                         let _ = sender.send(result);
                     });
                     let entry = entry_for_search.clone();
@@ -873,6 +893,44 @@ fn convert_page(
             );
         });
     }
+    let cookies_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(12)
+        .build();
+    let cookies_label = gtk::Label::new(Some(&tr("YouTube cookies (optional)")));
+    cookies_label.set_xalign(0.0);
+    cookies_label.set_width_chars(22);
+    cookies_row.append(&cookies_label);
+    cookies_row.append(&fields.youtube_cookies);
+    let cookies_browse = gtk::Button::with_label(&tr("Browse…"));
+    cookies_row.append(&cookies_browse);
+    artwork_body.append(&cookies_row);
+    let parent_for_cookies = parent.clone();
+    let cookies_entry = fields.youtube_cookies.clone();
+    let cookies_history = folder_history.clone();
+    cookies_browse.connect_clicked(move |_| {
+        let dialog = gtk::FileDialog::builder()
+            .title(&tr("Select YouTube cookies file"))
+            .build();
+        dialog.set_initial_folder(Some(&gio::File::for_path(
+            cookies_history.borrow().current(),
+        )));
+        let entry = cookies_entry.clone();
+        let history = cookies_history.clone();
+        dialog.open(
+            Some(&parent_for_cookies),
+            None::<&gio::Cancellable>,
+            move |result| {
+                if let Ok(file) = result
+                    && let Some(path) = file.path()
+                {
+                    history.borrow_mut().remember_file(&path);
+                    entry.set_text(&path.to_string_lossy());
+                }
+            },
+        );
+    });
+
     let manual_row = gtk::Box::builder()
         .orientation(gtk::Orientation::Horizontal)
         .spacing(12)
@@ -1182,6 +1240,10 @@ fn convert_page(
             title,
             manual_source,
             assets,
+            youtube_cookies: {
+                let value = fields_for_create.youtube_cookies.text().to_string();
+                (!value.is_empty()).then(|| PathBuf::from(value))
+            },
             include_title_image: !fields_for_create.disable_title_image.is_active(),
             use_cdda: fields_for_create.cdda.is_active(),
             disable_libcrypt_patching: fields_for_create.disable_libcrypt_patching.is_active(),
@@ -1381,6 +1443,7 @@ fn store_conversion_preferences(
     preferences.psx_undither = fields.psx_undither.is_active();
     preferences.disable_asset_downloads = fields.disable_asset_downloads.is_active();
     preferences.disable_snd0 = fields.disable_snd0.is_active();
+    preferences.youtube_cookies = fields.youtube_cookies.text().to_string();
     preferences.ntsc_u_icon0 = fields.ntsc_u_icon0.is_active();
     preferences.theme = fields.theme.selected();
     preferences.psp_root = fields.psp_root.text().to_string();

@@ -2,7 +2,7 @@
 
 Entrambi i pacchetti contengono l'applicazione GTK4/libadwaita compilata in Rust, l'encoder ATRAC3, `yt-dlp` e Deno. Non richiedono i pacchetti di sistema `yt-dlp` o `deno`. Le versioni incluse sono verificate con SHA-256. Deno permette a yt-dlp di risolvere le challenge JavaScript di YouTube; il suo runtime zipimport richiede Python 3.11 o successivo, che resta una dipendenza di sistema.
 
-La conversione accetta immagini CUE, CCD, CHD, ISO, BIN e IMG, anche contenute in archivi ZIP.
+La conversione accetta immagini CUE, CCD, CHD, ISO, BIN e IMG, anche contenute in archivi ZIP. Per un errore YouTube HTTP 403, è possibile selezionare nelle opzioni SND0 un file `cookies.txt` in formato Netscape esportato dal browser; l'app lo passa al yt-dlp incluso nel pacchetto.
 
 ## Debian
 
@@ -10,7 +10,7 @@ Servono Rust/Cargo, CMake, un compilatore C/C++, GTK 4.10 o superiore, libadwait
 
 ```sh
 python3 packaging/build_deb.py --offline
-sudo apt install ./dist/pop-fe-psp_0.1.39_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.40_amd64.deb
 ```
 
 Al primo build, esegui il comando senza `--offline` per scaricare e verificare yt-dlp e Deno nelle rispettive cache sotto `target/package-tools/`. In seguito puoi usare `--offline` anche per i build Cargo. Lo script compila `atracdenc` se manca, compila l'app Rust in release e crea il `.deb` in `dist/` senza privilegi di root.
