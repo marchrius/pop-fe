@@ -93,8 +93,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-   GNOME 51 ed è creato da `packaging/build_flatpak.py`. L'avvio della GUI nel
-   sandbox e su PSP resta da verificare.
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. Entrambi i pacchetti
+   includono versioni verificate di yt-dlp e Deno: YouTube non richiede il
+   pacchetto yt-dlp del sistema. L'avvio della GUI nel sandbox e su PSP resta
+   da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
 Il crate non è ancora un sostituto completo:
