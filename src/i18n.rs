@@ -111,6 +111,32 @@ pub fn localize_error(message: &str) -> String {
     {
         return tr("PBP section {index} is out of bounds").replace("{index}", index);
     }
+    if let Some(count) = message.strip_prefix("invalid PS3 manual page count: ") {
+        return tr("Invalid PS3 manual page count: {count}").replace("{count}", count);
+    }
+    if let Some(section) = message.strip_suffix(" SHA-1 mismatch") {
+        let key = match section {
+            "PS3 document header" => "PS3 document header SHA-1 mismatch",
+            "PS3 manual INFO block" => "PS3 manual INFO block SHA-1 mismatch",
+            _ => return tr(message),
+        };
+        return tr(key);
+    }
+    if let Some(error) = message.strip_prefix("cannot read ZIP disc image entry: ") {
+        return tr("Cannot read ZIP disc image entry: {error}").replace("{error}", error);
+    }
+    if let Some(error) = message.strip_prefix("invalid ZIP disc image: ") {
+        return tr("Invalid ZIP disc image: {error}").replace("{error}", error);
+    }
+    if let Some(status) = message.strip_prefix("chdman exited with ") {
+        return tr("chdman exited with {status}").replace("{status}", status);
+    }
+    if let Some(mode) = message.strip_prefix("unsupported CCD track mode ") {
+        return tr("Unsupported CCD track mode: {mode}").replace("{mode}", mode);
+    }
+    if let Some(status) = message.strip_prefix("yt-dlp search failed with ") {
+        return tr("yt-dlp search failed with {status}").replace("{status}", status);
+    }
     if let Some(game_id) = message
         .strip_prefix("LibCrypt patch unavailable for ")
         .and_then(|value| value.strip_suffix("; install lcp to patch this game"))
