@@ -320,7 +320,9 @@ impl Pbp {
                 return Err(PbpError::Cancelled);
             }
             if index_pos + 32 > base + image_size {
-                break;
+                return Err(PbpError::Invalid(
+                    "PSISO sector index table is truncated".into(),
+                ));
             }
             let mut entry = [0u8; 32];
             source.seek(SeekFrom::Start(index_pos))?;
@@ -330,8 +332,15 @@ impl Pbp {
             if offset == 0 && len == 0 {
                 break;
             }
-            if len == 0 || total + SECTOR_SIZE as u64 > MAX_DISC_BYTES {
-                break;
+            if len == 0 {
+                return Err(PbpError::Invalid(
+                    "PSISO sector index has an empty entry".into(),
+                ));
+            }
+            if total + SECTOR_SIZE as u64 > MAX_DISC_BYTES {
+                return Err(PbpError::Invalid(
+                    "PSISO disc exceeds the extraction size limit".into(),
+                ));
             }
             let mut encoded = vec![0u8; len];
             let data_pos = payload
