@@ -50,10 +50,13 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    PSISO assieme alla TOC; l'opzione CDDA conserva invece i settori audio raw e
    imposta i flag POPS corrispondenti.
    Il database fornisce titolo, CDDA e download/cache delle immagini PIC0,
-   PIC1 e ICON0 quando gli URL sono disponibili; PIC0 rispetta anche scala e
-   offset definiti per gioco nel database, modificabili dalla GUI con anteprima
-   aggiornata in tempo reale; il PIC0 a 1000×560 è quello effettivamente incluso
-   nel PBP. Per SND0 usa l'audio del tema quando
+   PIC1 e ICON0 quando gli URL sono disponibili. Sono ripristinati anche il
+   cache upstream per hash, i sidecar accanto all'immagine e i fallback alle
+   copertine/screenshot PSX Data Center quando il database non definisce
+   l'immagine; i campi null espliciti continuano a disabilitare il fallback.
+   PIC0 rispetta anche scala e offset definiti per gioco nel database,
+   modificabili dalla GUI con anteprima aggiornata in tempo reale; il PIC0 a
+   1000×560 è quello effettivamente incluso nel PBP. Per SND0 usa l'audio del tema quando
    disponibile, altrimenti il cache upstream dei file ATRAC3 già pronti; l'audio
    viene limitato ai vincoli PSP; se YouTube risponde HTTP 403, il download
    riprova automaticamente tramite IPv4. Le anteprime artwork vengono mostrate nella
@@ -93,10 +96,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-   GNOME 51 ed è creato da `packaging/build_flatpak.py`. Entrambi i pacchetti
-   includono versioni verificate di yt-dlp e Deno: YouTube non richiede il
-   pacchetto yt-dlp del sistema. L'avvio della GUI nel sandbox e su PSP resta
-   da verificare.
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.51
+   includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
+   runtime da Python, yt-dlp o Deno di sistema. L'avvio della GUI nel sandbox e
+   la compatibilità degli EBOOT su PSP reale restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
 Il crate non è ancora un sostituto completo:
