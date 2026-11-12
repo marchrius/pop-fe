@@ -238,6 +238,11 @@ impl Database {
     }
 
     pub fn psp_patch(&self, id: &str, md5: &str) -> Option<Vec<u8>> {
+        let id = self
+            .games
+            .get(id)
+            .and_then(|record| record.id.as_deref())
+            .unwrap_or(id);
         let record = self.ppf_fixes.get(id)?;
         if record
             .tags
@@ -308,6 +313,11 @@ impl Database {
     }
 
     pub fn psp_xdelta(&self, id: &str, md5: &str) -> Option<Vec<u8>> {
+        let id = self
+            .games
+            .get(id)
+            .and_then(|record| record.id.as_deref())
+            .unwrap_or(id);
         let record = self.ppf_fixes.get(id)?;
         if record
             .tags

@@ -136,6 +136,17 @@ pub fn create_from_image_with_progress_and_warnings(
             .and_then(|value| value.to_str())
             .unwrap_or_default()
             .to_ascii_lowercase();
+        let database = crate::database::Database::embedded();
+        let real_disc_id = match database.analyze_image_cancellable(image_path, cancelled) {
+            Ok(metadata) => metadata.id,
+            Err(crate::disc::DiscError::Cancelled) => return Err(CreateError::Cancelled),
+            Err(_) => "UNKN00000".into(),
+        };
+        let disc_id = if index == 0 {
+            config.game_id.clone()
+        } else {
+            real_disc_id.clone()
+        };
         // Even raw BIN/IMG and ISO inputs need a synthetic single-track CUE:
         // PSISO TOC lead-out values are CD sectors, not 0x9300-byte blocks.
         let cue_sheet = matches!(
@@ -178,14 +189,6 @@ pub fn create_from_image_with_progress_and_warnings(
         if disc_len == 0 {
             return Err(CreateError::Invalid("disc image is empty".into()));
         }
-        let disc_id = if index == 0 {
-            config.game_id.clone()
-        } else {
-            crate::database::Database::embedded()
-                .analyze_image(image_path)
-                .map(|metadata| metadata.id)
-                .unwrap_or_else(|_| "UNKN00000".into())
-        };
         let source_md5 = CueSheet::open_image_cancellable(image_path, cancelled)
             .and_then(|sheet| sheet.first_track_md5_cancellable(cancelled))
             .ok();
@@ -201,21 +204,20 @@ pub fn create_from_image_with_progress_and_warnings(
         let patch = ppf_compatible
             .then_some(source_md5.as_deref())
             .flatten()
-            .and_then(|md5| crate::database::Database::embedded().psp_patch(&disc_id, md5));
+            .and_then(|md5| database.psp_patch(&real_disc_id, md5));
         let xdelta = ppf_compatible
             .then_some(source_md5.as_deref())
             .flatten()
-            .and_then(|md5| crate::database::Database::embedded().psp_xdelta(&disc_id, md5));
-        let database = crate::database::Database::embedded();
+            .and_then(|md5| database.psp_xdelta(&real_disc_id, md5));
         let libcrypt_revision = if config.disable_libcrypt_patching || !ppf_compatible {
             None
         } else {
             let hash_revision = source_md5
                 .as_deref()
-                .and_then(|md5| database.libcrypt_patch_for_hash(&disc_id, md5));
+                .and_then(|md5| database.libcrypt_patch_for_hash(&real_disc_id, md5));
             match hash_revision {
                 Some(revision) => Some(revision),
-                None => database.libcrypt_patch_for_signature(&disc_id, &disc)?,
+                None => database.libcrypt_patch_for_signature(&real_disc_id, &disc)?,
             }
         };
         let libcrypt_patch = if config.disable_libcrypt_patching || !ppf_compatible {
@@ -223,13 +225,13 @@ pub fn create_from_image_with_progress_and_warnings(
         } else {
             match libcrypt_revision.clone() {
                 Some(patch) => patch,
-                None if database.has_libcrypt_revision_data(&disc_id) => None,
-                None => database.libcrypt_patch(&disc_id),
+                None if database.has_libcrypt_revision_data(&real_disc_id) => None,
+                None => database.libcrypt_patch(&real_disc_id),
             }
         };
         let lcp = if config.disable_libcrypt_patching
             || !ppf_compatible
-            || !database.libcrypt.contains_key(&disc_id)
+            || !database.libcrypt.contains_key(&real_disc_id)
             || libcrypt_revision.is_some()
             || libcrypt_patch.is_some()
         {
@@ -239,13 +241,13 @@ pub fn create_from_image_with_progress_and_warnings(
         };
         if !config.disable_libcrypt_patching
             && ppf_compatible
-            && database.libcrypt.contains_key(&disc_id)
+            && database.libcrypt.contains_key(&real_disc_id)
             && libcrypt_revision.is_none()
             && libcrypt_patch.is_none()
             && lcp.is_none()
         {
             warning(format!(
-                "LibCrypt patch unavailable for {disc_id}; install lcp to patch this game"
+                "LibCrypt patch unavailable for {real_disc_id}; install lcp to patch this game"
             ));
         }
         // Match POP-FE's PSP pipeline: compatibility PPF, compatibility
@@ -379,19 +381,25 @@ pub fn create_from_image_with_progress_and_warnings(
         };
         let disc_len = disc.metadata()?.len();
         let psiso = TempFile::new("psiso")?;
-        let database = crate::database::Database::embedded();
         let external_config = image_path.with_extension("pspconfig");
         let sidecar_config = fs::read(&external_config).ok();
-        let embedded_config = database.psp_config(&disc_id);
+        let config_disc_id = if database.games.contains_key(&real_disc_id) {
+            real_disc_id.as_str()
+        } else if database.games.contains_key(&disc_id) {
+            disc_id.as_str()
+        } else {
+            real_disc_id.as_str()
+        };
+        let embedded_config = database.psp_config(config_disc_id);
         if embedded_config.is_none()
             && sidecar_config.is_none()
             && database
                 .games
-                .get(&disc_id)
+                .get(config_disc_id)
                 .is_some_and(|record| record.pspconfig.is_some())
         {
             warning(format!(
-                "PSP compatibility config unavailable for {disc_id}; default settings will be used"
+                "PSP compatibility config unavailable for {config_disc_id}; default settings will be used"
             ));
         }
         let mut psp_config = embedded_config
@@ -421,9 +429,9 @@ pub fn create_from_image_with_progress_and_warnings(
                 psp_config[0x8d] |= 0x80;
             }
         }
-        let magic_word = crate::database::Database::embedded()
+        let magic_word = database
             .libcrypt
-            .get(&disc_id)
+            .get(&real_disc_id)
             .map(|record| record.magic_word);
         write_psiso(
             &disc,
