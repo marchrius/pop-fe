@@ -257,11 +257,7 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
         .join(format!("{}-pic0-source.png", safe_id(game_id)))
         .is_file()
         .then(|| directory.join(format!("{}-pic0-source.png", safe_id(game_id))));
-    let icon0 = cached_image_path(&directory, game_id, "icon0", (80, 80)).or_else(|| {
-        let source = pic1.as_ref()?;
-        let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
-        normalize_cached(source, &destination, (80, 80)).then_some(destination)
-    });
+    let icon0 = cached_image_path(&directory, game_id, "icon0", (80, 80));
     let snd0 = game.snd0.as_deref().and_then(|_| {
         let path = directory.join(format!("{}-snd0.at3", safe_id(game_id)));
         fs::read(&path)
@@ -1230,16 +1226,6 @@ fn valid_snd0(bytes: &[u8]) -> bool {
     let byte_rate = byte_rate as usize;
     let duration_is_valid = byte_rate > 0 && data_length <= byte_rate.saturating_mul(59);
     matches!(format, 0x0270 | 0xfffe) && data_length > 0 && duration_is_valid
-}
-
-fn normalize_cached(source: &Path, destination: &Path, size: (i32, i32)) -> bool {
-    if destination.is_file() {
-        return true;
-    }
-    let Ok(pixbuf) = Pixbuf::from_file(source) else {
-        return false;
-    };
-    save_scaled(&pixbuf, destination, size).is_ok()
 }
 
 fn save_scaled(
