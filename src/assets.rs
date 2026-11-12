@@ -195,7 +195,7 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
             url,
             &directory,
             game_id,
-            "icon0",
+            "icon0-v2",
             (80, 80),
             Some(cancelled),
         )
@@ -210,7 +210,7 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
                 &format!("https://psxdatacenter.com/{path}"),
                 &directory,
                 game_id,
-                "icon0-psx",
+                "icon0-v2",
                 (80, 80),
                 Some(cancelled),
             );
@@ -257,7 +257,7 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
         .join(format!("{}-pic0-source.png", safe_id(game_id)))
         .is_file()
         .then(|| directory.join(format!("{}-pic0-source.png", safe_id(game_id))));
-    let icon0 = cached_image_path(&directory, game_id, "icon0", (80, 80));
+    let icon0 = cached_image_path(&directory, game_id, "icon0-v2", (80, 80));
     let snd0 = game.snd0.as_deref().and_then(|_| {
         let path = directory.join(format!("{}-snd0.at3", safe_id(game_id)));
         fs::read(&path)
