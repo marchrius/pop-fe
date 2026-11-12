@@ -11033,6 +11033,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://www.videogamemanual.com/ps1/Koudelka%20(USA).pdf',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLUS01100': {
         'url': "games/U/K/SLUS-01051.html",
@@ -11044,6 +11045,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://www.videogamemanual.com/ps1/Koudelka%20(USA).pdf',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLUS01101': {
         'url': "games/U/K/SLUS-01051.html",
@@ -11055,6 +11057,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://www.videogamemanual.com/ps1/Koudelka%20(USA).pdf',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLUS01102': {
         'url': "games/U/K/SLUS-01051.html",
@@ -11066,6 +11069,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://www.videogamemanual.com/ps1/Koudelka%20(USA).pdf',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SCUS94303': {
         'url': "games/U/K/SCUS-94303.html",
@@ -26421,6 +26425,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES12897': {
         'url': "games/P/K/SLES-02897.html",
@@ -26432,6 +26437,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES22897': {
         'url': "games/P/K/SLES-02897.html",
@@ -26443,6 +26449,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES32897': {
         'url': "games/P/K/SLES-02897.html",
@@ -26454,6 +26461,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES02898': {
         'url': "games/P/K/SLES-02898.html",
@@ -26465,6 +26473,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES12898': {
         'url': "games/P/K/SLES-02898.html",
@@ -26476,6 +26485,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES22898': {
         'url': "games/P/K/SLES-02898.html",
@@ -26487,6 +26497,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES32898': {
         'url': "games/P/K/SLES-02898.html",
@@ -26498,6 +26509,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES02899': {
         'url': "games/P/K/SLES-02899.html",
@@ -26509,6 +26521,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES12899': {
         'url': "games/P/K/SLES-02899.html",
@@ -26520,6 +26533,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES22899': {
         'url': "games/P/K/SLES-02899.html",
@@ -26531,6 +26545,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES32899': {
         'url': "games/P/K/SLES-02899.html",
@@ -26542,6 +26557,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES02900': {
         'url': "games/P/K/SLES-02900.html",
@@ -26553,6 +26569,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES12900': {
         'url': "games/P/K/SLES-02900.html",
@@ -26564,6 +26581,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES22900': {
         'url': "games/P/K/SLES-02900.html",
@@ -26575,6 +26593,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES32900': {
         'url': "games/P/K/SLES-02900.html",
@@ -26586,6 +26605,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES02901': {
         'url': "games/P/K/SLES-02901.html",
@@ -26597,6 +26617,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES12901': {
         'url': "games/P/K/SLES-02901.html",
@@ -26608,6 +26629,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES22901': {
         'url': "games/P/K/SLES-02901.html",
@@ -26619,6 +26641,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES32901': {
         'url': "games/P/K/SLES-02901.html",
@@ -26630,6 +26653,7 @@ games = {
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
         'manual': 'https://archive.org/download/SonyPlaystationManuals/Koudelka%20%28USA%29%20%28Disc%201%29_jp2.zip',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLES00084': {
         'url': "games/P/K/SLES-00084.html",
@@ -57870,6 +57894,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLPS02461': {
         'url': "games/J/K/SLPS-02460.html",
@@ -57880,6 +57905,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLPS02462': {
         'url': "games/J/K/SLPS-02460.html",
@@ -57890,6 +57916,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLPS02463': {
         'url': "games/J/K/SLPS-02460.html",
@@ -57900,6 +57927,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SCPS45441': {
         'url': "games/J/K/SCPS-45441.html",
@@ -57910,6 +57938,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SCPS45442': {
         'url': "games/J/K/SCPS-45441.html",
@@ -57920,6 +57949,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SCPS45443': {
         'url': "games/J/K/SCPS-45441.html",
@@ -57930,6 +57960,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SCPS45444': {
         'url': "games/J/K/SCPS-45441.html",
@@ -57940,6 +57971,7 @@ games = {
         'pic0-offset': (0.2, 0.3),
         'pic1': 'https://images.launchbox-app.com/887f38ea-cf19-48f7-b779-36a7e8e03b37.jpg',
         'snd0': 'https://www.youtube.com/watch?v=ecQiaMUtw6E&list=PL7wKx1YpR-lyCgXmXqLiPm6Aen9la6zo_&index=1',
+        'ps3config': 'ps3configs/Koudelka/SLUS-01051.BIN',
     },
     'SLPS00684': {
         'url': "games/J/K/SLPS-00684.html",
