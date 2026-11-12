@@ -22,6 +22,9 @@ ASSETS = {
         "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
     ),
 }
+BINARY_SHA256 = {
+    "x86_64": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7",
+}
 ARCH_ALIASES = {"amd64": "x86_64", "arm64": "aarch64"}
 
 
@@ -56,16 +59,25 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
     executable = cache / "deno"
     license_file = cache / "LICENSE.md"
 
-    if not archive.is_file() or _sha256(archive) != expected_sha:
+    archive_valid = archive.is_file() and _sha256(archive) == expected_sha
+    executable_sha = BINARY_SHA256.get(architecture)
+    executable_valid = (
+        executable.is_file()
+        and executable_sha is not None
+        and _sha256(executable) == executable_sha
+    )
+    if not archive_valid:
         if offline:
-            raise RuntimeError(
-                f"Deno {VERSION} ({architecture}) is not cached; run the package builder once without --offline"
-            )
-        _download(f"{RELEASE}/{filename}", archive)
-        actual = _sha256(archive)
-        if actual != expected_sha:
-            archive.unlink(missing_ok=True)
-            raise RuntimeError(f"Deno archive SHA-256 mismatch: {actual}")
+            if not executable_valid:
+                raise RuntimeError(
+                    f"Deno {VERSION} ({architecture}) is not cached; run the package builder once without --offline"
+                )
+        else:
+            _download(f"{RELEASE}/{filename}", archive)
+            actual = _sha256(archive)
+            if actual != expected_sha:
+                archive.unlink(missing_ok=True)
+                raise RuntimeError(f"Deno archive SHA-256 mismatch: {actual}")
 
     if not license_file.is_file() or _sha256(license_file) != LICENSE_SHA256:
         if offline:
@@ -76,7 +88,9 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
             license_file.unlink(missing_ok=True)
             raise RuntimeError(f"Deno license SHA-256 mismatch: {actual}")
 
-    if not executable.is_file():
+    if not executable_valid:
+        if not archive.is_file() or _sha256(archive) != expected_sha:
+            raise RuntimeError(f"verified Deno archive {VERSION} is required to extract the binary")
         with tempfile.TemporaryDirectory(prefix="deno-extract-", dir=cache) as temporary:
             with ZipFile(archive) as bundle:
                 matches = [info for info in bundle.infolist() if Path(info.filename).name == "deno"]
@@ -90,6 +104,8 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
             temporary_executable.replace(executable)
 
     executable.chmod(0o755)
+    if executable_sha is not None and _sha256(executable) != executable_sha:
+        raise RuntimeError("Deno executable SHA-256 mismatch")
     version = subprocess.check_output([str(executable), "--version"], text=True).splitlines()[0]
     if not version.startswith(f"deno {VERSION} "):
         raise RuntimeError(f"unexpected Deno executable version: {version}")

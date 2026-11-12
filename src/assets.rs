@@ -189,23 +189,17 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
         return PbpAssets::default();
     }
     let icon_url = game.icon0.as_deref();
-    let mut icon0 = icon_url
-        .and_then(|url| {
-            cached_image(
-                &client,
-                url,
-                &directory,
-                game_id,
-                "icon0",
-                (80, 80),
-                Some(cancelled),
-            )
-        })
-        .or_else(|| {
-            let source = pic1.as_ref()?;
-            let destination = directory.join(format!("{}-icon0.png", safe_id(game_id)));
-            normalize_cached(source, &destination, (80, 80)).then_some(destination)
-        });
+    let mut icon0 = icon_url.and_then(|url| {
+        cached_image(
+            &client,
+            url,
+            &directory,
+            game_id,
+            "icon0",
+            (80, 80),
+            Some(cancelled),
+        )
+    });
     if icon0.is_none() && icon_url.is_none() && !database.game_has_field(game_id, "icon0") {
         if psx_page.is_none() {
             psx_page = cached_psx_page(&client, game, game_id, &directory, Some(cancelled));
