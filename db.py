@@ -10554,6 +10554,7 @@ disc_by_md5 = {'000c285ff98c05712009ef3ea6505f43': {'exe': 'SLPM_803.21', 'id': 
  'f12465ca182dae867fc002fba1bf6d15': {'exe': 'SLPS_018.60', 'id': 'SLPS01860', 'title': 'Tricky Sliders - Freestyle Snowboard (Japan)', 'vct': b'1998122022000000$'},
  'f126d6f8763f0deeda701990e9d05c8b': {'exe': 'SLPS_024.48', 'id': 'SLPS02448', 'title': 'Simple 1500 Series Vol. 12 - The Quiz (Japan)', 'vct': b'1999092023400000$'},
  'f1289e78bb4bc5a35eb892b93c9e07e7': {'exe': 'SLPS_024.44', 'id': 'SLPS02444', 'title': 'Simple 1500 Series Vol. 8 - The Solitaire (Japan)', 'vct': b'1999092400000000\x00'},
+ 'f12d542f8f3f9ec40a5004c2b46b5b5f': {'id': 'SLPS00017', 'title': "King's Field (Spanish) (T) (v1.0.2)", 'vct': b'1994111013000000$'},
  'f131832f24966e59ceb181edd827c604': {'exe': 'SLES_029.92', 'id': 'SLES02992', 'title': 'Silent Bomber (Spain)', 'vct': b'0000062810000000\x00'},
  'f137525acb30fc25a9a9cea6749e9640': {'exe': 'SLES_004.77', 'id': 'SLES00477', 'title': 'Colin McRae Rally (Europe) (En,Fr,De,Es) (Rev 1)', 'vct': b'1998112015271853\x00'},
  'f139c76f0a19dabd060069258a59313c': {'exe': 'SLPM_801.11', 'id': 'SLPM80111', 'title': 'Armored Core (Japan) (Demo 1)', 'vct': b'1997040400000000\x00'},
