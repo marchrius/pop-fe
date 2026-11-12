@@ -206,6 +206,11 @@ impl Pbp {
                 break;
             }
         }
+        if disc_index == 0 && psar < self.file_size {
+            return Err(PbpError::Invalid(
+                "PSAR contains no PSISO disc images".into(),
+            ));
+        }
         if cancelled.load(Ordering::Relaxed) {
             return Err(PbpError::Cancelled);
         }
@@ -330,13 +335,10 @@ impl Pbp {
             source.read_exact(&mut entry)?;
             let offset = u32::from_le_bytes(entry[0..4].try_into().unwrap()) as u64;
             let len = u16::from_le_bytes(entry[4..6].try_into().unwrap()) as usize;
-            if offset == 0 && len == 0 {
-                break;
-            }
+            // The sector table ends at the first zero length. A LibCrypt
+            // subchannel blob may follow it and begin with offset 0xffffffff.
             if len == 0 {
-                return Err(PbpError::Invalid(
-                    "PSISO sector index has an empty entry".into(),
-                ));
+                break;
             }
             if total + SECTOR_SIZE as u64 > MAX_DISC_BYTES {
                 return Err(PbpError::Invalid(
@@ -755,7 +757,7 @@ fn write_cue(
         image.file_name().unwrap_or_default().to_string_lossy(),
     );
     for track in 2..=if include_audio_tracks { tracks } else { 1 } {
-        let point = track as u8;
+        let point = bcd(track as u8);
         if let Some(entry) = entries.iter().find(|entry| entry[2] == point) {
             let absolute =
                 bcd(entry[7]) as u64 * 60 * 75 + bcd(entry[8]) as u64 * 75 + bcd(entry[9]) as u64;

@@ -56,7 +56,7 @@ pub fn create_psp_document(
         return Ok(Some(contents));
     }
     if contents.starts_with(b"\0PGD") {
-        let pages = decrypt_ps3_document(&contents)?;
+        let pages = decrypt_ps3_document(&contents, cancelled)?;
         if pages.is_empty() {
             return Err(ManualError::Invalid(
                 "encrypted PS3 manual contains no readable PSP pages".into(),
@@ -87,7 +87,7 @@ pub fn create_psp_document(
     create_document(game_id, &pages).map(Some)
 }
 
-fn decrypt_ps3_document(data: &[u8]) -> Result<Vec<Vec<u8>>, ManualError> {
+fn decrypt_ps3_document(data: &[u8], cancelled: &AtomicBool) -> Result<Vec<Vec<u8>>, ManualError> {
     const PGD_HEADER: &[u8; 16] = b"\0PGD\x01\0\0\0\x01\0\0\0\0\0\0\0";
     if data.get(..16) != Some(PGD_HEADER) || data.len() < 0x90 {
         return Err(ManualError::Invalid("invalid PS3 PGD manual header".into()));
@@ -128,6 +128,7 @@ fn decrypt_ps3_document(data: &[u8]) -> Result<Vec<Vec<u8>>, ManualError> {
 
     let mut pages = Vec::with_capacity(page_count);
     for index in 0..page_count {
+        check_cancelled(cancelled)?;
         let record = 8 + index * 0x80;
         let offset = read_u32(&decoded_info, record)? as usize;
         let length = read_u32(&decoded_info, record + 0x0c)? as usize;
@@ -163,6 +164,7 @@ fn decrypt_ps3_document(data: &[u8]) -> Result<Vec<Vec<u8>>, ManualError> {
         let mut page = encrypted_payload[table_size..].to_vec();
         let mut valid = true;
         for chunk in 0..chunks {
+            check_cancelled(cancelled)?;
             let offset = read_u32(&decoded_table, chunk * 8)? as usize;
             let size = read_u32(&decoded_table, chunk * 8 + 4)? as usize;
             let end = match offset.checked_add(size) {
@@ -265,7 +267,12 @@ unsafe extern "C" {
 fn des_cbc_decrypt(data: &[u8]) -> Result<Vec<u8>, ManualError> {
     const KEY: [u8; 8] = [0x39, 0xf7, 0xef, 0xa1, 0x6c, 0xce, 0x5f, 0x4c];
     const IV: [u8; 8] = [0xa8, 0x19, 0xc4, 0xf5, 0xe1, 0x54, 0xe3, 0x0b];
-    if data.is_empty() || data.len() % 8 != 0 || data.len() > i32::MAX as usize {
+    // The original implementation accepts empty encrypted chunk tables when
+    // a PS3 manual page has no separately encrypted payload chunks.
+    if data.is_empty() {
+        return Ok(Vec::new());
+    }
+    if data.len() % 8 != 0 || data.len() > i32::MAX as usize {
         return Err(ManualError::Invalid(
             "invalid encrypted PS3 manual block".into(),
         ));
@@ -419,52 +426,17 @@ fn read_source(
         && metadata.is_file()
         && metadata.len() <= MAX_MANUAL_BYTES as u64
     {
-        let contents = fs::read(path)?;
-        progress(0.9);
+        let contents = read_limited_file(path, cancelled, 0.9, progress)?;
         return Ok(contents);
     }
-    let mut reader: Box<dyn Read> = if remote {
-        let client = reqwest::blocking::Client::builder()
-            .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(90))
-            .user_agent(concat!("POP-FE-PSP/", env!("CARGO_PKG_VERSION")))
+    if remote {
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .map_err(|error| ManualError::Invalid(error.to_string()))?;
-        let response = client
-            .get(source)
-            .send()
-            .and_then(reqwest::blocking::Response::error_for_status)
-            .map_err(|error| ManualError::Invalid(error.to_string()))?;
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_MANUAL_BYTES as u64)
-        {
-            return Err(ManualError::Invalid(
-                "manual download exceeds size limit".into(),
-            ));
-        }
-        Box::new(response)
-    } else {
-        Box::new(fs::File::open(source)?)
-    };
-    let mut contents = Vec::new();
-    let mut buffer = [0u8; 128 * 1024];
-    loop {
-        if cancelled.load(AtomicOrdering::Relaxed) {
-            return Err(ManualError::Cancelled);
-        }
-        let count = reader.read(&mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        contents.extend_from_slice(&buffer[..count]);
-        if contents.len() > MAX_MANUAL_BYTES {
-            return Err(ManualError::Invalid("manual exceeds size limit".into()));
-        }
-        progress((contents.len() as f64 / MAX_MANUAL_BYTES as f64).min(0.35));
-    }
-    if let Some(path) = cache {
-        if let Some(directory) = path.parent()
+        let contents = runtime.block_on(download_remote_source(source, cancelled, progress))?;
+        if let Some(path) = cache
+            && let Some(directory) = path.parent()
             && fs::create_dir_all(directory).is_ok()
         {
             let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
@@ -474,8 +446,86 @@ fn read_source(
                 }
             }
         }
+        return Ok(contents);
+    }
+    read_limited_file(Path::new(source), cancelled, 0.35, progress)
+}
+
+fn read_limited_file(
+    path: &Path,
+    cancelled: &AtomicBool,
+    progress_limit: f64,
+    progress: &dyn Fn(f64),
+) -> Result<Vec<u8>, ManualError> {
+    let mut reader = fs::File::open(path)?;
+    let mut contents = Vec::new();
+    let mut buffer = [0u8; 128 * 1024];
+    loop {
+        if cancelled.load(AtomicOrdering::Relaxed) {
+            return Err(ManualError::Cancelled);
+        }
+        let count = reader.read(&mut buffer)?;
+        if count == 0 {
+            progress(progress_limit);
+            return Ok(contents);
+        }
+        contents.extend_from_slice(&buffer[..count]);
+        if contents.len() > MAX_MANUAL_BYTES {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
+        progress(progress_limit * (contents.len() as f64 / MAX_MANUAL_BYTES as f64).min(1.0));
+    }
+}
+
+async fn download_remote_source(
+    source: &str,
+    cancelled: &AtomicBool,
+    progress: &dyn Fn(f64),
+) -> Result<Vec<u8>, ManualError> {
+    let client = reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(90))
+        .user_agent(concat!("POP-FE-PSP/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .map_err(|error| ManualError::Invalid(error.to_string()))?;
+    let response = tokio::select! {
+        _ = wait_for_cancellation(cancelled) => return Err(ManualError::Cancelled),
+        result = client.get(source).send() => result
+            .and_then(reqwest::Response::error_for_status)
+            .map_err(|error| ManualError::Invalid(error.to_string()))?,
+    };
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_MANUAL_BYTES as u64)
+    {
+        return Err(ManualError::Invalid(
+            "manual download exceeds size limit".into(),
+        ));
+    }
+    let mut response = response;
+    let mut contents = Vec::new();
+    loop {
+        let chunk = tokio::select! {
+            _ = wait_for_cancellation(cancelled) => return Err(ManualError::Cancelled),
+            result = response.chunk() => result
+                .map_err(|error| ManualError::Invalid(error.to_string()))?,
+        };
+        let Some(chunk) = chunk else {
+            break;
+        };
+        contents.extend_from_slice(&chunk);
+        if contents.len() > MAX_MANUAL_BYTES {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
+        progress((contents.len() as f64 / MAX_MANUAL_BYTES as f64).min(0.35));
     }
     Ok(contents)
+}
+
+async fn wait_for_cancellation(cancelled: &AtomicBool) {
+    while !cancelled.load(AtomicOrdering::Relaxed) {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
 }
 
 fn manual_cache_path(url: &str) -> PathBuf {
@@ -509,6 +559,7 @@ fn archive_pages(
     let mut archive = ZipArchive::new(Cursor::new(contents))
         .map_err(|error| ManualError::Invalid(error.to_string()))?;
     let mut entries = Vec::new();
+    let mut declared_bytes = 0u64;
     for index in 0..archive.len() {
         if entries.len() >= MAX_ARCHIVE_ENTRIES {
             break;
@@ -523,11 +574,16 @@ fn archive_pages(
         if name.split('/').any(|part| part.starts_with('.')) || name.contains("__MACOSX") {
             continue;
         }
+        declared_bytes = declared_bytes.saturating_add(file.size());
+        if declared_bytes > MAX_MANUAL_BYTES as u64 {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
         entries.push((index, name));
     }
     entries.sort_by(|left, right| natural_cmp(&left.1, &right.1));
     let count = entries.len().max(1) as f64;
     let mut pages = Vec::new();
+    let mut extracted_bytes = 0usize;
     for (position, (index, _name)) in entries.into_iter().enumerate() {
         check_cancelled(cancelled)?;
         let mut entry = archive
@@ -538,6 +594,10 @@ fn archive_pages(
             .by_ref()
             .take((MAX_PAGE_BYTES + 1) as u64)
             .read_to_end(&mut bytes)?;
+        extracted_bytes = extracted_bytes.saturating_add(bytes.len());
+        if extracted_bytes > MAX_MANUAL_BYTES {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
         if bytes.is_empty() || bytes.len() > MAX_PAGE_BYTES {
             continue;
         }
@@ -564,6 +624,7 @@ fn directory_pages(
 ) -> Result<Vec<Vec<u8>>, ManualError> {
     let mut pending = vec![(root.to_path_buf(), 0usize)];
     let mut files = Vec::new();
+    let mut declared_bytes = 0u64;
     while let Some((directory, depth)) = pending.pop() {
         check_cancelled(cancelled)?;
         if depth > 32 {
@@ -581,6 +642,10 @@ fn directory_pages(
             } else if file_type.is_file() {
                 let metadata = entry.metadata()?;
                 if metadata.len() > 0 && metadata.len() <= MAX_PAGE_BYTES as u64 {
+                    declared_bytes = declared_bytes.saturating_add(metadata.len());
+                    if declared_bytes > MAX_MANUAL_BYTES as u64 {
+                        return Err(ManualError::Invalid("manual exceeds size limit".into()));
+                    }
                     files.push(entry.path());
                     if files.len() >= MAX_ARCHIVE_ENTRIES {
                         break;
@@ -595,9 +660,20 @@ fn directory_pages(
     files.sort_by(|left, right| natural_cmp(&left.to_string_lossy(), &right.to_string_lossy()));
     let count = files.len().max(1) as f64;
     let mut pages = Vec::new();
+    let mut read_bytes = 0usize;
     for (index, path) in files.iter().enumerate() {
         check_cancelled(cancelled)?;
-        let bytes = fs::read(path)?;
+        let mut bytes = Vec::new();
+        fs::File::open(path)?
+            .take((MAX_PAGE_BYTES + 1) as u64)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > MAX_PAGE_BYTES {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
+        read_bytes = read_bytes.saturating_add(bytes.len());
+        if read_bytes > MAX_MANUAL_BYTES {
+            return Err(ManualError::Invalid("manual exceeds size limit".into()));
+        }
         if let Some(pixbuf) = decode_image(&bytes, temporary, index, cancelled)? {
             pages.extend(prepare_pages(&pixbuf)?);
         }

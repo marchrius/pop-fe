@@ -244,8 +244,8 @@ pub fn localize_error(message: &str) -> String {
         "operation cancelled" => "Operation stopped",
         "compressed PSISO sector is invalid" => "Compressed PSISO sector is invalid",
         "disc ID could not be determined" => "Disc ID could not be determined",
-        "game ID must contain nine ASCII characters" => {
-            "Game ID must contain nine ASCII characters"
+        "game ID must contain nine ASCII alphanumeric characters" => {
+            "Game ID must contain nine ASCII alphanumeric characters"
         }
         "select between one and 32 disc images" => "Select between one and 32 disc images",
         "disc image is empty" => "Disc image is empty",
@@ -287,6 +287,8 @@ pub fn localize_error(message: &str) -> String {
         "CDDA image is not aligned to sectors" => "CDDA image is not aligned to sectors",
         "CUE audio track is empty" => "CUE audio track is empty",
         "CUE supports at most 99 tracks" => "CUE supports at most 99 tracks",
+        "CUE file exceeds the 4 MiB size limit" => "CUE file exceeds the 4 MiB size limit",
+        "CCD file exceeds the 4 MiB size limit" => "CCD file exceeds the 4 MiB size limit",
         "CUE audio track exceeds WAV size limit" => "CUE audio track exceeds WAV size limit",
         "invalid PPF description footer" => "Invalid PPF description footer",
         "PPF1 header is truncated" => "PPF1 header is truncated",
@@ -332,12 +334,16 @@ pub fn localize_error(message: &str) -> String {
         "first section overlaps the PBP header" => "First section overlaps the PBP header",
         "section offsets are not ordered" => "PBP section offsets are not ordered",
         "PSISO image size is invalid" => "PSISO image size is invalid",
+        "PSAR contains no PSISO disc images" => "PSAR contains no PSISO disc images",
         "compressed sector is out of bounds" => "Compressed sector is out of bounds",
         "audio track is out of bounds" => "Audio track is out of bounds",
         "staged filename is missing" => "Staged filename is missing",
         "sector offset overflow" => "Sector offset overflow",
         "empty disc image" => "Disc image is empty",
         "disc has no data track for ISO export" => "Disc has no data track for ISO export",
+        "multiple companion CUE files have different contents" => {
+            "Multiple companion CUE files have different contents"
+        }
         "CUE data track does not refer to the extracted image" => {
             "CUE data track does not refer to the extracted image"
         }

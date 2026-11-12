@@ -317,6 +317,11 @@ fn apply_local_sidecars(
     if let Some(path) = local_artwork_png(&pic1, game_id, "local-pic1", cancelled) {
         assets.pic1 = Some(path);
     }
+    let local_snd0 = image_path.with_extension("snd0");
+    if local_snd0.is_file() {
+        assets.snd0 = Some(local_snd0);
+        assets.local_snd0 = true;
+    }
 }
 
 fn local_artwork_png(
@@ -436,17 +441,20 @@ pub fn load_theme_assets_cancellable(
             return base.clone();
         }
     }
-    if let Some(path) =
-        cached_theme_snd0(&client, repository, game_id, theme, &directory, cancelled)
-    {
-        result.snd0 = Some(path);
+    if !base.local_snd0 {
+        if let Some(path) =
+            cached_theme_snd0(&client, repository, game_id, theme, &directory, cancelled)
+        {
+            result.snd0 = Some(path);
+        }
     }
     result
 }
 
 pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    let mut result = load_game_assets_cached(game_id);
-    merge_missing_assets(&mut result, base);
+    let mut result = base.clone();
+    let cached_game_assets = load_game_assets_cached(game_id);
+    merge_missing_assets(&mut result, &cached_game_assets);
     let Some(theme_info) = Database::embedded().themes.get(theme) else {
         return result;
     };
@@ -470,7 +478,7 @@ pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -
         }
     }
     let audio = directory.join(format!("{}-{}-snd0.wav", safe_id(game_id), safe_id(theme)));
-    if valid_wave_file(&audio) {
+    if !base.local_snd0 && valid_wave_file(&audio) {
         result.snd0 = Some(audio);
     }
     result

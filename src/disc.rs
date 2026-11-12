@@ -10,6 +10,8 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use md5::{Digest, Md5};
 use thiserror::Error;
 
+const MAX_CUE_BYTES: u64 = 4 * 1024 * 1024;
+
 #[derive(Debug, Error)]
 pub enum DiscError {
     #[error("cannot read disc image: {0}")]
@@ -100,7 +102,7 @@ impl CueSheet {
             .extension()
             .and_then(|ext| ext.to_str())
             .is_some_and(|ext| ext.eq_ignore_ascii_case("bin") || ext.eq_ignore_ascii_case("img"))
-            && let Some(cue) = companion_cue(path)
+            && let Some(cue) = companion_cue(path)?
         {
             if cancelled.load(Ordering::Relaxed) {
                 return Err(DiscError::Cancelled);
@@ -147,13 +149,13 @@ impl CueSheet {
     }
 
     pub fn parse(path: &Path) -> Result<Self, DiscError> {
-        let source = std::fs::read_to_string(path)?;
+        let source = read_cue_text(path)?;
         let mut current_file: Option<PathBuf> = None;
         let mut tracks: Vec<Track> = Vec::new();
         let mut has_index01 = Vec::new();
 
         for (line_number, line) in source.lines().enumerate() {
-            let line = line.trim();
+            let line = line.trim().trim_start_matches('\u{feff}');
             let mut words = line.split_whitespace();
             let Some(command) = words.next() else {
                 continue;
@@ -163,12 +165,7 @@ impl CueSheet {
                     let filename = parse_cue_filename(line).ok_or_else(|| {
                         DiscError::Cue(format!("malformed FILE entry at line {}", line_number + 1))
                     })?;
-                    let image = PathBuf::from(filename);
-                    current_file = Some(if image.is_absolute() {
-                        image
-                    } else {
-                        path.parent().unwrap_or_else(|| Path::new(".")).join(image)
-                    });
+                    current_file = Some(resolve_cue_file(&filename, path));
                 }
                 "TRACK" => {
                     let number =
@@ -294,7 +291,15 @@ impl CueSheet {
     }
 
     fn parse_ccd(path: &Path) -> Result<Self, DiscError> {
-        let source = std::fs::read_to_string(path)?;
+        let mut source = String::new();
+        File::open(path)?
+            .take(MAX_CUE_BYTES + 1)
+            .read_to_string(&mut source)?;
+        if source.len() as u64 > MAX_CUE_BYTES {
+            return Err(DiscError::Cue(
+                "CCD file exceeds the 4 MiB size limit".into(),
+            ));
+        }
         let image = ccd_image_path(path)?;
         let mut section: Option<u8> = None;
         let mut parsed: std::collections::BTreeMap<u8, Track> = std::collections::BTreeMap::new();
@@ -449,7 +454,9 @@ impl CueSheet {
             .iter()
             .skip(1)
             .find(|next| next.path == track.path)
-            .map(|next| next.index01)
+            // Python's CUE fixup ends the previous track immediately before
+            // the next track's first index (INDEX 00 when it has a pregap).
+            .map(|next| next.index00.unwrap_or(next.index01))
             .unwrap_or_else(|| file_end / track.mode.sector_size());
         let sectors = end_sector
             .checked_sub(track.index01)
@@ -562,14 +569,18 @@ impl CueSheet {
     }
 }
 
-fn companion_cue(image: &Path) -> Option<PathBuf> {
+fn companion_cue(image: &Path) -> Result<Option<PathBuf>, DiscError> {
     let parent = image.parent().unwrap_or_else(|| Path::new("."));
-    let stem = image.file_stem()?;
-    std::fs::read_dir(parent)
-        .ok()?
+    let Some(stem) = image.file_stem() else {
+        return Ok(None);
+    };
+    let Ok(entries) = std::fs::read_dir(parent) else {
+        return Ok(None);
+    };
+    let mut candidates = entries
         .filter_map(Result::ok)
         .map(|entry| entry.path())
-        .find(|candidate| {
+        .filter(|candidate| {
             candidate
                 .file_stem()
                 .and_then(|candidate_stem| candidate_stem.to_str())
@@ -581,6 +592,22 @@ fn companion_cue(image: &Path) -> Option<PathBuf> {
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("cue"))
                 && candidate.is_file()
         })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    let Some(first) = candidates.first().cloned() else {
+        return Ok(None);
+    };
+    if candidates.len() > 1 {
+        let reference = read_cue_bytes(&first)?;
+        for candidate in candidates.iter().skip(1) {
+            if read_cue_bytes(candidate)? != reference {
+                return Err(DiscError::Cue(
+                    "multiple companion CUE files have different contents".into(),
+                ));
+            }
+        }
+    }
+    Ok(Some(first))
 }
 
 fn parse_ccd_integer(value: &str) -> Option<u64> {
@@ -983,6 +1010,108 @@ fn parse_cue_filename(line: &str) -> Option<String> {
     }
 }
 
+fn read_cue_text(path: &Path) -> Result<String, DiscError> {
+    let bytes = read_cue_bytes(path)?;
+    if let Some(encoded) = bytes.strip_prefix(&[0xff, 0xfe]) {
+        return decode_utf16_cue(encoded, true);
+    }
+    if let Some(encoded) = bytes.strip_prefix(&[0xfe, 0xff]) {
+        return decode_utf16_cue(encoded, false);
+    }
+    let utf8 = bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(&bytes);
+    String::from_utf8(utf8.to_vec())
+        .map_err(|_| DiscError::Cue("CUE text is not valid UTF-8 or UTF-16".into()))
+}
+
+fn read_cue_bytes(path: &Path) -> Result<Vec<u8>, DiscError> {
+    let mut bytes = Vec::new();
+    File::open(path)?
+        .take(MAX_CUE_BYTES + 1)
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > MAX_CUE_BYTES {
+        return Err(DiscError::Cue(
+            "CUE file exceeds the 4 MiB size limit".into(),
+        ));
+    }
+    Ok(bytes)
+}
+
+fn decode_utf16_cue(encoded: &[u8], little_endian: bool) -> Result<String, DiscError> {
+    if encoded.len() % 2 != 0 {
+        return Err(DiscError::Cue(
+            "CUE UTF-16 data has an incomplete code unit".into(),
+        ));
+    }
+    let units: Vec<u16> = encoded
+        .chunks_exact(2)
+        .map(|pair| {
+            let bytes = [pair[0], pair[1]];
+            if little_endian {
+                u16::from_le_bytes(bytes)
+            } else {
+                u16::from_be_bytes(bytes)
+            }
+        })
+        .collect();
+    String::from_utf16(&units)
+        .map_err(|_| DiscError::Cue("CUE contains invalid UTF-16 data".into()))
+}
+
+fn resolve_cue_file(filename: &str, cue_path: &Path) -> PathBuf {
+    let normalized = if cfg!(windows) {
+        filename.to_owned()
+    } else {
+        filename.replace('\\', "/")
+    };
+    let image = PathBuf::from(&normalized);
+    if let Some(path) = find_case_insensitive_file(&image) {
+        return path;
+    }
+
+    let bytes = normalized.as_bytes();
+    let windows_drive_absolute = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    let parent = cue_path.parent().unwrap_or_else(|| Path::new("."));
+    if (image.is_absolute() || windows_drive_absolute)
+        && let Some(name) = image.file_name()
+    {
+        let beside_cue = parent.join(name);
+        if let Some(path) = find_case_insensitive_file(&beside_cue) {
+            return path;
+        }
+    }
+    if image.is_absolute() || windows_drive_absolute {
+        image
+    } else {
+        let relative = parent.join(image);
+        find_case_insensitive_file(&relative).unwrap_or(relative)
+    }
+}
+
+fn find_case_insensitive_file(path: &Path) -> Option<PathBuf> {
+    if path.is_file() {
+        return Some(path.to_path_buf());
+    }
+    let parent = path.parent()?;
+    let name = path.file_name()?.to_string_lossy();
+    let mut matches = std::fs::read_dir(parent)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let candidate = entry.path();
+            (entry
+                .file_name()
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&name)
+                && candidate.is_file())
+            .then_some(candidate)
+        });
+    let first = matches.next()?;
+    matches.next().is_none().then_some(first)
+}
+
 fn cue_time_to_frames(value: &str) -> Option<u64> {
     let mut parts = value.split(':');
     let minutes = parts.next()?.parse::<u64>().ok()?;
@@ -1000,10 +1129,24 @@ fn cue_time_to_frames(value: &str) -> Option<u64> {
 
 pub fn game_id_from_system_cnf(system_cnf: &[u8], known_ids: &[String]) -> Option<String> {
     let upper = String::from_utf8_lossy(system_cnf).to_ascii_uppercase();
-    let serial =
-        regex::Regex::new(r"(?<![A-Z0-9])([A-Z]{4})[-_]?([0-9]{3})[.-]?([0-9]{2})(?![0-9])")
-            .ok()?;
+    // The Rust regex crate has no look-around support. Check the boundaries
+    // after matching so serials embedded in unrelated identifiers are ignored.
+    let serial = regex::Regex::new(r"([A-Z]{4})[-_]?([0-9]{3})[.-]?([0-9]{2})").ok()?;
     for captures in serial.captures_iter(&upper) {
+        let Some(whole) = captures.get(0) else {
+            continue;
+        };
+        if upper[..whole.start()]
+            .chars()
+            .next_back()
+            .is_some_and(|character| character.is_ascii_alphanumeric())
+            || upper[whole.end()..]
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_ascii_digit())
+        {
+            continue;
+        }
         let normalized = format!("{}{}{}", &captures[1], &captures[2], &captures[3]);
         if normalized.len() == 9 && known_ids.iter().any(|id| id == &normalized) {
             return Some(normalized);

@@ -17,7 +17,12 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    vengono separati dal tipo usando l'ultimo campo; gli indici non supportati
    vengono rifiutati esplicitamente; la numerazione deve essere consecutiva
    da 01 (massimo 99 tracce), ogni traccia deve dichiarare `INDEX 01` e gli
-   indici `0`/`1` senza zero iniziale restano compatibili.
+   indici `0`/`1` senza zero iniziale restano compatibili. I percorsi FILE CUE
+   relativi con separatori Windows vengono normalizzati su Linux; se un
+   percorso assoluto Windows non è valido, si cerca il file omonimo accanto al
+   CUE. I nomi dei file vengono confrontati senza distinzione ASCII tra
+   maiuscole e minuscole solo quando la corrispondenza nella cartella prevista
+   è univoca. Sono riconosciuti BOM UTF-8 e UTF-16 little/big-endian.
    Anche la lettura dei download artwork viene
    interrotta ai confini dei blocchi ricevuti. I processi esterni vengono
    isolati in gruppi e terminati insieme ai discendenti quando si annulla.
@@ -56,9 +61,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    l'immagine; i campi null espliciti continuano a disabilitare il fallback.
    PIC0 rispetta anche scala e offset definiti per gioco nel database,
    modificabili dalla GUI con anteprima aggiornata in tempo reale; il PIC0 a
-   1000×560 è quello effettivamente incluso nel PBP. Per SND0 usa l'audio del tema quando
-   disponibile, altrimenti il cache upstream dei file ATRAC3 già pronti; l'audio
-   viene limitato ai vincoli PSP; se YouTube risponde HTTP 403, il download
+   1000×560 è quello effettivamente incluso nel PBP. Per SND0 dà precedenza al
+   sidecar `<immagine>.snd0`, poi all'audio del tema e infine al cache upstream
+   dei file ATRAC3 già pronti. L'audio viene limitato ai vincoli PSP. Se YouTube
+   risponde HTTP 403, il download
    riprova automaticamente tramite IPv4 e abilita i componenti EJS remoti di
    yt-dlp tramite Deno per risolvere le challenge JavaScript di YouTube. Le
    anteprime artwork vengono mostrate nella
@@ -95,10 +101,12 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    La GUI consente di selezionare patch romhack PPF/Xdelta, abbinate alle
    immagini disco nell'ordine selezionato. La sequenza è fix PPF automatico,
    Xdelta automatico, romhack selezionato e patch LibCrypt.
+   Ogni disco della selezione multipla mostra un ID modificabile, compilato
+   automaticamente dall'analisi dell'immagine.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-   GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.73
+GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.92
    includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
    runtime da Python, yt-dlp o Deno di sistema. L'avvio della GUI nel sandbox e
    la compatibilità degli EBOOT su PSP reale restano da verificare.
@@ -115,8 +123,10 @@ disponibile nel PATH o in `POPFE_LCP`, altrimenti non applica una patch
 predefinita potenzialmente errata. I pacchetti non includono `lcp`.
 Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
 finché non sarà validato su immagini e hardware reali. La decifratura DES dei
-manuali PS3 PGD e la conversione in `DOCUMENT.DAT` non sono ancora state
-verificate con file campione. I filtri pittorici Rust sono approssimazioni dei
+manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono state verificate con
+un PGD sintetico cifrato secondo il formato originale, incluso il caso di una
+pagina senza blocchi cifrati; manca ancora la verifica con un manuale PS3 reale.
+I filtri pittorici Rust sono approssimazioni dei
 filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo

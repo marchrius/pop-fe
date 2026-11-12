@@ -992,7 +992,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "pop-fe-psp"
-version = "0.1.73"
+version = "0.1.92"
 dependencies = [
  "cairo-rs",
  "flate2",
@@ -1007,6 +1007,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "thiserror",
+ "tokio",
  "zip",
 ]
 
@@ -1534,7 +1535,19 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "socket2",
+ "tokio-macros",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "385a6cb71ab9ab790c5fe8d67f1645e6c450a7ce006a33de03daa956cf70a496"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]

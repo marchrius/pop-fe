@@ -42,6 +42,8 @@ pub struct PbpAssets {
     pub pic0_source: Option<PathBuf>,
     pub pic1: Option<PathBuf>,
     pub snd0: Option<PathBuf>,
+    /// True when SND0 was discovered beside the source disc image.
+    pub local_snd0: bool,
     pub logo: Option<PathBuf>,
 }
 
@@ -52,6 +54,8 @@ pub struct PbpCreateConfig {
     pub romhack_patches: Vec<Option<PathBuf>>,
     pub output: PathBuf,
     pub game_id: String,
+    /// User-selected ID for each image, in the same order as `images`.
+    pub disc_ids: Vec<String>,
     pub title: String,
     pub manual_source: Option<String>,
     pub assets: PbpAssets,
@@ -91,14 +95,29 @@ pub fn create_from_image_with_progress_and_warnings(
     progress: impl Fn(f64) + Send + Sync,
     warning: impl Fn(String) + Send + Sync,
 ) -> Result<(), CreateError> {
-    if config.game_id.len() != 9 || !config.game_id.is_ascii() {
+    if config.game_id.len() != 9
+        || !config
+            .game_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric())
+    {
         return Err(CreateError::Invalid(
-            "game ID must contain nine ASCII characters".into(),
+            "game ID must contain nine ASCII alphanumeric characters".into(),
         ));
     }
     if config.images.is_empty() || config.images.len() > 32 {
         return Err(CreateError::Invalid(
             "select between one and 32 disc images".into(),
+        ));
+    }
+    if config.disc_ids.len() != config.images.len()
+        || config
+            .disc_ids
+            .iter()
+            .any(|id| id.len() != 9 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()))
+    {
+        return Err(CreateError::Invalid(
+            "each disc ID must contain nine ASCII alphanumeric characters".into(),
         ));
     }
     // POP-FE always keeps PSTITLEIMG for multi-disc EBOOTs so POPS can expose
@@ -107,9 +126,12 @@ pub fn create_from_image_with_progress_and_warnings(
     progress(0.0);
     #[cfg(feature = "gui")]
     let manual_document = if let Some(source) = config.manual_source.as_deref() {
-        match crate::manual::create_psp_document(source, &config.game_id, cancelled, |fraction| {
-            progress(0.02 * fraction);
-        }) {
+        match crate::manual::create_psp_document(
+            source,
+            &config.disc_ids[0],
+            cancelled,
+            |fraction| progress(0.02 * fraction),
+        ) {
             Ok(document) => document,
             Err(crate::manual::ManualError::Cancelled) => return Err(CreateError::Cancelled),
             Err(error) => {
@@ -142,11 +164,7 @@ pub fn create_from_image_with_progress_and_warnings(
             Err(crate::disc::DiscError::Cancelled) => return Err(CreateError::Cancelled),
             Err(_) => "UNKN00000".into(),
         };
-        let disc_id = if index == 0 {
-            config.game_id.clone()
-        } else {
-            real_disc_id.clone()
-        };
+        let disc_id = config.disc_ids[index].clone();
         // Even raw BIN/IMG and ISO inputs need a synthetic single-track CUE:
         // PSISO TOC lead-out values are CD sectors, not 0x9300-byte blocks.
         let cue_sheet = matches!(
@@ -639,14 +657,124 @@ pub fn create_from_image_with_progress_and_warnings(
     }
     output.sync_all()?;
     drop(output);
-    fs::rename(&staged_output.path, &config.output)?;
-    if let Some(document) = manual_document {
-        let document_path = output_dir.join("DOCUMENT.DAT");
-        let temporary = document_path.with_extension(format!("{}.tmp", std::process::id()));
-        fs::write(&temporary, document)?;
-        fs::rename(temporary, document_path)?;
-    }
+    let staged_document = if let Some(document) = manual_document {
+        let staged = TempFile::new_in(output_dir, "document")?;
+        let mut file = staged.file.try_clone()?;
+        file.write_all(&document)?;
+        file.sync_all()?;
+        Some(staged)
+    } else {
+        None
+    };
+    publish_conversion(
+        &staged_output,
+        &config.output,
+        staged_document.as_ref(),
+        &output_dir.join("DOCUMENT.DAT"),
+    )?;
     progress(1.0);
+    Ok(())
+}
+
+fn publish_conversion(
+    staged_output: &TempFile,
+    output: &std::path::Path,
+    staged_document: Option<&TempFile>,
+    document: &std::path::Path,
+) -> io::Result<()> {
+    let parent = output.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut backup_output = if output.exists() {
+        Some(TempFile::new_in(parent, "eboot-backup")?)
+    } else {
+        None
+    };
+    let mut backup_document = if staged_document.is_some() && document.exists() {
+        Some(TempFile::new_in(parent, "document-backup")?)
+    } else {
+        None
+    };
+
+    if let Some(backup) = backup_document.as_ref()
+        && let Err(error) = fs::rename(document, &backup.path)
+    {
+        return Err(error);
+    }
+    if let Some(backup) = backup_output.as_ref()
+        && let Err(error) = fs::rename(output, &backup.path)
+    {
+        if let Some(previous_document) = backup_document.as_ref() {
+            if let Err(restore_error) = fs::rename(&previous_document.path, document) {
+                if let Some(recovery_file) = backup_document.take() {
+                    std::mem::forget(recovery_file);
+                }
+                return Err(io::Error::other(format!(
+                    "{error}; could not restore previous DOCUMENT.DAT: {restore_error}"
+                )));
+            }
+        }
+        return Err(error);
+    }
+
+    let mut published_document = false;
+    let mut published_output = false;
+    let publish_error = if let Some(staged) = staged_document {
+        match fs::rename(&staged.path, document) {
+            Ok(()) => {
+                published_document = true;
+                match fs::rename(&staged_output.path, output) {
+                    Ok(()) => {
+                        published_output = true;
+                        None
+                    }
+                    Err(error) => Some(error),
+                }
+            }
+            Err(error) => Some(error),
+        }
+    } else {
+        match fs::rename(&staged_output.path, output) {
+            Ok(()) => {
+                published_output = true;
+                None
+            }
+            Err(error) => Some(error),
+        }
+    };
+    if let Some(error) = publish_error {
+        let mut rollback_errors = Vec::new();
+        if published_output && let Err(rollback) = fs::remove_file(output) {
+            rollback_errors.push(format!("remove new EBOOT.PBP: {rollback}"));
+        }
+        if published_document && let Err(rollback) = fs::remove_file(document) {
+            rollback_errors.push(format!("remove new DOCUMENT.DAT: {rollback}"));
+        }
+        if let Some(backup) = backup_output.as_ref()
+            && let Err(rollback) = fs::rename(&backup.path, output)
+        {
+            rollback_errors.push(format!("restore previous EBOOT.PBP: {rollback}"));
+        }
+        if let Some(backup) = backup_document.as_ref()
+            && let Err(rollback) = fs::rename(&backup.path, document)
+        {
+            rollback_errors.push(format!("restore previous DOCUMENT.DAT: {rollback}"));
+        }
+        if rollback_errors.is_empty() {
+            return Err(error);
+        }
+        if let Some(recovery_file) = backup_output.take() {
+            std::mem::forget(recovery_file);
+        }
+        if let Some(recovery_file) = backup_document.take() {
+            std::mem::forget(recovery_file);
+        }
+        return Err(io::Error::other(format!(
+            "{error}; conversion rollback was incomplete: {}",
+            rollback_errors.join("; ")
+        )));
+    }
+    // Backups are deleted when their TempFile values are dropped.
+    backup_output.take();
+    backup_document.take();
     Ok(())
 }
 

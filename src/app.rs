@@ -1,4 +1,6 @@
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
+use std::io::Cursor;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -59,6 +61,8 @@ struct DiscFields {
     icon_preview: gtk::Picture,
     pic0_preview: gtk::Picture,
     pic1_preview: gtk::Picture,
+    secondary_disc_ids: Rc<RefCell<HashMap<PathBuf, String>>>,
+    secondary_disc_id_entries: Rc<RefCell<HashMap<PathBuf, gtk::Entry>>>,
 }
 
 const THEME_NAMES: [&str; 7] = [
@@ -140,9 +144,15 @@ pub fn activate(application: &adw::Application) {
     let help = gio::SimpleAction::new("help", None);
     let window_for_help = window.clone();
     help.connect_activate(move |_, _| {
+        let help_text = [
+            tr("Add disc images, review automatically loaded data and previews, choose the PSP folder, then create EBOOT.PBP."),
+            tr("Select a PBP and an output folder to extract its contents."),
+            tr("Ctrl+O — Open images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit"),
+        ]
+        .join("\n\n");
         let dialog = adw::AlertDialog::new(
             Some(&tr("POP-FE Help")),
-            Some(&tr("Convert: add game images, check the data and previews, choose the output folder and create EBOOT.PBP.\n\nExtract: select the PBP and an output folder.\n\nCtrl+O — Open Images or PBP\nAlt+1 — Convert\nAlt+2 — Extract\nF1 — Help\nCtrl+Q — Quit")),
+            Some(&help_text),
         );
         dialog.add_response("close", &tr("Close"));
         dialog.set_default_response(Some("close"));
@@ -433,6 +443,8 @@ fn convert_page(
         icon_preview,
         pic0_preview,
         pic1_preview,
+        secondary_disc_ids: Rc::new(RefCell::new(HashMap::new())),
+        secondary_disc_id_entries: Rc::new(RefCell::new(HashMap::new())),
     };
     fields.cdda.set_active(saved_preferences.cdda);
     fields
@@ -609,6 +621,7 @@ fn convert_page(
     let cancellation_for_clear = cancel_state.clone();
     clear.connect_clicked(move |_| {
         files_for_clear.borrow_mut().clear();
+        fields_for_clear.secondary_disc_ids.borrow_mut().clear();
         refresh_disc_list(
             &list_for_clear,
             &files_for_clear,
@@ -1234,13 +1247,43 @@ fn convert_page(
             }
         }
         let id = fields_for_create.id.text().to_string();
+        let disc_ids = selected
+            .iter()
+            .enumerate()
+            .map(|(index, image)| {
+                if index == 0 {
+                    id.clone()
+                } else {
+                    fields_for_create
+                        .secondary_disc_ids
+                        .borrow()
+                        .get(image)
+                        .cloned()
+                        .unwrap_or_else(|| "UNKN00000".to_string())
+                }
+            })
+            .collect::<Vec<_>>();
         if fields_for_create.theme_loading.get() {
             fields_for_create
                 .status
                 .set_text(&tr("Wait for theme artwork to finish loading"));
             return;
         }
-        if id.len() != 9 || fields_for_create.psp_root.text().is_empty() {
+        if disc_ids.iter().any(|disc_id| {
+            disc_id.len() != 9 || !disc_id.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        }) {
+            fields_for_create.status.set_text(&tr(
+                "Each disc ID must contain nine ASCII alphanumeric characters",
+            ));
+            return;
+        }
+        if id.len() != 9 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            fields_for_create.status.set_text(&tr(
+                "Game ID must contain nine ASCII alphanumeric characters",
+            ));
+            return;
+        }
+        if fields_for_create.psp_root.text().is_empty() {
             fields_for_create.status.set_text(&tr(
                 "Select a PSP folder and identify the disc before conversion",
             ));
@@ -1251,7 +1294,11 @@ fn convert_page(
             None
         } else {
             Some(fields_for_create.manual_entry.text().to_string())
-        };
+        }
+        .filter(|source| {
+            !fields_for_create.disable_asset_downloads.is_active()
+                || !(source.starts_with("http://") || source.starts_with("https://"))
+        });
         let mut assets = fields_for_create.assets.borrow().clone();
         if fields_for_create.ntsc_u_icon0.is_active()
             && let Some(icon0) = assets.icon0.as_deref()
@@ -1297,6 +1344,7 @@ fn convert_page(
             romhack_patches: manual_patches,
             output: output.clone(),
             game_id: id,
+            disc_ids,
             title,
             manual_source,
             assets,
@@ -1436,7 +1484,8 @@ fn refresh_disc_list(
     while let Some(row) = list.first_child() {
         list.remove(&row);
     }
-    for path in files.borrow().iter() {
+    fields.secondary_disc_id_entries.borrow_mut().clear();
+    for (index, path) in files.borrow().iter().enumerate() {
         let row = gtk::Box::builder()
             .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
@@ -1453,6 +1502,30 @@ fn refresh_disc_list(
             .build();
         label.set_tooltip_text(Some(&path.to_string_lossy()));
         row.append(&label);
+        if index > 0 {
+            let ids = fields.secondary_disc_ids.clone();
+            let value = ids
+                .borrow()
+                .get(path)
+                .cloned()
+                .unwrap_or_else(|| "UNKN00000".to_string());
+            let entry = gtk::Entry::builder()
+                .text(&value)
+                .width_chars(9)
+                .max_length(9)
+                .tooltip_text(&tr("Disc ID"))
+                .build();
+            let path_for_id = path.clone();
+            entry.connect_changed(move |entry| {
+                ids.borrow_mut()
+                    .insert(path_for_id.clone(), entry.text().to_string());
+            });
+            fields
+                .secondary_disc_id_entries
+                .borrow_mut()
+                .insert(path.clone(), entry.clone());
+            row.append(&entry);
+        }
         let remove = gtk::Button::from_icon_name("list-remove-symbolic");
         remove.add_css_class("flat");
         remove.set_tooltip_text(Some(&tr("Remove Image")));
@@ -1471,9 +1544,11 @@ fn refresh_disc_list(
         let fields = fields.clone();
         let busy = operation_busy.clone();
         let cancellation = cancel_state.clone();
+        let secondary_ids = fields.secondary_disc_ids.clone();
         remove.connect_clicked(move |_| {
             let removed_first = files.borrow().first() == Some(&path_to_remove);
             files.borrow_mut().retain(|file| file != &path_to_remove);
+            secondary_ids.borrow_mut().remove(&path_to_remove);
             refresh_disc_list(
                 &list_for_remove,
                 &files,
@@ -1526,6 +1601,7 @@ fn analyze_first(
     let Some(path) = files.borrow().first().cloned() else {
         return;
     };
+    let all_paths = files.borrow().clone();
     if operation_busy.get() && fields.analysis_cancel.borrow().is_none() {
         fields
             .status
@@ -1566,6 +1642,7 @@ fn analyze_first(
     set_picture(&fields.pic0_preview, None);
     set_picture(&fields.pic1_preview, None);
     let download_assets = !fields.disable_asset_downloads.is_active();
+    let secondary_paths = all_paths.into_iter().skip(1).collect::<Vec<_>>();
     let worker_cancellation = cancellation.clone();
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
@@ -1585,11 +1662,32 @@ fn analyze_first(
                 } else {
                     crate::create::PbpAssets::default()
                 };
-                (metadata, assets)
+                let mut secondary_ids = Vec::with_capacity(secondary_paths.len());
+                for secondary_path in secondary_paths {
+                    if worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                        return Err(crate::disc::DiscError::Cancelled);
+                    }
+                    let id = match crate::database::Database::embedded()
+                        .analyze_image_cancellable(&secondary_path, &worker_cancellation)
+                    {
+                        Ok(metadata) => metadata.id,
+                        Err(crate::disc::DiscError::Cancelled) => {
+                            return Err(crate::disc::DiscError::Cancelled);
+                        }
+                        Err(_) => "UNKN00000".to_string(),
+                    };
+                    secondary_ids.push((secondary_path, id));
+                }
+                Ok((metadata, assets, secondary_ids))
             });
-        let _ = sender.send(result.map_err(|error| error.to_string()));
+        let _ = sender.send(
+            result
+                .and_then(|result| result)
+                .map_err(|error| error.to_string()),
+        );
     });
     let fields = fields.clone();
+    let files = files.clone();
     let operation_busy = operation_busy.clone();
     let cancel_state = cancel_state.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(80), move || {
@@ -1598,7 +1696,7 @@ fn analyze_first(
             fields.analysis_progress.pulse();
         }
         match receiver.try_recv() {
-            Ok(Ok((metadata, assets))) => {
+            Ok(Ok((metadata, assets, secondary_ids))) => {
                 let owns_active =
                     finish_analysis(&fields, &operation_busy, &cancel_state, &cancellation);
                 if !is_current || !owns_active {
@@ -1612,6 +1710,24 @@ fn analyze_first(
                     return gtk::glib::ControlFlow::Break;
                 }
                 fields.id.set_text(&metadata.id);
+                let mut update_entries = Vec::new();
+                {
+                    let mut ids = fields.secondary_disc_ids.borrow_mut();
+                    for (path, id) in secondary_ids {
+                        if files.borrow().contains(&path) {
+                            let current = ids.get(&path).cloned();
+                            if current.is_none() || current.as_deref() == Some("UNKN00000") {
+                                ids.insert(path.clone(), id.clone());
+                                update_entries.push((path, id));
+                            }
+                        }
+                    }
+                }
+                for (path, id) in update_entries {
+                    if let Some(entry) = fields.secondary_disc_id_entries.borrow().get(&path) {
+                        entry.set_text(&id);
+                    }
+                }
                 fields.title.set_text(&metadata.title);
                 fields.cdda.set_active(metadata.use_cdda);
                 if fields.manual_entry.text().is_empty() {
@@ -1746,8 +1862,8 @@ fn refresh_theme_art(fields: &DiscFields) {
     }
     if selected == 0 || selected >= THEME_NAMES.len() {
         fields.theme_loading.set(false);
-        let mut assets = base;
-        apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
+        let mut assets = base.clone();
+        apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow(), &base, false);
         *fields.assets.borrow_mut() = assets;
         refresh_asset_previews(fields);
         return;
@@ -1764,10 +1880,12 @@ fn refresh_theme_art(fields: &DiscFields) {
     *fields.theme_cancel.borrow_mut() = Some(cancellation.clone());
     let theme_name = THEME_NAMES[selected].to_string();
     let allow_downloads = !fields.disable_asset_downloads.is_active();
+    let overrides = fields.asset_overrides.borrow().clone();
     let (sender, receiver) = mpsc::channel();
     let worker_cancellation = cancellation.clone();
     thread::spawn(move || {
-        let assets = if allow_downloads {
+        let fallback = base.clone();
+        let mut assets = if allow_downloads {
             crate::assets::load_theme_assets_cancellable(
                 &game_id,
                 &theme_name,
@@ -1777,13 +1895,14 @@ fn refresh_theme_art(fields: &DiscFields) {
         } else {
             crate::assets::load_theme_assets_offline(&game_id, &theme_name, &base)
         };
+        apply_asset_overrides(&mut assets, &overrides, &fallback, true);
         let _ = sender.send(assets);
     });
     let fields = fields.clone();
     gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
         fields.analysis_progress.pulse();
         match receiver.try_recv() {
-            Ok(mut assets) => {
+            Ok(assets) => {
                 let is_current = fields.theme_generation.get() == generation;
                 let owns_active = finish_theme_art(&fields, &cancellation);
                 if !owns_active {
@@ -1797,7 +1916,6 @@ fn refresh_theme_art(fields: &DiscFields) {
                     fields.status.set_text(&tr("Operation stopped"));
                     return gtk::glib::ControlFlow::Break;
                 }
-                apply_asset_overrides(&mut assets, &fields.asset_overrides.borrow());
                 *fields.assets.borrow_mut() = assets;
                 refresh_asset_previews(&fields);
                 fields.status.set_text(&tr("Theme artwork loaded"));
@@ -1859,6 +1977,15 @@ fn set_asset_override(fields: &DiscFields, key: &str, path: Option<PathBuf>) {
         return;
     }
 
+    if path.is_some()
+        && fields.theme.selected() > 0
+        && matches!(key, "icon0" | "pic1")
+        && !fields.id.text().is_empty()
+    {
+        refresh_theme_art(fields);
+        return;
+    }
+
     if let Some(path) = path {
         let mut assets = fields.assets.borrow_mut();
         match key {
@@ -1905,11 +2032,19 @@ fn apply_pic0_layout(fields: &DiscFields) {
     };
     if custom_source.is_some() {
         fields.asset_overrides.borrow_mut().pic0 = Some(pic0.clone());
-        fields.assets.borrow_mut().pic0 = Some(pic0);
+        if fields.theme.selected() == 0 {
+            fields.assets.borrow_mut().pic0 = Some(pic0);
+        } else {
+            refresh_theme_art(fields);
+            return;
+        }
     } else {
         fields.base_assets.borrow_mut().pic0 = Some(pic0.clone());
         if fields.theme.selected() == 0 {
             fields.assets.borrow_mut().pic0 = Some(pic0);
+        } else {
+            refresh_theme_art(fields);
+            return;
         }
     }
     refresh_asset_previews(fields);
@@ -1918,17 +2053,19 @@ fn apply_pic0_layout(fields: &DiscFields) {
 fn apply_asset_overrides(
     assets: &mut crate::create::PbpAssets,
     overrides: &crate::create::PbpAssets,
+    fallback: &crate::create::PbpAssets,
+    theme_selected: bool,
 ) {
-    if overrides.icon0.is_some() {
+    if overrides.icon0.is_some() && (!theme_selected || assets.icon0 == fallback.icon0) {
         assets.icon0.clone_from(&overrides.icon0);
     }
     if overrides.icon1.is_some() {
         assets.icon1.clone_from(&overrides.icon1);
     }
-    if overrides.pic0.is_some() {
+    if overrides.pic0.is_some() && (!theme_selected || assets.pic0 == fallback.pic0) {
         assets.pic0.clone_from(&overrides.pic0);
     }
-    if overrides.pic1.is_some() {
+    if overrides.pic1.is_some() && (!theme_selected || assets.pic1 == fallback.pic1) {
         assets.pic1.clone_from(&overrides.pic1);
     }
     if overrides.snd0.is_some() {
@@ -1989,6 +2126,12 @@ fn show_xmb_preview(
             .set_text(&tr("Another operation is in progress"));
         return;
     }
+    if fields.theme_loading.get() {
+        fields
+            .status
+            .set_text(&tr("Wait for theme artwork to finish loading"));
+        return;
+    }
     let game_id = fields.id.text().to_string();
     if game_id.is_empty() {
         fields
@@ -2020,12 +2163,28 @@ fn show_xmb_preview(
     let assets = fields.assets.borrow().clone();
     let disable_pic0 = fields.disable_pic0.is_active();
     let disable_pic1 = fields.disable_pic1.is_active();
-    set_picture(
+    let watermark = fields.watermark.is_active();
+    let title = fields.title.text().to_string();
+    set_xmb_background(
         &background,
         (!disable_pic1).then_some(assets.pic1.as_deref()).flatten(),
+        watermark,
+        &title,
+        &game_id,
     );
     background.set_visible(!disable_pic1);
     stage.set_child(Some(&background));
+
+    let game_label = gtk::Label::new(None);
+    game_label.set_markup(&format!(
+        "<span foreground=\"white\" weight=\"bold\">{}</span>",
+        gtk::glib::markup_escape_text(&tr("Game"))
+    ));
+    game_label.set_halign(gtk::Align::Start);
+    game_label.set_valign(gtk::Align::Start);
+    game_label.set_margin_start(45);
+    game_label.set_margin_top(68);
+    stage.add_overlay(&game_label);
 
     let icon = asset_preview(68, 68);
     set_picture(&icon, assets.icon0.as_deref());
@@ -2047,7 +2206,9 @@ fn show_xmb_preview(
     detail.set_visible(!disable_pic0 && assets.pic0.is_some());
     stage.add_overlay(&detail);
     content.append(&stage);
-    let caption_text = tr("PSP XMB simulation · actual artwork from the selected game and theme.");
+    let caption_text = tr(
+        "PSP XMB simulation · actual images from the selected theme. System graphics may differ on the console; audio is not played.",
+    );
     let caption = gtk::Label::new(Some(&caption_text));
     caption.set_wrap(true);
     caption.add_css_class("dim-label");
@@ -2073,6 +2234,7 @@ fn show_xmb_preview(
         let worker_cancellation = cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
+            let fallback = base.clone();
             let mut assets = if allow_downloads {
                 crate::assets::load_theme_assets_cancellable(
                     &id,
@@ -2083,7 +2245,7 @@ fn show_xmb_preview(
             } else {
                 crate::assets::load_theme_assets_offline(&id, &selected_theme, &base)
             };
-            apply_asset_overrides(&mut assets, &overrides);
+            apply_asset_overrides(&mut assets, &overrides, &fallback, true);
             let _ = sender.send(assets);
         });
         let background = background.clone();
@@ -2091,14 +2253,20 @@ fn show_xmb_preview(
         let detail = detail.clone();
         let disable_pic0 = disable_pic0;
         let disable_pic1 = disable_pic1;
+        let watermark = watermark;
+        let title = title.clone();
+        let game_id = game_id.clone();
         let operation_busy = operation_busy.clone();
         let cancel_state = cancel_state.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(assets) => {
-                    set_picture(
+                    set_xmb_background(
                         &background,
                         (!disable_pic1).then_some(assets.pic1.as_deref()).flatten(),
+                        watermark,
+                        &title,
+                        &game_id,
                     );
                     background.set_visible(!disable_pic1);
                     set_picture(&icon, assets.icon0.as_deref());
@@ -2137,6 +2305,28 @@ fn set_picture(picture: &gtk::Picture, path: Option<&std::path::Path>) {
     } else {
         picture.set_filename(None::<&std::path::Path>);
     }
+}
+
+fn set_xmb_background(
+    picture: &gtk::Picture,
+    path: Option<&std::path::Path>,
+    watermark: bool,
+    title: &str,
+    game_id: &str,
+) {
+    picture.set_filename(None::<&std::path::Path>);
+    picture.set_paintable(None::<&gtk::gdk::Paintable>);
+    if watermark
+        && let Some(path) = path
+        && let Ok(bytes) = std::fs::read(path)
+        && let Ok(png) = crate::assets::watermark_pic1_png(&bytes, title, game_id)
+        && let Ok(pixbuf) = gdk_pixbuf::Pixbuf::from_read(Cursor::new(png))
+    {
+        let texture = gtk::gdk::Texture::for_pixbuf(&pixbuf);
+        picture.set_paintable(Some(&texture));
+        return;
+    }
+    set_picture(picture, path);
 }
 
 fn extract_page(
