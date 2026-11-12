@@ -189,9 +189,13 @@ pub fn create_from_image_with_progress_and_warnings(
         if disc_len == 0 {
             return Err(CreateError::Invalid("disc image is empty".into()));
         }
-        let source_md5 = CueSheet::open_image_cancellable(image_path, cancelled)
+        let source_md5 = match CueSheet::open_image_cancellable(image_path, cancelled)
             .and_then(|sheet| sheet.first_track_md5_cancellable(cancelled))
-            .ok();
+        {
+            Ok(md5) => Some(md5),
+            Err(crate::disc::DiscError::Cancelled) => return Err(CreateError::Cancelled),
+            Err(_) => None,
+        };
         let ppf_compatible = matches!(extension.as_str(), "bin" | "img")
             || cue_sheet.as_ref().is_some_and(|sheet| {
                 sheet.tracks.first().is_some_and(|first| {
