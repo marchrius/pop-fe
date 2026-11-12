@@ -184,7 +184,7 @@ impl Database {
         cancelled: &AtomicBool,
     ) -> Result<DiscMetadata, DiscError> {
         let cue = CueSheet::open_image_cancellable(path, cancelled)?;
-        let id = if let Some(id) = game_id_override(path) {
+        let mut id = if let Some(id) = game_id_override(path) {
             id
         } else {
             match self.identify_cancellable(&cue, cancelled) {
@@ -193,6 +193,9 @@ impl Database {
                 Err(error) => return Err(error),
             }
         };
+        if id == "SCES02836" {
+            id = "SCPS02836".to_string();
+        }
         if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(DiscError::Cancelled);
         }
