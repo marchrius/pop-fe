@@ -161,9 +161,17 @@ impl Database {
             return Ok(record.id.clone());
         }
 
-        let cnf = cue.system_cnf()?;
         let ids: Vec<String> = self.games.keys().cloned().collect();
-        game_id_from_system_cnf(&cnf, &ids).ok_or(DiscError::UnknownId)
+        if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(DiscError::Cancelled);
+        }
+        if let Ok(cnf) = cue.system_cnf()
+            && let Some(id) = game_id_from_system_cnf(&cnf, &ids)
+        {
+            return Ok(id);
+        }
+        cue.scan_data_tracks_for_game_id(&ids, cancelled)?
+            .ok_or(DiscError::UnknownId)
     }
 
     pub fn analyze_image(&self, path: &std::path::Path) -> Result<DiscMetadata, DiscError> {
@@ -176,10 +184,14 @@ impl Database {
         cancelled: &AtomicBool,
     ) -> Result<DiscMetadata, DiscError> {
         let cue = CueSheet::open_image_cancellable(path, cancelled)?;
-        let id = match self.identify_cancellable(&cue, cancelled) {
-            Ok(id) => id,
-            Err(DiscError::UnknownId) => "UNKN00000".to_string(),
-            Err(error) => return Err(error),
+        let id = if let Some(id) = game_id_override(path) {
+            id
+        } else {
+            match self.identify_cancellable(&cue, cancelled) {
+                Ok(id) => id,
+                Err(DiscError::UnknownId) => "UNKN00000".to_string(),
+                Err(error) => return Err(error),
+            }
         };
         if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(DiscError::Cancelled);
@@ -304,6 +316,17 @@ impl Database {
         let patch = record.hashes.as_ref()?.get(md5)?.get("xdelta")?;
         self.ppf_data.get(patch).and_then(|hex| decode_hex(hex))
     }
+}
+
+fn game_id_override(image: &std::path::Path) -> Option<String> {
+    let path = image.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let mut contents = String::new();
+    File::open(path.join("GAME_ID"))
+        .ok()?
+        .take(4096)
+        .read_to_string(&mut contents)
+        .ok()?;
+    Some(contents.chars().take(9).collect())
 }
 
 fn local_manual_for_image(image: &std::path::Path) -> Option<String> {

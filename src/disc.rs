@@ -520,6 +520,46 @@ impl CueSheet {
             "SYSTEM.CNF not found in ISO9660 root".into(),
         ))
     }
+
+    /// Search the initial data-track sectors for a known PlayStation serial.
+    /// Some valid images omit or damage SYSTEM.CNF, so POP-FE falls back to
+    /// this scan after checking the normal ISO9660 path.
+    pub fn scan_data_tracks_for_game_id(
+        &self,
+        known_ids: &[String],
+        cancelled: &AtomicBool,
+    ) -> Result<Option<String>, DiscError> {
+        for track in self
+            .tracks
+            .iter()
+            .filter(|track| track.mode != TrackMode::Audio)
+        {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(DiscError::Cancelled);
+            }
+            let Some(offset) = track.index01.checked_mul(track.mode.sector_size()) else {
+                continue;
+            };
+            let Some(length) = track.mode.sector_size().checked_mul(512) else {
+                continue;
+            };
+            let mut file = match File::open(&track.path) {
+                Ok(file) => file,
+                Err(_) => continue,
+            };
+            if file.seek(SeekFrom::Start(offset)).is_err() {
+                continue;
+            }
+            let mut data = Vec::new();
+            if file.take(length).read_to_end(&mut data).is_err() {
+                continue;
+            }
+            if let Some(id) = game_id_from_system_cnf(&data, known_ids) {
+                return Ok(Some(id));
+            }
+        }
+        Ok(None)
+    }
 }
 
 fn companion_cue(image: &Path) -> Option<PathBuf> {
@@ -960,7 +1000,9 @@ fn cue_time_to_frames(value: &str) -> Option<u64> {
 
 pub fn game_id_from_system_cnf(system_cnf: &[u8], known_ids: &[String]) -> Option<String> {
     let upper = String::from_utf8_lossy(system_cnf).to_ascii_uppercase();
-    let serial = regex::Regex::new(r"([A-Z]{4})[-_]?([0-9]{3})[.-]?([0-9]{2})").ok()?;
+    let serial =
+        regex::Regex::new(r"(?<![A-Z0-9])([A-Z]{4})[-_]?([0-9]{3})[.-]?([0-9]{2})(?![0-9])")
+            .ok()?;
     for captures in serial.captures_iter(&upper) {
         let normalized = format!("{}{}{}", &captures[1], &captures[2], &captures[3]);
         if normalized.len() == 9 && known_ids.iter().any(|id| id == &normalized) {
