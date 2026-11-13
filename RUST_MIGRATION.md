@@ -112,7 +112,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. Il `.deb` ricava le
    dipendenze OpenCV dalla build; il Flatpak include le librerie OpenCV usate.
-   I pacchetti 0.1.99 includono yt-dlp standalone e Deno verificati con SHA-256,
+   I pacchetti 0.1.100 includono yt-dlp standalone e Deno verificati con SHA-256,
    senza dipendenze runtime da Python, yt-dlp o Deno di sistema. Su x86_64
    includono anche `lcp` standalone verificato con SHA-256, per applicare il
    fallback automatico alle revisioni LibCrypt non riconosciute dal database.

@@ -50,7 +50,7 @@ pub fn tr(message: &str) -> String {
 }
 
 pub fn localize_error(message: &str) -> String {
-    const PREFIXES: [(&str, &str); 21] = [
+    const PREFIXES: [(&str, &str); 20] = [
         ("I/O error: ", "I/O error: "),
         ("invalid conversion input: ", "Invalid conversion input: "),
         ("invalid PBP: ", "Invalid PBP: "),
@@ -84,10 +84,6 @@ pub fn localize_error(message: &str) -> String {
         (
             "manual Xdelta romhack patch failed: ",
             "Manual Xdelta romhack patch failed: ",
-        ),
-        (
-            "manual Xdelta romhack patch failed with ",
-            "Manual Xdelta romhack patch failed with ",
         ),
         ("invalid PPF patch: ", "Invalid PPF patch: "),
         ("PPF validation failed: ", "PPF validation failed: "),
@@ -135,11 +131,105 @@ pub fn localize_error(message: &str) -> String {
     if let Some(status) = message.strip_prefix("chdman exited with ") {
         return tr("chdman exited with {status}").replace("{status}", status);
     }
+    if let Some(error) = message.strip_prefix("CHD input requires chdman (MAME tools): ") {
+        return tr("CHD input requires chdman (MAME tools): {error}")
+            .replace("{error}", &localize_error(error));
+    }
     if let Some(mode) = message.strip_prefix("unsupported CCD track mode ") {
         return tr("Unsupported CCD track mode: {mode}").replace("{mode}", mode);
     }
     if let Some(status) = message.strip_prefix("yt-dlp search failed with ") {
         return tr("yt-dlp search failed with {status}").replace("{status}", status);
+    }
+    if let Some(track) = message
+        .strip_prefix("CUE audio track ")
+        .and_then(|value| value.strip_suffix(" indexes are out of order"))
+    {
+        return tr("CUE audio track {track} indexes are out of order").replace("{track}", track);
+    }
+    if let Some(path) = message.strip_prefix("CDDA mode cannot merge mixed sector sizes in ") {
+        return tr("CDDA mode cannot merge mixed sector sizes in {path}").replace("{path}", path);
+    }
+    if let Some(rest) = message.strip_prefix("CDDA image ")
+        && let Some((path, sector_size)) = rest.split_once(" is not aligned to ")
+        && let Some(sector_size) = sector_size.strip_suffix("-byte sectors")
+    {
+        return tr("CDDA image {path} is not aligned to {size}-byte sectors")
+            .replace("{path}", path)
+            .replace("{size}", sector_size);
+    }
+    if let Some(path) = message.strip_prefix("CCD companion IMG file not found for ") {
+        return tr("CCD companion IMG file not found for {path}").replace("{path}", path);
+    }
+    if let Some(path) = message.strip_prefix("chdman did not create the extracted files for ") {
+        return tr("chdman did not create extracted files for {path}").replace("{path}", path);
+    }
+    if let Some(path) = message.strip_prefix("extraction destination is not a regular file: ") {
+        return tr("Extraction destination is not a regular file: {path}").replace("{path}", path);
+    }
+    if let Some(path) = message.strip_prefix("missing image file ") {
+        return tr("Missing image file: {path}").replace("{path}", path);
+    }
+    if let Some(track) = message.strip_prefix("track ")
+        && let Some(number) = track.strip_suffix(" INDEX 00 is after INDEX 01")
+    {
+        return tr("Track {track} INDEX 00 is after INDEX 01").replace("{track}", number);
+    }
+    if let Some(track) = message.strip_prefix("track ")
+        && let Some(number) = track.strip_suffix(" index lies beyond the image file")
+    {
+        return tr("Track {track} index lies beyond the image file").replace("{track}", number);
+    }
+    if let Some(rest) = message.strip_prefix("CCD track number must be between 1 and 99 at line ") {
+        return tr("CCD track number must be between 1 and 99 at line {line}")
+            .replace("{line}", rest);
+    }
+    if let Some(rest) = message.strip_prefix("duplicate CCD track ")
+        && let Some((track, line)) = rest.split_once(" at line ")
+    {
+        return tr("Duplicate CCD track {track} at line {line}")
+            .replace("{track}", track)
+            .replace("{line}", line);
+    }
+    for (prefix, key) in [
+        (
+            "TRACK appears before FILE at line ",
+            "CUE TRACK appears before FILE at line {line}",
+        ),
+        (
+            "INDEX appears before TRACK at line ",
+            "CUE INDEX appears before TRACK at line {line}",
+        ),
+        (
+            "invalid CCD track section at line ",
+            "Invalid CCD track section at line {line}",
+        ),
+    ] {
+        if let Some(line) = message.strip_prefix(prefix) {
+            return tr(key).replace("{line}", line);
+        }
+    }
+    if let Some((cause, restore_error)) =
+        message.split_once("; could not restore previous DOCUMENT.DAT: ")
+    {
+        return tr("{error}; could not restore previous DOCUMENT.DAT: {restore_error}")
+            .replace("{error}", &localize_error(cause))
+            .replace("{restore_error}", &localize_error(restore_error));
+    }
+    if let Some((cause, rollback)) = message.split_once("; conversion rollback was incomplete: ") {
+        return tr("{error}; conversion rollback was incomplete: {rollback}")
+            .replace("{error}", &localize_error(cause))
+            .replace("{rollback}", rollback);
+    }
+    if let Some((_, rest)) = message.split_once("; rollback was incomplete (")
+        && let Some((rollback, recovery)) = rest.split_once("); recovery files remain in ")
+    {
+        return tr("Rollback was incomplete ({rollback}); recovery files remain in {path}")
+            .replace("{rollback}", rollback)
+            .replace("{path}", recovery);
+    }
+    if let Some(operation_error) = localize_external_command_failure(message) {
+        return operation_error;
     }
     if let Some(game_id) = message
         .strip_prefix("LibCrypt patch unavailable for ")
@@ -371,4 +461,34 @@ pub fn localize_error(message: &str) -> String {
         _ => return tr(message),
     };
     tr(key)
+}
+
+fn localize_external_command_failure(message: &str) -> Option<String> {
+    let (operation, status_detail) = message.split_once(" failed with ")?;
+    let (status, detail) = if let Some(value) = status_detail.strip_prefix("exit status: ") {
+        match value.split_once(": ") {
+            Some((code, detail)) => (tr("Exit code {code}").replace("{code}", code), Some(detail)),
+            None => (tr("Exit code {code}").replace("{code}", value), None),
+        }
+    } else if let Some(value) = status_detail.strip_prefix("signal: ") {
+        match value.split_once(": ") {
+            Some((signal, detail)) => (
+                tr("Signal {signal}").replace("{signal}", signal),
+                Some(detail),
+            ),
+            None => (tr("Signal {signal}").replace("{signal}", value), None),
+        }
+    } else {
+        (status_detail.to_owned(), None)
+    };
+    let operation = tr(operation);
+    Some(match detail {
+        Some(detail) => tr("External command {operation} failed with {status}: {detail}")
+            .replace("{operation}", &operation)
+            .replace("{status}", &status)
+            .replace("{detail}", &localize_error(detail)),
+        None => tr("External command {operation} failed with {status}")
+            .replace("{operation}", &operation)
+            .replace("{status}", &status),
+    })
 }
