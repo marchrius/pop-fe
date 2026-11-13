@@ -129,6 +129,7 @@
   "Select the PBP file and output folder": "Seleziona il file PBP e la cartella di output",
   "Extraction in progress": "Estrazione in corso",
   "Extraction complete: {count} files": "Estrazione completata: {count} file",
+  "Extraction complete: {count} files. Some data tracks cannot be represented as a 2048-byte ISO; the raw BIN/CUE was preserved.": "Estrazione completata: {count} file. Alcune tracce dati non sono rappresentabili come ISO a 2048 byte; il BIN/CUE raw è stato conservato.",
   "Extraction failed: {error}": "Estrazione non riuscita: {error}",
   "Extraction failed": "Estrazione non riuscita",
   "Select PSP Root Folder": "Seleziona cartella principale PSP",

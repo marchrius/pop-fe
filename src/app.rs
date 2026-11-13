@@ -2653,10 +2653,28 @@ fn extract_page(
                 }
                 Ok(TaskMessage::Finished(Ok(files))) => {
                     operation_busy.set(false);
-                    status.set_text(
-                        &tr("Extraction complete: {count} files")
-                            .replace("{count}", &files.len().to_string()),
-                    );
+                    let bin_count = files
+                        .iter()
+                        .filter(|path| {
+                            path.extension()
+                                .and_then(|extension| extension.to_str())
+                                .is_some_and(|extension| extension.eq_ignore_ascii_case("bin"))
+                        })
+                        .count();
+                    let iso_count = files
+                        .iter()
+                        .filter(|path| {
+                            path.extension()
+                                .and_then(|extension| extension.to_str())
+                                .is_some_and(|extension| extension.eq_ignore_ascii_case("iso"))
+                        })
+                        .count();
+                    let summary = if bin_count > iso_count {
+                        tr("Extraction complete: {count} files. Some data tracks cannot be represented as a 2048-byte ISO; the raw BIN/CUE was preserved.")
+                    } else {
+                        tr("Extraction complete: {count} files")
+                    };
+                    status.set_text(&summary.replace("{count}", &files.len().to_string()));
                     progress.set_fraction(1.0);
                     progress.set_text(Some(&tr("Completed")));
                     button.set_sensitive(true);
