@@ -1,0 +1,50 @@
+--- a/src/pcmengin.h
++++ b/src/pcmengin.h
+@@ -27,6 +27,7 @@
+ 
+ #include <assert.h>
+ #include <string.h>
++#include <stdint.h>
+ 
+ class TPCMBufferTooSmall : public std::exception {
+     virtual const char* what() const throw() {
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -32,21 +32,16 @@
+ enable_cxx_compiler_flag_if_supported("-Wall")
+ enable_cxx_compiler_flag_if_supported("-Wextra")
+ 
++INCLUDE(FindLibSndFile)
++include_directories(${LIBSNDFILE_INCLUDE_DIR})
++set(SOURCE_PCM_IO_LIB
++    pcm_io_sndfile.cpp
++)
++
+ if (WIN32)
+     add_compile_definitions(PLATFORM_WINDOWS)
+     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+     include_directories("platform/win/getopt")
+-    set(SOURCE_PCM_IO_LIB
+-        platform/win/pcm_io/mf/pcm_io_mf.cpp
+-		platform/win/pcm_io/win32/pcm_io_win32.cpp
+-		platform/win/pcm_io/pcm_io.cpp
+-    )
+-else()
+-    INCLUDE(FindLibSndFile)
+-    include_directories(${LIBSNDFILE_INCLUDE_DIR})
+-    set(SOURCE_PCM_IO_LIB
+-        pcm_io_sndfile.cpp
+-    )
+ endif()
+ 
+ include (TestBigEndian)
+@@ -90,9 +85,7 @@
+ add_library(fft_impl STATIC ${SOURCE_FFT_LIB})
+ 
+ add_library(pcm_io STATIC ${SOURCE_PCM_IO_LIB})
+-if (NOT WIN32)
+ target_link_libraries(pcm_io ${SNDFILE_LIBRARIES})
+-endif()
+ 
+ add_library(oma STATIC ${SOURCE_OMA_LIB})
+ add_library(bitstream STATIC ${SOURCE_BITSTREAM_LIB})

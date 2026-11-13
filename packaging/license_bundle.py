@@ -13,6 +13,11 @@ def ensure_apache_2_license(offline: bool = False) -> Path:
 
 
 def ensure_gpl_2_license(offline: bool = False) -> Path:
+    bundled = ROOT / "licenses/GPL-2.0.txt"
+    if bundled.is_file() and _valid_license_text(
+        bundled.read_text(encoding="utf-8"), "GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991"
+    ):
+        return bundled
     return _ensure_license(
         "GPL-2.0.txt", GPL_2_LICENSE_URL, "GNU GENERAL PUBLIC LICENSE\nVersion 2, June 1991", offline
     )

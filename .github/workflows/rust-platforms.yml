@@ -94,6 +94,9 @@ jobs:
           PKG_CONFIG_PATH: /ucrt64/lib/pkgconfig:/ucrt64/share/pkgconfig
           LIBCLANG_PATH: /ucrt64/bin
         run: cargo +stable-x86_64-pc-windows-gnu build --locked --release
+      - name: Apply MinGW fixes to ATRAC3 submodule
+        shell: msys2 {0}
+        run: git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
       - name: Build ATRAC3 encoder
         shell: msys2 {0}
         run: |
