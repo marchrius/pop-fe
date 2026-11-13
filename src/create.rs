@@ -475,6 +475,33 @@ pub fn create_from_image_with_progress_and_warnings(
     }
 
     let mut assets = Vec::new();
+    #[cfg(feature = "gui")]
+    for (path, kind) in [
+        (
+            config.assets.icon0.as_ref(),
+            Some(crate::assets::PbpImageKind::Icon0),
+        ),
+        (config.assets.icon1.as_ref(), None),
+        (
+            config.assets.pic0.as_ref(),
+            Some(crate::assets::PbpImageKind::Pic0),
+        ),
+        (
+            config.assets.pic1.as_ref(),
+            Some(crate::assets::PbpImageKind::Pic1),
+        ),
+    ] {
+        assets.push(match path {
+            Some(path) => match kind {
+                Some(kind) => crate::assets::normalize_pbp_image(path, kind).map_err(|error| {
+                    CreateError::Invalid(format!("could not prepare PBP image: {error}"))
+                })?,
+                None => fs::read(path)?,
+            },
+            None => Vec::new(),
+        });
+    }
+    #[cfg(not(feature = "gui"))]
     for path in [
         config.assets.icon0.as_ref(),
         config.assets.icon1.as_ref(),
@@ -504,6 +531,12 @@ pub fn create_from_image_with_progress_and_warnings(
         })?;
     }
     let logo = match &config.assets.logo {
+        #[cfg(feature = "gui")]
+        Some(path) => crate::assets::normalize_pbp_image(path, crate::assets::PbpImageKind::Logo)
+            .map_err(|error| {
+            CreateError::Invalid(format!("could not prepare PBP image: {error}"))
+        })?,
+        #[cfg(not(feature = "gui"))]
         Some(path) => fs::read(path)?,
         None => DEFAULT_LOGO.to_vec(),
     };

@@ -50,7 +50,7 @@ pub fn tr(message: &str) -> String {
 }
 
 pub fn localize_error(message: &str) -> String {
-    const PREFIXES: [(&str, &str); 20] = [
+    const PREFIXES: [(&str, &str); 21] = [
         ("I/O error: ", "I/O error: "),
         ("invalid conversion input: ", "Invalid conversion input: "),
         ("invalid PBP: ", "Invalid PBP: "),
@@ -95,6 +95,10 @@ pub fn localize_error(message: &str) -> String {
         ("7-Zip is unavailable: ", "7-Zip is unavailable: "),
         ("pdftoppm is unavailable: ", "pdftoppm is unavailable: "),
         ("ffmpeg is unavailable: ", "ffmpeg is unavailable: "),
+        (
+            "could not prepare PBP image: ",
+            "Could not prepare an image for the PBP: ",
+        ),
     ];
     for (prefix, translation_key) in PREFIXES {
         if let Some(detail) = message.strip_prefix(prefix) {
@@ -316,6 +320,11 @@ pub fn localize_error(message: &str) -> String {
         "could not extract RAR manual" => "Could not extract RAR manual",
         "could not render manual PDF" => "Could not render the manual PDF",
         "could not resize manual page" => "Could not resize a manual page",
+        "image is empty or exceeds the 32 MB limit" => "Image is empty or exceeds the 32 MB limit",
+        "could not resize image for the PBP" => "Could not resize the image for the PBP",
+        "could not add alpha channel to PBP image" => {
+            "Could not add an alpha channel to the PBP image"
+        }
         "7-Zip is unavailable: " => "7-Zip is unavailable: ",
         "pdftoppm is unavailable: " => "pdftoppm is unavailable: ",
         "ffmpeg is unavailable: " => "ffmpeg is unavailable: ",

@@ -96,6 +96,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    disattivazione SND0 e PSTITLEIMG e PIC1 come logo. SND0 personalizzato si
    converte in ATRAC3, si limita ai vincoli PSP e può essere cercato/scaricato
    da YouTube tramite yt-dlp. ICON0 può usare la cornice PSN NTSC-U originale.
+   ICON0, PIC0, PIC1 e logo vengono ridimensionati anche per gli override
+   locali; PIC0 e PIC1 mantengono il canale alfa.
    Conversione ed estrazione espongono percentuali quando disponibili,
    un indicatore animato durante le fasi senza aggiornamenti e cancellazione.
    La GUI consente di selezionare patch romhack PPF/Xdelta, abbinate alle
@@ -106,7 +108,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.96
+GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.97
 includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
 runtime da Python, yt-dlp o Deno di sistema. Su x86_64 includono anche `lcp`
 standalone verificato con SHA-256, per applicare il fallback automatico alle

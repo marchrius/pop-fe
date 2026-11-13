@@ -19,6 +19,53 @@ const MAX_SND0_BYTES: usize = 500_000;
 const MAX_THEME_AUDIO_BYTES: usize = 32 * 1024 * 1024;
 const NTSC_U_ICON0_FRAME: &[u8] = include_bytes!("../data/psp/icon0_ntsc_u.png");
 
+#[derive(Clone, Copy)]
+pub enum PbpImageKind {
+    Icon0,
+    Pic0,
+    Pic1,
+    Logo,
+}
+
+pub fn normalize_pbp_image(
+    path: &Path,
+    kind: PbpImageKind,
+) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    let metadata = fs::metadata(path)?;
+    if metadata.len() == 0 || metadata.len() > MAX_IMAGE_BYTES as u64 {
+        return Err("image is empty or exceeds the 32 MB limit".into());
+    }
+    let image = Pixbuf::from_file(path)?;
+    let (width, height, force_alpha) = match kind {
+        PbpImageKind::Icon0 => {
+            let aspect = image.width() as f64 / image.height().max(1) as f64;
+            if aspect > 0.75 && aspect < 1.4 {
+                (80, 80, false)
+            } else {
+                (144, 80, false)
+            }
+        }
+        PbpImageKind::Pic0 => (310, 180, true),
+        PbpImageKind::Pic1 => (480, 272, true),
+        PbpImageKind::Logo => (480, 272, false),
+    };
+    let image = if image.width() == width && image.height() == height {
+        image
+    } else {
+        image
+            .scale_simple(width, height, InterpType::Hyper)
+            .ok_or("could not resize image for the PBP")?
+    };
+    let image = if force_alpha && !image.has_alpha() {
+        image
+            .add_alpha(false, 0, 0, 0)
+            .map_err(|_| std::io::Error::other("could not add alpha channel to PBP image"))?
+    } else {
+        image
+    };
+    Ok(image.save_to_bufferv("png", &[])?)
+}
+
 pub fn frame_ntsc_u_icon0(
     source_path: &Path,
     game_id: &str,
