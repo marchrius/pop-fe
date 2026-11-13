@@ -48,3 +48,12 @@
  
  add_library(oma STATIC ${SOURCE_OMA_LIB})
  add_library(bitstream STATIC ${SOURCE_BITSTREAM_LIB})
+--- a/src/compressed_io.h
++++ b/src/compressed_io.h
+@@ -17,5 +17,6 @@
+ 
+ #pragma once
++#include <stdint.h>
+ #include <vector>
+ #include <array>
+ #include <string>

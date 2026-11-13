@@ -146,7 +146,12 @@ def _ensure_macos_arm_bundle(offline: bool) -> Path:
         stderr=subprocess.DEVNULL,
         check=False,
     ).returncode:
-        subprocess.run(["make", "mac-os"], cwd=source, check=True)
+        make_command = ["make", "mac-os"]
+        if platform.machine().lower() in ("arm64", "aarch64"):
+            # Xcode 26's Apple Silicon runner can expose a non-native `gcc`
+            # wrapper; make the architecture explicit for the final link.
+            make_command.append("COMPILER=clang -arch arm64")
+        subprocess.run(make_command, cwd=source, check=True)
         built = source / "build" / f"lcp.{platform.machine()}"
         if not built.is_file():
             raise RuntimeError(f"native LibCrypt build did not produce {built.name}")
@@ -156,7 +161,13 @@ def _ensure_macos_arm_bundle(offline: bool) -> Path:
             stderr=subprocess.DEVNULL,
             check=False,
         ).returncode:
-            raise RuntimeError("native LibCrypt build did not produce an arm64 executable")
+            details = subprocess.run(
+                ["/usr/bin/file", str(built)], text=True, capture_output=True, check=False
+            )
+            raise RuntimeError(
+                "native LibCrypt build did not produce an arm64 executable: "
+                + details.stdout.strip()
+            )
         temporary = executable.with_suffix(".tmp")
         shutil.copy2(built, temporary)
         temporary.chmod(0o755)

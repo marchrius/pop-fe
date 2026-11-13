@@ -200,7 +200,40 @@ def main() -> None:
     for path in sorted(library_paths):
         if path.is_dir():
             command.extend(["-s", str(path)])
-    subprocess.run(command, check=True)
+    bundled = subprocess.run(command, text=True, capture_output=True, check=False)
+    bundler_output = bundled.stdout + bundled.stderr
+    if bundled.returncode:
+        # dylibbundler 1.0.5 on Xcode 26 attempts `install_name_tool -rpath ""`
+        # for binaries that have no LC_RPATH entry. That operation fails, even
+        # though its dependency rewriting can still complete. Verify the final
+        # Mach-O dependencies below instead of accepting an incomplete bundle.
+        known_rpath_issue = (
+            'no LC_RPATH load command with path:' in bundler_output
+            and 'required for specified option "-rpath' in bundler_output
+        )
+        if not known_rpath_issue:
+            raise subprocess.CalledProcessError(
+                bundled.returncode, command, bundled.stdout, bundled.stderr
+            )
+
+    macho_files = [*macos.iterdir(), *frameworks.glob("*.dylib"), *loader_dir.glob("*.dylib")]
+    unresolved = []
+    for macho in macho_files:
+        if not macho.is_file():
+            continue
+        inspected = subprocess.run(
+            ["otool", "-L", str(macho)], text=True, capture_output=True, check=False
+        )
+        if inspected.returncode:
+            continue  # Non-Mach-O runtime files (for example, shell helpers).
+        for line in inspected.stdout.splitlines()[1:]:
+            dependency = line.strip().split(" (compatibility version", 1)[0]
+            if dependency.startswith(("/usr/local/", "/opt/homebrew/")):
+                unresolved.append(f"{macho.name}: {dependency}")
+    if unresolved:
+        raise RuntimeError(
+            "macOS app bundle still references Homebrew libraries:\n" + "\n".join(unresolved)
+        )
 
     archive = output / f"pop-fe-psp-macos-{architecture}.zip"
     archive.unlink(missing_ok=True)
