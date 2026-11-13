@@ -309,6 +309,7 @@ fn page(title: &str, subtitle: &str) -> (gtk::ScrolledWindow, gtk::Box) {
     let scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .overlay_scrolling(false)
         .hexpand(true)
         .vexpand(true)
         .child(&content)
@@ -350,6 +351,7 @@ fn log_panel(buffer: &gtk::TextBuffer) -> gtk::Frame {
         .min_content_height(112)
         .max_content_height(220)
         .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .overlay_scrolling(false)
         .hexpand(true)
         .child(&view)
         .build();
