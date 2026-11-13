@@ -4,11 +4,16 @@ import hashlib
 import json
 from pathlib import Path
 import platform
+import shutil
+import subprocess
 import urllib.request
 from zipfile import ZipFile
 
 ROOT = Path(__file__).resolve().parents[1]
 VERSION = "1.1.0"
+SOURCE_COMMIT = "f1e70da5666a888ca82d8e1c0ba4d04b994ac426"
+LIB_ENIGMA_COMMIT = "7c4780c7031ba0d1236cb813aa3159931251ac84"
+SOURCE_REPOSITORY = "https://github.com/alex-free/libcrypt-patcher.git"
 RELEASE = f"https://github.com/alex-free/libcrypt-patcher/releases/download/v{VERSION}"
 GITHUB_RELEASE_API = f"https://api.github.com/repos/alex-free/libcrypt-patcher/releases/tags/v{VERSION}"
 ASSETS = {
@@ -61,10 +66,111 @@ def _portable_asset_digest(asset_name: str) -> str:
     return digest.removeprefix("sha256:")
 
 
+def _git_revision(repository: Path, path: str = "") -> str:
+    command = ["git", "-C", str(repository)]
+    if path:
+        command.extend(["-C", path])
+    command.extend(["rev-parse", "HEAD"])
+    return subprocess.check_output(command, text=True).strip()
+
+
+def _ensure_macos_arm_bundle(offline: bool) -> Path:
+    if platform.system() != "Darwin" or platform.machine().lower() not in ("arm64", "aarch64"):
+        raise RuntimeError("building the native LibCrypt patcher requires an Apple Silicon Mac")
+
+    source_key = f"{SOURCE_COMMIT[:12]}-{LIB_ENIGMA_COMMIT[:12]}"
+    cache = ROOT / "target/package-tools/libcrypt-patcher" / VERSION / f"macos-aarch64-{source_key}"
+    cache.mkdir(parents=True, exist_ok=True)
+    source = cache / "source"
+    executable = cache / "lcp"
+
+    def source_is_pinned() -> bool:
+        try:
+            return (
+                _git_revision(source) == SOURCE_COMMIT
+                and _git_revision(source, "lib-enigma") == LIB_ENIGMA_COMMIT
+                and not subprocess.check_output(
+                    [
+                        "git", "-C", str(source), "status", "--porcelain",
+                        "--untracked-files=no", "--ignore-submodules=all",
+                    ],
+                    text=True,
+                ).strip()
+                and not subprocess.check_output(
+                    [
+                        "git", "-C", str(source), "-C", "lib-enigma", "status", "--porcelain",
+                        "--untracked-files=no",
+                    ],
+                    text=True,
+                ).strip()
+            )
+        except (OSError, subprocess.CalledProcessError):
+            return False
+
+    if not source_is_pinned():
+        if offline:
+            raise RuntimeError(
+                f"LibCrypt patcher {VERSION} source (including lib-enigma) is not cached; "
+                "run the package builder once without --offline"
+            )
+        temporary = cache / "source.download"
+        if temporary.exists():
+            shutil.rmtree(temporary)
+        subprocess.run(
+            [
+                "git",
+                "clone",
+                "--depth",
+                "1",
+                "--branch",
+                f"v{VERSION}",
+                "--recurse-submodules",
+                SOURCE_REPOSITORY,
+                str(temporary),
+            ],
+            check=True,
+        )
+        if not (
+            _git_revision(temporary) == SOURCE_COMMIT
+            and _git_revision(temporary, "lib-enigma") == LIB_ENIGMA_COMMIT
+        ):
+            shutil.rmtree(temporary)
+            raise RuntimeError(f"LibCrypt patcher {VERSION} source revision did not match the pinned commits")
+        if source.exists():
+            shutil.rmtree(source)
+        temporary.replace(source)
+
+    if not executable.is_file() or subprocess.run(
+        ["/usr/bin/lipo", "-verify_arch", "arm64", str(executable)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode:
+        subprocess.run(["make", "mac-os"], cwd=source, check=True)
+        built = source / "build" / f"lcp.{platform.machine()}"
+        if not built.is_file():
+            raise RuntimeError(f"native LibCrypt build did not produce {built.name}")
+        if subprocess.run(
+            ["/usr/bin/lipo", "-verify_arch", "arm64", str(built)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        ).returncode:
+            raise RuntimeError("native LibCrypt build did not produce an arm64 executable")
+        temporary = executable.with_suffix(".tmp")
+        shutil.copy2(built, temporary)
+        temporary.chmod(0o755)
+        temporary.replace(executable)
+    executable.chmod(0o755)
+    return executable
+
+
 def ensure_bundle(architecture: str | None = None, offline: bool = False) -> Path | None:
     """Return the verified lcp executable, or None when upstream has no asset."""
     architecture = architecture or platform.machine()
     architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
+    if architecture == "macos-aarch64":
+        return _ensure_macos_arm_bundle(offline)
     portable_asset = PORTABLE_ASSETS.get(architecture)
     if portable_asset:
         archive_name, executable_name = portable_asset

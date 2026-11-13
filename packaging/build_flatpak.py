@@ -211,6 +211,8 @@ def main():
              app / 'share/icons/hicolor/scalable/apps/org.popfe.PSPManager.svg'),
             (ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt',
              app / 'share/licenses/libcrypt-patcher-BSD-3-Clause.txt'),
+            (ROOT / 'licenses/lib-enigma-BSD-3-Clause.txt',
+             app / 'share/licenses/lib-enigma-BSD-3-Clause.txt'),
             (yt_dlp, app / 'bin/yt-dlp'),
             (yt_dlp_license, app / 'share/licenses/yt-dlp-LICENSE.txt'),
             (yt_dlp_third_party, app / 'share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt'),

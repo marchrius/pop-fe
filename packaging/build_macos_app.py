@@ -47,7 +47,8 @@ def main() -> None:
         parser.error("build pop-fe-psp and atracdenc before packaging")
     yt_dlp, yt_license, yt_third_party = ensure_yt_dlp_bundle("macos", offline=args.offline)
     deno, deno_license = ensure_deno_bundle(deno_target, offline=args.offline)
-    lcp = ensure_lcp_bundle("macos-x86_64", offline=args.offline)
+    lcp_architecture = "macos-aarch64" if architecture == "aarch64" else "macos-x86_64"
+    lcp = ensure_lcp_bundle(lcp_architecture, offline=args.offline)
     xdelta_license = ensure_gpl_2_license(offline=args.offline)
     dylibbundler = shutil.which("dylibbundler")
     if dylibbundler is None:
@@ -94,6 +95,7 @@ def main() -> None:
     shutil.copy2(yt_third_party, licenses / "yt-dlp-THIRD_PARTY_LICENSES.txt")
     shutil.copy2(deno_license, licenses / "deno-LICENSE.md")
     shutil.copy2(ROOT / "licenses/libcrypt-patcher-BSD-3-Clause.txt", licenses / "libcrypt-patcher-LICENSE.txt")
+    shutil.copy2(ROOT / "licenses/lib-enigma-BSD-3-Clause.txt", licenses / "lib-enigma-LICENSE.txt")
     shutil.copy2(xdelta_license, licenses / "xdelta3-GPL-2.0-or-later.txt")
     shutil.copy2(ROOT / "LICENCE-LGPL-2.1.txt", licenses / "pop-fe-LICENSE.txt")
 

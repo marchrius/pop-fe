@@ -93,6 +93,7 @@ def main():
         doc = stage / 'usr/share/doc/pop-fe-psp'
         install(ROOT / 'LICENCE-LGPL-2.1.txt', doc / 'copyright')
         install(ROOT / 'licenses/libcrypt-patcher-BSD-3-Clause.txt', doc / 'libcrypt-patcher-BSD-3-Clause.txt')
+        install(ROOT / 'licenses/lib-enigma-BSD-3-Clause.txt', doc / 'lib-enigma-BSD-3-Clause.txt')
         install(yt_dlp_license, doc / 'yt-dlp-LICENSE.txt')
         install(yt_dlp_third_party, doc / 'yt-dlp-THIRD_PARTY_LICENSES.txt')
         install(deno_license, doc / 'deno-LICENSE.md')

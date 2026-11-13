@@ -79,6 +79,7 @@ def main() -> None:
         shutil.copy2(yt_third_party, licenses / "yt-dlp-THIRD_PARTY_LICENSES.txt")
         shutil.copy2(deno_license, licenses / "deno-LICENSE.md")
         shutil.copy2(ROOT / "licenses/libcrypt-patcher-BSD-3-Clause.txt", licenses / "libcrypt-patcher-LICENSE.txt")
+        shutil.copy2(ROOT / "licenses/lib-enigma-BSD-3-Clause.txt", licenses / "lib-enigma-LICENSE.txt")
         shutil.copy2(xdelta_license, licenses / "xdelta3-Apache-2.0.txt")
         shutil.copy2(ROOT / "LICENCE-LGPL-2.1.txt", licenses / "pop-fe-LICENSE.txt")
         copy_tree(prefix / "share/licenses", licenses / "msys2-ucrt64")

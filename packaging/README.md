@@ -42,6 +42,8 @@ cmake --build target/atracdenc-build --parallel
 python3 packaging/build_macos_app.py
 ```
 
+Il bundle Apple Silicon compila il patcher LibCrypt in modo nativo dal tag upstream v1.1.0 e dalla revisione fissata di `lib-enigma`; la prima build richiede Git e l'accesso a GitHub. Dopo aver creato la cache, il packaging può essere eseguito con `--offline`.
+
 Su Windows si usa MSYS2 UCRT64 con GTK 4, libadwaita, OpenCV, libsndfile, OpenSSL, CMake, Ninja e la toolchain Rust GNU x86_64. L'app va avviata dall'ambiente UCRT64 affinché GTK e OpenCV trovino le DLL e i dati di runtime. Il workflow `.github/workflows/rust-platforms.yml` contiene la configurazione di build e packaging.
 
 In UCRT64, la build locale usa gli stessi pacchetti della CI:
@@ -55,7 +57,7 @@ cmake --build target/atracdenc-build --parallel
 python packaging/build_windows_portable.py
 ```
 
-Gli artefatti CI contengono una `.app` macOS per ciascuna architettura e uno ZIP Windows portabile. Su Windows il bundle include GTK/OpenCV, OpenSSL con il provider legacy, encoder ATRAC3, yt-dlp, Deno, i patcher LibCrypt e Xdelta, FFmpeg, Poppler e 7-Zip. Per le immagini CHD, scarica la distribuzione Windows ufficiale di [MAME](https://www.mamedev.org/release.html) ed estrai `chdman.exe` e le DLL adiacenti nella cartella dell'app; in alternativa aggiungi quella cartella al `PATH`. Il patcher LibCrypt macOS incluso è Intel x86_64 e sui Mac Apple Silicon richiede Rosetta. Gli artefatti CI non sono firmati/notarizzati per la distribuzione pubblica.
+Gli artefatti CI contengono una `.app` macOS per ciascuna architettura e uno ZIP Windows portabile. Su Windows il bundle include GTK/OpenCV, OpenSSL con il provider legacy, encoder ATRAC3, yt-dlp, Deno, i patcher LibCrypt e Xdelta, FFmpeg, Poppler e 7-Zip. Per le immagini CHD, scarica la distribuzione Windows ufficiale di [MAME](https://www.mamedev.org/release.html) ed estrai `chdman.exe` e le DLL adiacenti nella cartella dell'app; in alternativa aggiungi quella cartella al `PATH`. Il patcher LibCrypt nei bundle macOS è compilato nativamente per Intel e Apple Silicon dalla sorgente upstream fissata alla release 1.1.0. Gli artefatti CI non sono firmati/notarizzati per la distribuzione pubblica.
 
 Su macOS estrai lo ZIP, sposta `POP-FE PSP Manager.app` in `Applicazioni` e aprila. Essendo un artefatto non firmato/notarizzato, al primo avvio macOS può richiedere l'apertura dal menu contestuale. Su Windows estrai lo ZIP in una cartella e avvia `Start POP-FE PSP Manager.cmd`.
 
