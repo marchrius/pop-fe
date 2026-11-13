@@ -61,7 +61,9 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    l'immagine; i campi null espliciti continuano a disabilitare il fallback.
    PIC0 rispetta anche scala e offset definiti per gioco nel database,
    modificabili dalla GUI con anteprima aggiornata in tempo reale; il PIC0 a
-   1000×560 è quello effettivamente incluso nel PBP. Per SND0 dà precedenza al
+   1000×560 è quello effettivamente incluso nel PBP. I cover automatici
+   mantengono il rapporto d'aspetto: ICON0 può essere 80×80 o 144×80.
+   Per SND0 dà precedenza al
    sidecar `<immagine>.snd0`, poi all'audio del tema e infine al cache upstream
    dei file ATRAC3 già pronti. L'audio viene limitato ai vincoli PSP. Se YouTube
    risponde HTTP 403, il download
@@ -108,7 +110,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.97
+GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.98
 includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
 runtime da Python, yt-dlp o Deno di sistema. Su x86_64 includono anche `lcp`
 standalone verificato con SHA-256, per applicare il fallback automatico alle

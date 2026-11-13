@@ -237,13 +237,11 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
     }
     let icon_url = game.icon0.as_deref();
     let mut icon0 = icon_url.and_then(|url| {
-        cached_image(
+        cached_icon0_candidates(
             &client,
-            url,
+            &[url.to_owned()],
             &directory,
             game_id,
-            "icon0-v2",
-            (80, 80),
             Some(cancelled),
         )
     });
@@ -252,13 +250,11 @@ pub fn load_game_assets_cancellable(game_id: &str, cancelled: &AtomicBool) -> Pb
             psx_page = cached_psx_page(&client, game, game_id, &directory, Some(cancelled));
         }
         if let Some(path) = psx_page.as_deref().and_then(first_psx_cover) {
-            icon0 = cached_image(
+            icon0 = cached_icon0_candidates(
                 &client,
-                &format!("https://psxdatacenter.com/{path}"),
+                &[format!("https://psxdatacenter.com/{path}")],
                 &directory,
                 game_id,
-                "icon0-v2",
-                (80, 80),
                 Some(cancelled),
             );
         }
@@ -304,7 +300,7 @@ pub fn load_game_assets_cached(game_id: &str) -> PbpAssets {
         .join(format!("{}-pic0-source.png", safe_id(game_id)))
         .is_file()
         .then(|| directory.join(format!("{}-pic0-source.png", safe_id(game_id))));
-    let icon0 = cached_image_path(&directory, game_id, "icon0-v2", (80, 80));
+    let icon0 = cached_icon0_path(&directory, game_id);
     let snd0 = game.snd0.as_deref().and_then(|_| {
         let path = directory.join(format!("{}-snd0.at3", safe_id(game_id)));
         fs::read(&path)
@@ -1035,46 +1031,91 @@ fn cached_image_candidates(
         return Some(path);
     }
     for url in urls {
-        if is_cancelled(cancelled) {
-            return None;
-        }
-        let Some(response) = client
-            .get(url)
-            .send()
-            .ok()
-            .and_then(|r| r.error_for_status().ok())
-        else {
+        let Some(pixbuf) = download_pixbuf(client, url, cancelled) else {
             continue;
         };
-        if response
-            .content_length()
-            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
-        {
-            continue;
-        }
-        let mut bytes = Vec::new();
-        if read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes).is_none()
-            || bytes.is_empty()
-            || bytes.len() > MAX_IMAGE_BYTES
-        {
-            continue;
-        }
-        let Ok(pixbuf) = Pixbuf::from_read(Cursor::new(bytes)) else {
-            continue;
-        };
-        if pixbuf.width() <= 0
-            || pixbuf.height() <= 0
-            || pixbuf.width() > 8000
-            || pixbuf.height() > 8000
-            || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
-        {
-            continue;
-        }
         if save_scaled(&pixbuf, &path, size).is_ok() {
             return Some(path);
         }
     }
     None
+}
+
+fn cached_icon0_candidates(
+    client: &Client,
+    urls: &[String],
+    directory: &Path,
+    game_id: &str,
+    cancelled: Option<&AtomicBool>,
+) -> Option<PathBuf> {
+    if is_cancelled(cancelled) {
+        return None;
+    }
+    let path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+    if valid_icon0_path(&path) {
+        return Some(path);
+    }
+    let _ = fs::remove_file(&path);
+    for url in urls {
+        let Some(pixbuf) = download_pixbuf(client, url, cancelled) else {
+            continue;
+        };
+        if is_cancelled(cancelled) {
+            return None;
+        }
+        let aspect = pixbuf.width() as f64 / pixbuf.height() as f64;
+        let size = if aspect > 0.75 && aspect < 1.4 {
+            (80, 80)
+        } else {
+            (144, 80)
+        };
+        if save_scaled_with_interpolation(&pixbuf, &path, size, InterpType::Hyper).is_ok() {
+            return Some(path);
+        }
+    }
+    cached_image_path(directory, game_id, "icon0-v2", (80, 80))
+}
+
+fn cached_icon0_path(directory: &Path, game_id: &str) -> Option<PathBuf> {
+    let path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+    valid_icon0_path(&path)
+        .then_some(path)
+        .or_else(|| cached_image_path(directory, game_id, "icon0-v2", (80, 80)))
+}
+
+fn valid_icon0_path(path: &Path) -> bool {
+    Pixbuf::from_file(path).ok().is_some_and(|image| {
+        (image.width() == 80 && image.height() == 80)
+            || (image.width() == 144 && image.height() == 80)
+    })
+}
+
+fn download_pixbuf(client: &Client, url: &str, cancelled: Option<&AtomicBool>) -> Option<Pixbuf> {
+    if is_cancelled(cancelled) {
+        return None;
+    }
+    let response = client.get(url).send().ok()?.error_for_status().ok()?;
+    if response
+        .content_length()
+        .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+    {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    read_response(response, MAX_IMAGE_BYTES, cancelled, &mut bytes)?;
+    if bytes.is_empty() || bytes.len() > MAX_IMAGE_BYTES || is_cancelled(cancelled) {
+        return None;
+    }
+    let pixbuf = Pixbuf::from_read(Cursor::new(bytes)).ok()?;
+    if pixbuf.width() <= 0
+        || pixbuf.height() <= 0
+        || pixbuf.width() > 8000
+        || pixbuf.height() > 8000
+        || pixbuf.width() as i64 * pixbuf.height() as i64 > 50_000_000
+    {
+        return None;
+    }
+    Some(pixbuf)
 }
 
 fn cached_pic0(
@@ -1422,8 +1463,17 @@ fn save_scaled(
     destination: &Path,
     size: (i32, i32),
 ) -> Result<(), Box<dyn std::error::Error>> {
+    save_scaled_with_interpolation(pixbuf, destination, size, InterpType::Bilinear)
+}
+
+fn save_scaled_with_interpolation(
+    pixbuf: &Pixbuf,
+    destination: &Path,
+    size: (i32, i32),
+    interpolation: InterpType,
+) -> Result<(), Box<dyn std::error::Error>> {
     let scaled = pixbuf
-        .scale_simple(size.0, size.1, InterpType::Bilinear)
+        .scale_simple(size.0, size.1, interpolation)
         .ok_or("could not resize image")?;
     let bytes = scaled.save_to_bufferv("png", &[])?;
     let temporary = destination.with_extension(format!("{}.tmp", std::process::id()));
