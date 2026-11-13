@@ -774,6 +774,13 @@ fn convert_page(
     content.append(&settings);
 
     let (options, option_body) = section(&tr("Options"));
+    let option_flow = gtk::FlowBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .column_spacing(12)
+        .row_spacing(6)
+        .min_children_per_line(1)
+        .max_children_per_line(3)
+        .build();
     for label in [
         "Disable Asset Downloads",
         "Disable SND0",
@@ -795,43 +802,44 @@ fn convert_page(
                 fields.cdda.set_tooltip_text(Some(&tr(
                     "Store CD audio as raw CDDA tracks instead of ATRAC3",
                 )));
-                option_body.append(&fields.cdda);
+                option_flow.append(&fields.cdda);
             }
             "Disable LibCrypt Patching" => {
                 fields.disable_libcrypt_patching.set_tooltip_text(Some(&tr(
                     "Skip the automatic LibCrypt sector patch when one is available",
                 )));
-                option_body.append(&fields.disable_libcrypt_patching);
+                option_flow.append(&fields.disable_libcrypt_patching);
             }
-            "Disable Asset Downloads" => option_body.append(&fields.disable_asset_downloads),
-            "Disable SND0" => option_body.append(&fields.disable_snd0),
-            "NTSC-U style ICON0" => option_body.append(&fields.ntsc_u_icon0),
-            "Force NTSC" => option_body.append(&fields.force_ntsc),
-            "Allow Disc Swapping" => option_body.append(&fields.allow_disc_swapping),
-            "Disable PSTITLEIMG" => option_body.append(&fields.disable_title_image),
+            "Disable Asset Downloads" => option_flow.append(&fields.disable_asset_downloads),
+            "Disable SND0" => option_flow.append(&fields.disable_snd0),
+            "NTSC-U style ICON0" => option_flow.append(&fields.ntsc_u_icon0),
+            "Force NTSC" => option_flow.append(&fields.force_ntsc),
+            "Allow Disc Swapping" => option_flow.append(&fields.allow_disc_swapping),
+            "Disable PSTITLEIMG" => option_flow.append(&fields.disable_title_image),
             "Disable PIC0" => {
-                option_body.append(&fields.disable_pic0);
+                option_flow.append(&fields.disable_pic0);
                 let fields = fields.clone();
                 let check = fields.disable_pic0.clone();
                 check.connect_toggled(move |_| refresh_asset_previews(&fields));
             }
             "Disable PIC1" => {
-                option_body.append(&fields.disable_pic1);
+                option_flow.append(&fields.disable_pic1);
                 let fields = fields.clone();
                 let check = fields.disable_pic1.clone();
                 check.connect_toggled(move |_| refresh_asset_previews(&fields));
             }
-            "Use PIC1 as Logo" => option_body.append(&fields.use_pic1_logo),
-            "Watermark" => option_body.append(&fields.watermark),
-            "PSX-undither" => option_body.append(&fields.psx_undither),
+            "Use PIC1 as Logo" => option_flow.append(&fields.use_pic1_logo),
+            "Watermark" => option_flow.append(&fields.watermark),
+            "PSX-undither" => option_flow.append(&fields.psx_undither),
             _ => {
                 let option = gtk::CheckButton::with_label(&tr(label));
                 option.set_sensitive(false);
                 option.set_tooltip_text(Some(&tr("This option is not ported yet")));
-                option_body.append(&option);
+                option_flow.append(&option);
             }
         }
     }
+    option_body.append(&option_flow);
     content.append(&options);
     let (artwork, artwork_body) = section(&tr("Game Artwork"));
     for (key, label) in [
