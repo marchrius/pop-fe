@@ -36,8 +36,9 @@ OPENSSL_DIR="$(brew --prefix openssl@3)" \
 OPENSSL_LIB_DIR="$(brew --prefix openssl@3)/lib" \
 OPENSSL_INCLUDE_DIR="$(brew --prefix openssl@3)/include" \
 PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:${PKG_CONFIG_PATH}" \
-RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib" cargo build --locked --release
-cmake -S atracdenc/src -B target/atracdenc-build -DCMAKE_BUILD_TYPE=Release
+LIBCLANG_PATH="$(brew --prefix llvm)/lib" \
+RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib -C link-arg=-Wl,-rpath,$(brew --prefix llvm)/lib" cargo build --locked --release
+cmake -S atracdenc/src -B target/atracdenc-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build target/atracdenc-build --parallel
 python3 packaging/build_macos_app.py
 ```
@@ -52,7 +53,7 @@ In UCRT64, la build locale usa gli stessi pacchetti della CI:
 pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-libadwaita mingw-w64-ucrt-x86_64-opencv mingw-w64-ucrt-x86_64-libsndfile mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-ffmpeg mingw-w64-ucrt-x86_64-poppler mingw-w64-ucrt-x86_64-7zip xdelta3
 rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
 cargo +stable-x86_64-pc-windows-gnu build --locked --release
-cmake -S atracdenc/src -B target/atracdenc-build -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake -S atracdenc/src -B target/atracdenc-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build target/atracdenc-build --parallel
 python packaging/build_windows_portable.py
 ```
