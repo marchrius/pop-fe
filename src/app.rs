@@ -2229,7 +2229,7 @@ fn show_xmb_preview(
         .title(tr("XMB Preview · {theme}").replace("{theme}", theme_name))
         .transient_for(parent)
         .default_width(600)
-        .default_height(390)
+        .default_height(430)
         .build();
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
@@ -2304,25 +2304,45 @@ fn show_xmb_preview(
     caption.set_wrap(true);
     caption.add_css_class("dim-label");
     content.append(&caption);
+    let preview_progress_row = gtk::Box::builder()
+        .orientation(gtk::Orientation::Horizontal)
+        .spacing(8)
+        .build();
+    let preview_progress = gtk::ProgressBar::new();
+    preview_progress.set_show_text(true);
+    preview_progress.set_text(Some(&tr("Loading theme artwork")));
+    preview_progress.set_hexpand(true);
+    let preview_cancel = gtk::Button::with_label(&tr("Cancel"));
+    let preview_cancellation = Arc::new(AtomicBool::new(false));
+    let cancel_token = preview_cancellation.clone();
+    let progress_for_cancel = preview_progress.clone();
+    preview_cancel.connect_clicked(move |button| {
+        cancel_token.store(true, std::sync::atomic::Ordering::Relaxed);
+        progress_for_cancel.set_text(Some(&tr("Stopping")));
+        button.set_sensitive(false);
+    });
+    preview_progress_row.append(&preview_progress);
+    preview_progress_row.append(&preview_cancel);
+    preview_progress_row.set_visible(false);
+    content.append(&preview_progress_row);
     window.set_child(Some(&content));
-    let cancellation_for_close = cancel_state.clone();
+    let cancellation_for_close = preview_cancellation.clone();
     window.connect_close_request(move |_| {
-        if let Some(token) = cancellation_for_close.borrow().as_ref() {
-            token.store(true, std::sync::atomic::Ordering::Relaxed);
-        }
+        cancellation_for_close.store(true, std::sync::atomic::Ordering::Relaxed);
         gtk::glib::Propagation::Proceed
     });
     window.present();
     if fields.theme.selected() > 0 {
         operation_busy.set(true);
-        let cancellation = Arc::new(AtomicBool::new(false));
-        *cancel_state.borrow_mut() = Some(cancellation.clone());
+        preview_progress_row.set_visible(true);
+        preview_cancel.set_sensitive(true);
+        *cancel_state.borrow_mut() = Some(preview_cancellation.clone());
         let base = fields.base_assets.borrow().clone();
         let id = game_id.clone();
         let selected_theme = theme_name.to_string();
         let allow_downloads = !fields.disable_asset_downloads.is_active();
         let overrides = fields.asset_overrides.borrow().clone();
-        let worker_cancellation = cancellation.clone();
+        let worker_cancellation = preview_cancellation.clone();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
             let fallback = base.clone();
@@ -2349,9 +2369,17 @@ fn show_xmb_preview(
         let game_id = game_id.clone();
         let operation_busy = operation_busy.clone();
         let cancel_state = cancel_state.clone();
+        let cancellation = preview_cancellation.clone();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(assets) => {
+                    if cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                        preview_progress.set_text(Some(&tr("Operation stopped")));
+                        preview_cancel.set_sensitive(false);
+                        operation_busy.set(false);
+                        *cancel_state.borrow_mut() = None;
+                        return gtk::glib::ControlFlow::Break;
+                    }
                     set_xmb_background(
                         &background,
                         (!disable_pic1).then_some(assets.pic1.as_deref()).flatten(),
@@ -2374,12 +2402,20 @@ fn show_xmb_preview(
                         (!disable_pic0).then_some(assets.pic0.as_deref()).flatten(),
                     );
                     detail.set_visible(!disable_pic0 && assets.pic0.is_some());
+                    preview_progress.set_fraction(1.0);
+                    preview_progress.set_text(Some(&tr("Completed")));
+                    preview_cancel.set_visible(false);
                     operation_busy.set(false);
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
                 }
-                Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                Err(mpsc::TryRecvError::Empty) => {
+                    preview_progress.pulse();
+                    gtk::glib::ControlFlow::Continue
+                }
                 Err(mpsc::TryRecvError::Disconnected) => {
+                    preview_progress.set_text(Some(&tr("Error")));
+                    preview_cancel.set_sensitive(false);
                     operation_busy.set(false);
                     *cancel_state.borrow_mut() = None;
                     gtk::glib::ControlFlow::Break
