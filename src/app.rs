@@ -224,7 +224,10 @@ pub fn activate(application: &adw::Application) {
     let theme_cancellation_for_close = theme_cancellation.clone();
     let pending_for_close = close_pending.clone();
     window.connect_close_request(move |window| {
-        if (!busy_for_close.get() && !theme_busy_for_close.get()) || pending_for_close.get() {
+        if pending_for_close.get() {
+            return gtk::glib::Propagation::Stop;
+        }
+        if !busy_for_close.get() && !theme_busy_for_close.get() {
             return gtk::glib::Propagation::Proceed;
         }
         let dialog = adw::AlertDialog::new(
@@ -242,12 +245,12 @@ pub fn activate(application: &adw::Application) {
         let cancellation = cancellation_for_close.clone();
         let theme_busy = theme_busy_for_close.clone();
         let theme_cancellation = theme_cancellation_for_close.clone();
-        let pending = pending_for_close.clone();
+        let pending_for_dialog = pending_for_close.clone();
         dialog.connect_response(None, move |_, response| {
             if response != "quit" {
                 return;
             }
-            pending.set(true);
+            pending_for_dialog.set(true);
             if let Some(token) = cancellation.borrow().as_ref() {
                 token.store(true, std::sync::atomic::Ordering::Relaxed);
             }
@@ -257,10 +260,12 @@ pub fn activate(application: &adw::Application) {
             let window = window_to_close.clone();
             let busy = busy.clone();
             let theme_busy = theme_busy.clone();
+            let pending_for_timeout = pending_for_dialog.clone();
             gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
                 if busy.get() || theme_busy.get() {
                     gtk::glib::ControlFlow::Continue
                 } else {
+                    pending_for_timeout.set(false);
                     window.close();
                     gtk::glib::ControlFlow::Break
                 }
