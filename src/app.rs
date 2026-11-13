@@ -308,7 +308,7 @@ fn page(title: &str, subtitle: &str) -> (gtk::ScrolledWindow, gtk::Box) {
 
     let scroll = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
-        .vscrollbar_policy(gtk::PolicyType::Automatic)
+        .vscrollbar_policy(gtk::PolicyType::Always)
         .overlay_scrolling(false)
         .hexpand(true)
         .vexpand(true)
