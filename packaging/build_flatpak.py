@@ -196,7 +196,9 @@ def main():
         stage = temporary / 'stage'
         repo = temporary / 'repo'
         run('flatpak', 'build-init', '--arch', arch, str(stage), APP_ID, RUNTIME, RUNTIME, RUNTIME_VERSION)
-        app = stage / 'files/app'
+        # `files` is mounted as `/app` by the Flatpak runtime. Keeping an
+        # extra `app` directory here makes the declared command unavailable.
+        app = stage / 'files'
         install_pairs = [
             (binary, app / 'bin/pop-fe-psp'),
             (encoder, app / 'bin/atracdenc'),
