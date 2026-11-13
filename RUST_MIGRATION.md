@@ -116,7 +116,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    senza dipendenze runtime da Python, yt-dlp o Deno di sistema. Su x86_64
    includono anche `lcp` standalone verificato con SHA-256, per applicare il
    fallback automatico alle revisioni LibCrypt non riconosciute dal database.
-   L'avvio della GUI nel sandbox e la compatibilità degli EBOOT su PSP reale
+   La GUI Flatpak è stata installata e avviata nel sandbox; conversione ed
+   estrazione con immagini reali e compatibilità degli EBOOT su PSP reale
    restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
