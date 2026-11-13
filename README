@@ -25,34 +25,29 @@ Or create a PS3 PKG:
 
 or ...
 
-PSP GUI
--------
+POP-FE PSP Manager
+------------------
 
-The simplified PSP frontend can be started with the project virtualenv:
+The PSP manager is the native Rust/GTK4 application. It provides Converti and
+Estrai pages. Converti accepts one or more CUE/BIN/IMG/ISO/CCD/CHD images or
+supported disc images inside ZIP archives and creates
+`PSP/GAME/<game-id>/EBOOT.PBP`; Estrai reads an EBOOT.PBP and exports
+its disc images, CUE files and available audio tracks. The manager also loads
+game metadata and artwork, supports themes and an XMB preview, and reports
+progress with cancellation. The interface follows the system language when it
+is Italian or English, and defaults to English otherwise.
 
-  $ source .venv/bin/activate
-  $ python psp_gui.py
+To build and run the GUI from the source tree on Debian/Ubuntu, install Rust,
+GTK 4.10 development files and libadwaita 1.5 development files, then run:
 
-On Linux with GTK 4 installed, the native frontend can be started with:
+  $ cargo run --locked
 
-  $ /usr/bin/python3 psp_gui_gtk.py
+For installable Debian and Flatpak packages, see `packaging/README.md`. The
+Python PSP GUI is legacy; the Python packaging scripts build and ship the Rust
+application.
 
-To build an installable Ubuntu package, run:
-
-  $ python3 packaging/build_deb.py
-
-See packaging/README.md for dependencies and installation instructions.
-
-The native frontend also requires libadwaita Python introspection bindings
-(Debian/Ubuntu: gir1.2-adw-1). Its headerbar menu provides file opening,
-Converti/Estrai navigation, log clearing, help and application information.
-Ctrl+O opens files, Alt+1/Alt+2 switches pages, F1 opens help and Ctrl+Q exits.
-Light and dark appearance follows the desktop preference via libadwaita.
-
-It has two tabs: Conversione accepts one or more CUE/BIN/IMG/ISO images and
-writes the result under PSP/GAME/<game-id>/EBOOT.PBP (raw ISO files are wrapped
-automatically as MODE1/2048); Estrazione accepts an EBOOT.PBP and exports
-PSISO*.img, PSISO*.cue and any available audio tracks as POPS ATRAC/AEA files.
+The existing Python command-line tools continue to cover the project's other
+target platforms. The PSP GTK manager no longer launches the Python backend.
 
 
 Enjoy.
