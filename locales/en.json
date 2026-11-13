@@ -83,7 +83,7 @@
   "Cancel": "Cancel",
   "Create EBOOT.PBP": "Create EBOOT.PBP",
   "Extract EBOOT.PBP Contents": "Extract EBOOT.PBP Contents",
-  "Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP.": "Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP.",
+  "Export raw BIN/CUE and available audio tracks. An ISO is created when the disc data supports 2048-byte extraction.": "Export raw BIN/CUE and available audio tracks. An ISO is created when the disc data supports 2048-byte extraction.",
   "PBP File": "PBP File",
   "Output Folder": "Output Folder",
   "Extract Contents": "Extract Contents",

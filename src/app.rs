@@ -2490,7 +2490,9 @@ fn extract_page(
 ) -> gtk::ScrolledWindow {
     let (scroll, content) = page(
         &tr("Extract EBOOT.PBP Contents"),
-        &tr("Export ISO and raw BIN/CUE images plus audio tracks stored in the PBP."),
+        &tr(
+            "Export raw BIN/CUE and available audio tracks. An ISO is created when the disc data supports 2048-byte extraction.",
+        ),
     );
     let (inputs, input_body) = section(&tr("Extraction"));
     let pbp_path = append_entry(&input_body, &tr("PBP File"), "");
