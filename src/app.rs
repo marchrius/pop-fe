@@ -2246,6 +2246,7 @@ fn show_xmb_preview(
     let disable_pic0 = fields.disable_pic0.is_active();
     let disable_pic1 = fields.disable_pic1.is_active();
     let watermark = fields.watermark.is_active();
+    let ntsc_u_icon0 = fields.ntsc_u_icon0.is_active();
     let title = fields.title.text().to_string();
     set_xmb_background(
         &background,
@@ -2269,7 +2270,15 @@ fn show_xmb_preview(
     stage.add_overlay(&game_label);
 
     let icon = asset_preview(68, 68);
-    set_picture(&icon, assets.icon0.as_deref());
+    let framed_icon = if ntsc_u_icon0 {
+        assets
+            .icon0
+            .as_deref()
+            .and_then(|path| crate::assets::frame_ntsc_u_icon0(path, &game_id).ok())
+    } else {
+        None
+    };
+    set_picture(&icon, framed_icon.as_deref().or(assets.icon0.as_deref()));
     icon.set_halign(gtk::Align::Start);
     icon.set_valign(gtk::Align::Start);
     icon.set_margin_start(45);
@@ -2351,7 +2360,15 @@ fn show_xmb_preview(
                         &game_id,
                     );
                     background.set_visible(!disable_pic1);
-                    set_picture(&icon, assets.icon0.as_deref());
+                    let framed_icon = if ntsc_u_icon0 {
+                        assets
+                            .icon0
+                            .as_deref()
+                            .and_then(|path| crate::assets::frame_ntsc_u_icon0(path, &game_id).ok())
+                    } else {
+                        None
+                    };
+                    set_picture(&icon, framed_icon.as_deref().or(assets.icon0.as_deref()));
                     set_picture(
                         &detail,
                         (!disable_pic0).then_some(assets.pic0.as_deref()).flatten(),
