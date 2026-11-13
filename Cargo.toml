@@ -2,7 +2,7 @@
 name = "pop-fe-psp"
 version = "0.1.101"
 edition = "2024"
-rust-version = "1.86"
+rust-version = "1.88"
 description = "GTK4 application for converting and extracting PlayStation disc images for PSP"
 license = "LGPL-2.1-or-later"
 
