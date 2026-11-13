@@ -1306,9 +1306,7 @@ fn prepare_snd0(
     const MAX_DURATION: f64 = 59.0;
     let mut _download = None;
     progress(0.0);
-    let source = if source.to_str().is_some_and(|value| {
-        value.starts_with("https://www.youtube.com/") || value.starts_with("https://youtu.be/")
-    }) {
+    let source = if source.to_str().is_some_and(is_youtube_url) {
         if youtube_cookies.is_some_and(|path| !path.is_file()) {
             return Err(CreateError::Invalid(
                 "YouTube cookies file does not exist".into(),
@@ -1441,6 +1439,26 @@ fn prepare_snd0(
         duration = next_duration;
         attempts += 1;
     }
+}
+
+fn is_youtube_url(value: &str) -> bool {
+    let Some((scheme, remainder)) = value.split_once("://") else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("https") && !scheme.eq_ignore_ascii_case("http") {
+        return false;
+    }
+    let authority = remainder.split(['/', '?', '#']).next().unwrap_or_default();
+    let host_port = authority.rsplit('@').next().unwrap_or_default();
+    let host = host_port
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    matches!(
+        host.as_str(),
+        "youtube.com" | "www.youtube.com" | "m.youtube.com" | "music.youtube.com" | "youtu.be"
+    )
 }
 
 fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
