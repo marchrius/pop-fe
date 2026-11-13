@@ -106,7 +106,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.95
+GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.96
 includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
 runtime da Python, yt-dlp o Deno di sistema. Su x86_64 includono anche `lcp`
 standalone verificato con SHA-256, per applicare il fallback automatico alle
