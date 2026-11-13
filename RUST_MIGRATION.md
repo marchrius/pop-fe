@@ -39,7 +39,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    correttamente sezioni, asset e immagini BIN/CUE; per nessuno dei tre è stato
    creato un ISO separato. Il PBP di Final Fantasy IX usa hash SHA-1 vuoti, che
    il dumper legacy accetta; il backend Rust verifica gli hash presenti e
-   tollera il campo tutto zero.
+   tollera il campo tutto zero. Un ciclo completo Rust BIN→PBP→BIN su Metal
+   Slug X ha ricostruito l'immagine sorgente byte per byte (104.315.904 byte).
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
    inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN. La verifica
    su più giochi, in particolare con tracce audio ATRAC, è ancora necessaria.
