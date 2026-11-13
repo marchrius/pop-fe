@@ -169,7 +169,7 @@ pub fn create_from_image_with_progress_and_warnings(
         // PSISO TOC lead-out values are CD sectors, not 0x9300-byte blocks.
         let cue_sheet = matches!(
             extension.as_str(),
-            "cue" | "chd" | "ccd" | "iso" | "bin" | "img"
+            "cue" | "chd" | "ccd" | "iso" | "bin" | "img" | "zip"
         )
         .then(|| CueSheet::open_image_cancellable(image_path, cancelled))
         .transpose()
