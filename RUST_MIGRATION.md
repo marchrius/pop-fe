@@ -43,10 +43,13 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Slug X ha ricostruito l'immagine sorgente byte per byte (104.315.904 byte).
    Un CUE multitraccia con lo stesso BIN e cinque secondi di audio PCM ha
    prodotto un EBOOT da cui è stato estratto `TRACK_0_02.aea` (83.040 byte,
-   intestazione EA3 valida).
+   intestazione EA3 valida). La modalità CDDA sullo stesso CUE ha conservato
+   i byte raw nella traccia audio del BIN e nel CUE estratto, senza creare AEA.
+   Un ISO9660 Mode 1 generato localmente è stato convertito e riestratto
+   identico byte per byte (358.400 byte).
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
    inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN. La verifica
-   con PBP multitraccia di giochi reali e in modalità CDDA è ancora necessaria.
+   con PBP multitraccia di giochi reali è ancora necessaria.
    I file vengono estratti in staging e
    pubblicati nella cartella scelta solo a operazione completata; annullamento
    o errori durante la decodifica non lasciano immagini parziali.
