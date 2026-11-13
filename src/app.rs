@@ -496,6 +496,40 @@ fn convert_page(
     fields
         .theme
         .set_selected(saved_preferences.theme.min((THEME_NAMES.len() - 1) as u32));
+    let load_id_data = gtk::Button::with_label(&tr("Load Game Data"));
+    if let Some(row) = fields
+        .id
+        .parent()
+        .and_then(|widget| widget.downcast::<gtk::Box>().ok())
+    {
+        row.append(&load_id_data);
+    }
+    let files_for_id = files.clone();
+    let fields_for_id = fields.clone();
+    let busy_for_id = operation_busy.clone();
+    let cancellation_for_id = cancel_state.clone();
+    load_id_data.connect_clicked(move |_| {
+        let id = fields_for_id.id.text().to_string();
+        if id.len() != 9 || !id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            fields_for_id.status.set_text(&tr(
+                "Game ID must contain nine ASCII alphanumeric characters",
+            ));
+            return;
+        }
+        if files_for_id.borrow().is_empty() {
+            fields_for_id
+                .status
+                .set_text(&tr("Select an image before loading game data"));
+            return;
+        }
+        analyze_first_with_id(
+            &files_for_id,
+            &fields_for_id,
+            &busy_for_id,
+            &cancellation_for_id,
+            Some(id),
+        );
+    });
     for control in [
         fields.pic0_scaling.clone(),
         fields.pic0_x_offset.clone(),
@@ -1629,6 +1663,16 @@ fn analyze_first(
     operation_busy: &Rc<Cell<bool>>,
     cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
 ) {
+    analyze_first_with_id(files, fields, operation_busy, cancel_state, None);
+}
+
+fn analyze_first_with_id(
+    files: &Rc<RefCell<Vec<PathBuf>>>,
+    fields: &DiscFields,
+    operation_busy: &Rc<Cell<bool>>,
+    cancel_state: &Rc<RefCell<Option<Arc<AtomicBool>>>>,
+    id_override: Option<String>,
+) {
     let Some(path) = files.borrow().first().cloned() else {
         return;
     };
@@ -1677,40 +1721,44 @@ fn analyze_first(
     let worker_cancellation = cancellation.clone();
     let (sender, receiver) = mpsc::channel();
     thread::spawn(move || {
-        let result = crate::database::Database::embedded()
-            .analyze_image_cancellable(&path, &worker_cancellation)
-            .map(|metadata| {
-                let assets = if download_assets
-                    && !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed)
+        let database = crate::database::Database::embedded();
+        let analysis = if let Some(id) = id_override.as_deref() {
+            database.analyze_image_with_id_cancellable(&path, id, &worker_cancellation)
+        } else {
+            database.analyze_image_cancellable(&path, &worker_cancellation)
+        };
+        let result = analysis.map(|metadata| {
+            let assets = if download_assets
+                && !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed)
+            {
+                crate::assets::load_game_assets_for_image_cancellable(
+                    &metadata.id,
+                    &path,
+                    &worker_cancellation,
+                )
+            } else if !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                crate::assets::load_game_assets_cached_for_image(&metadata.id, &path)
+            } else {
+                crate::create::PbpAssets::default()
+            };
+            let mut secondary_ids = Vec::with_capacity(secondary_paths.len());
+            for secondary_path in secondary_paths {
+                if worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    return Err(crate::disc::DiscError::Cancelled);
+                }
+                let id = match crate::database::Database::embedded()
+                    .analyze_image_cancellable(&secondary_path, &worker_cancellation)
                 {
-                    crate::assets::load_game_assets_for_image_cancellable(
-                        &metadata.id,
-                        &path,
-                        &worker_cancellation,
-                    )
-                } else if !worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
-                    crate::assets::load_game_assets_cached_for_image(&metadata.id, &path)
-                } else {
-                    crate::create::PbpAssets::default()
-                };
-                let mut secondary_ids = Vec::with_capacity(secondary_paths.len());
-                for secondary_path in secondary_paths {
-                    if worker_cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    Ok(metadata) => metadata.id,
+                    Err(crate::disc::DiscError::Cancelled) => {
                         return Err(crate::disc::DiscError::Cancelled);
                     }
-                    let id = match crate::database::Database::embedded()
-                        .analyze_image_cancellable(&secondary_path, &worker_cancellation)
-                    {
-                        Ok(metadata) => metadata.id,
-                        Err(crate::disc::DiscError::Cancelled) => {
-                            return Err(crate::disc::DiscError::Cancelled);
-                        }
-                        Err(_) => "UNKN00000".to_string(),
-                    };
-                    secondary_ids.push((secondary_path, id));
-                }
-                Ok((metadata, assets, secondary_ids))
-            });
+                    Err(_) => "UNKN00000".to_string(),
+                };
+                secondary_ids.push((secondary_path, id));
+            }
+            Ok((metadata, assets, secondary_ids))
+        });
         let _ = sender.send(
             result
                 .and_then(|result| result)

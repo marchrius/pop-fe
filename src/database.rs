@@ -196,16 +196,42 @@ impl Database {
         if id == "SCES02836" {
             id = "SCPS02836".to_string();
         }
+        self.metadata_for_id(path, &id, cancelled)
+    }
+
+    pub fn analyze_image_with_id_cancellable(
+        &self,
+        path: &std::path::Path,
+        game_id: &str,
+        cancelled: &AtomicBool,
+    ) -> Result<DiscMetadata, DiscError> {
+        if game_id.len() != 9 || !game_id.bytes().all(|byte| byte.is_ascii_alphanumeric()) {
+            return Err(DiscError::UnknownId);
+        }
+        CueSheet::open_image_cancellable(path, cancelled)?;
+        let mut id = game_id.to_ascii_uppercase();
+        if id == "SCES02836" {
+            id = "SCPS02836".to_string();
+        }
+        self.metadata_for_id(path, &id, cancelled)
+    }
+
+    fn metadata_for_id(
+        &self,
+        path: &std::path::Path,
+        id: &str,
+        cancelled: &AtomicBool,
+    ) -> Result<DiscMetadata, DiscError> {
         if cancelled.load(std::sync::atomic::Ordering::Relaxed) {
             return Err(DiscError::Cancelled);
         }
-        let game = self.games.get(&id);
+        let game = self.games.get(id);
         let title = self
-            .title(&id)
+            .title(id)
             .map(str::to_owned)
-            .unwrap_or_else(|| id.clone());
+            .unwrap_or_else(|| id.to_owned());
         Ok(DiscMetadata {
-            id,
+            id: id.to_owned(),
             title,
             manual: local_manual_for_image(path)
                 .or_else(|| game.and_then(|record| record.manual.clone())),
