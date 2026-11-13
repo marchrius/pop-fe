@@ -622,8 +622,14 @@ fn render_theme_pic1(
     theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let original = Pixbuf::from_file(source)?;
+    let painterly = matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
+    // The original filters process a 1000×1000 icon before it is composited
+    // into the 1920×1080 PIC1. At the final 480×272 size that corresponds to
+    // 250×250 pixels; retain that working resolution instead of filtering a
+    // 120×120 thumbnail and magnifying its artifacts.
+    let icon_size = if painterly { 250 } else { 120 };
     let icon = original
-        .scale_simple(120, 120, InterpType::Bilinear)
+        .scale_simple(icon_size, icon_size, InterpType::Bilinear)
         .ok_or("could not resize theme icon")?;
     let bytes = icon.read_pixel_bytes();
     let pixels = bytes.as_ref();
@@ -667,13 +673,12 @@ fn render_theme_pic1(
             }
         }
     } else {
-        let painterly = matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
-        let pixel_size = 250.0 / 120.0;
-        for y in 0..120usize {
-            for x in 0..120usize {
+        let pixel_size = 250.0 / icon_size as f64;
+        for y in 0..icon_size as usize {
+            for x in 0..icon_size as usize {
                 let mut p = pixel(pixels, stride, channels, x, y);
                 if painterly {
-                    p = painterly_pixel(pixels, stride, channels, x, y, theme);
+                    p = painterly_pixel(pixels, stride, channels, x, y, icon_size as usize, theme);
                 }
                 context.set_source_rgb(
                     p[0] as f64 / 255.0,
@@ -704,14 +709,15 @@ fn painterly_pixel(
     channels: usize,
     x: usize,
     y: usize,
+    size: usize,
     theme: &str,
 ) -> [u8; 3] {
     let mut sum = [0u32; 3];
     let mut count = 0u32;
     for dy in -2i32..=2 {
         for dx in -2i32..=2 {
-            let nx = (x as i32 + dx).clamp(0, 119) as usize;
-            let ny = (y as i32 + dy).clamp(0, 119) as usize;
+            let nx = (x as i32 + dx).clamp(0, size as i32 - 1) as usize;
+            let ny = (y as i32 + dy).clamp(0, size as i32 - 1) as usize;
             let p = pixel(data, stride, channels, nx, ny);
             for c in 0..3 {
                 sum[c] += p[c] as u32;
