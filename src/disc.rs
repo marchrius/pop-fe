@@ -771,9 +771,6 @@ fn materialize_zip(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
     if let Some(image) = find_archived_disc(&cached_dir) {
         return Ok(image);
     }
-    if cached_dir.exists() {
-        std::fs::remove_dir_all(&cached_dir)?;
-    }
     let temporary = cache_root.join(format!(
         "zip-{}-{}",
         std::process::id(),
@@ -843,14 +840,16 @@ fn materialize_zip(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
         Ok(()) => find_archived_disc(&cached_dir).ok_or_else(|| {
             DiscError::Cue("ZIP archive does not contain a supported disc image".into())
         }),
-        Err(_) if find_archived_disc(&cached_dir).is_some() => {
-            let _ = std::fs::remove_dir_all(&temporary);
-            Ok(find_archived_disc(&cached_dir).expect("checked above"))
-        }
-        Err(error) => {
-            let _ = std::fs::remove_dir_all(&temporary);
-            Err(DiscError::Io(error))
-        }
+        Err(error) => match find_archived_disc(&cached_dir) {
+            Some(image) => {
+                let _ = std::fs::remove_dir_all(&temporary);
+                Ok(image)
+            }
+            None => {
+                let _ = std::fs::remove_dir_all(&temporary);
+                Err(DiscError::Io(error))
+            }
+        },
     }
 }
 
