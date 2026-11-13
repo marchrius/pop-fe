@@ -339,7 +339,7 @@ fn extract_rar(
     fs::write(&archive, contents)?;
     fs::create_dir(&destination)?;
     let output_option = format!("-o{}", destination.display());
-    let mut command = Command::new("7z");
+    let mut command = Command::new(crate::paths::find_executable("7z"));
     command
         .args(["x", "-y", "-bd", "-bso0", "-bsp0"])
         .arg(output_option)
@@ -440,7 +440,9 @@ fn read_source(
             && fs::create_dir_all(directory).is_ok()
         {
             let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-            if fs::write(&temporary, &contents).is_ok() && fs::rename(&temporary, &path).is_err() {
+            if fs::write(&temporary, &contents).is_ok()
+                && crate::paths::replace_file(&temporary, &path).is_err()
+            {
                 let _ = fs::remove_file(temporary);
             }
         }
@@ -527,25 +529,13 @@ async fn wait_for_cancellation(cancelled: &AtomicBool) {
 }
 
 fn manual_cache_path(url: &str) -> PathBuf {
-    let cache_root = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .filter(|path| path.is_absolute())
-                .map(|path| path.join(".cache"))
-        })
-        .unwrap_or_else(std::env::temp_dir);
+    let cache_root = crate::paths::cache_dir();
     let digest = Md5::digest(url.as_bytes());
     let digest = digest
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    cache_root
-        .join("org.popfe.PSPManager")
-        .join("manuals")
-        .join(format!("{digest}.cache"))
+    cache_root.join("manuals").join(format!("{digest}.cache"))
 }
 
 fn archive_pages(
@@ -694,7 +684,7 @@ fn pdf_pages(
     let input = temporary.join(format!("source-{unique}.pdf"));
     fs::write(&input, contents)?;
     let prefix = temporary.join(format!("render-{unique}"));
-    let mut command = Command::new("pdftoppm");
+    let mut command = Command::new(crate::paths::find_executable("pdftoppm"));
     command
         .arg("-png")
         .arg("-l")
@@ -812,7 +802,7 @@ fn decode_image(
     let source = temporary.join(format!("page-{index}.jp2"));
     let output = temporary.join(format!("decoded-{index}.png"));
     fs::write(&source, contents)?;
-    let mut command = Command::new("ffmpeg");
+    let mut command = Command::new(crate::paths::find_executable("ffmpeg"));
     command
         .args(["-nostdin", "-v", "error", "-y", "-i"])
         .arg(&source)

@@ -7,9 +7,23 @@ pub(crate) fn isolate(command: &mut Command) {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        command.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
 }
 
 pub(crate) fn terminate(child: &mut Child) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let mut taskkill = Command::new("taskkill");
+        taskkill.creation_flags(0x08000000);
+        let _ = taskkill
+            .args(["/F", "/T", "/PID", &child.id().to_string()])
+            .status();
+    }
     #[cfg(unix)]
     {
         let process_group = -(child.id() as libc::pid_t);

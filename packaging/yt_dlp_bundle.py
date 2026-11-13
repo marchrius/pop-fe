@@ -12,6 +12,8 @@ RAW = f"https://raw.githubusercontent.com/yt-dlp/yt-dlp/{VERSION}"
 ASSETS = {
     "x86_64": ("yt-dlp_linux", "767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795"),
     "aarch64": ("yt-dlp_linux_aarch64", "e87e9533e89fe5889abaa21f5114dfe7756d6aa6219b83551add04d48b18e483"),
+    "macos": ("yt-dlp_macos", "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"),
+    "windows-x86_64": ("yt-dlp.exe", "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d"),
 }
 LICENSE_SHA256 = "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
 THIRD_PARTY_SHA256 = "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
@@ -38,8 +40,12 @@ def _sha256(path: Path) -> str:
 
 
 def ensure_bundle(architecture: str | None = None, offline: bool = False) -> tuple[Path, Path, Path]:
-    """Return standalone yt-dlp and upstream licenses for the requested Linux architecture."""
+    """Return a verified standalone yt-dlp executable and upstream licenses for a target platform."""
     architecture = architecture or platform.machine()
+    if architecture in ("arm64", "aarch64", "x86_64", "amd64") and platform.system() == "Darwin":
+        architecture = "macos"
+    elif architecture in ("AMD64", "x86_64") and platform.system() == "Windows":
+        architecture = "windows-x86_64"
     architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
     if architecture not in ASSETS:
         raise RuntimeError(f"yt-dlp standalone is not available for architecture {architecture}")
@@ -47,7 +53,7 @@ def ensure_bundle(architecture: str | None = None, offline: bool = False) -> tup
     asset, expected = ASSETS[architecture]
     cache = ROOT / "target/package-tools/yt-dlp" / VERSION / architecture
     cache.mkdir(parents=True, exist_ok=True)
-    executable = cache / "yt-dlp"
+    executable = cache / ("yt-dlp.exe" if architecture == "windows-x86_64" else "yt-dlp")
     license_file = cache / "LICENSE"
     third_party = cache / "THIRD_PARTY_LICENSES.txt"
 

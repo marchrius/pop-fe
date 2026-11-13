@@ -112,7 +112,7 @@ pub fn frame_ntsc_u_icon0(
     let png = frame.save_to_bufferv("png", &[])?;
     let temporary = output.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, png)?;
-    fs::rename(temporary, &output)?;
+    crate::paths::replace_file(&temporary, &output)?;
     Ok(output)
 }
 
@@ -411,7 +411,7 @@ fn local_artwork_png(
     }
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, png).ok()?;
-    fs::rename(&temporary, &path).ok()?;
+    crate::paths::replace_file(&temporary, &path).ok()?;
     Some(path)
 }
 
@@ -997,7 +997,7 @@ fn write_png(surface: ImageSurface, path: &Path) -> Result<(), Box<dyn std::erro
     let mut file = fs::File::create(&temporary)?;
     surface.write_to_png(&mut file)?;
     drop(file);
-    fs::rename(temporary, path)?;
+    crate::paths::replace_file(&temporary, path)?;
     Ok(())
 }
 
@@ -1041,7 +1041,7 @@ fn cached_psx_page(
         }
         let temporary = cache.with_extension(format!("{}.tmp", std::process::id()));
         fs::write(&temporary, &bytes).ok()?;
-        fs::rename(temporary, &cache).ok()?;
+        crate::paths::replace_file(&temporary, &cache).ok()?;
         bytes
     };
     Some(String::from_utf8_lossy(&bytes).into_owned())
@@ -1278,7 +1278,7 @@ fn cached_pic0(
     let source_png = source.save_to_bufferv("png", &[]).ok()?;
     let temporary_source = source_path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary_source, source_png).ok()?;
-    fs::rename(temporary_source, &source_path).ok()?;
+    crate::paths::replace_file(&temporary_source, &source_path).ok()?;
     render_pic0_pixbuf(
         &source,
         &path,
@@ -1353,7 +1353,7 @@ fn render_pic0_pixbuf(
     let encoded = canvas.save_to_bufferv("png", &[]).ok()?;
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, encoded).ok()?;
-    fs::rename(temporary, path).ok()?;
+    crate::paths::replace_file(&temporary, path).ok()?;
     Some(path.to_path_buf())
 }
 
@@ -1393,7 +1393,7 @@ fn cached_snd0(
     }
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, bytes).ok()?;
-    fs::rename(&temporary, &path).ok()?;
+    crate::paths::replace_file(&temporary, &path).ok()?;
     Some(path)
 }
 
@@ -1452,7 +1452,7 @@ fn cached_theme_snd0(
         let _ = fs::remove_file(&temporary);
         return None;
     }
-    fs::rename(temporary, &path).ok()?;
+    crate::paths::replace_file(&temporary, &path).ok()?;
     Some(path)
 }
 
@@ -1575,21 +1575,12 @@ fn save_pixbuf(pixbuf: &Pixbuf, destination: &Path) -> Result<(), Box<dyn std::e
 fn save_png_bytes(bytes: &[u8], destination: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let temporary = destination.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, bytes)?;
-    fs::rename(temporary, destination)?;
+    crate::paths::replace_file(&temporary, destination)?;
     Ok(())
 }
 
 fn cache_directory() -> PathBuf {
-    std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|home| home.join(".cache"))
-        })
-        .unwrap_or_else(std::env::temp_dir)
-        .join("org.popfe.PSPManager")
+    crate::paths::cache_dir()
 }
 
 fn safe_id(id: &str) -> String {

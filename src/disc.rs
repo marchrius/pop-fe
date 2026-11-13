@@ -660,16 +660,7 @@ fn materialize_chd(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
     metadata.len().hash(&mut hasher);
     metadata.modified().ok().hash(&mut hasher);
     let key = format!("{:016x}", hasher.finish());
-    let cache_root = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|root| root.is_absolute())
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|home| home.join(".cache"))
-        })
-        .unwrap_or_else(std::env::temp_dir)
-        .join("org.popfe.PSPManager/disc-images");
+    let cache_root = crate::paths::cache_dir().join("disc-images");
     std::fs::create_dir_all(&cache_root)?;
     let cached_dir = cache_root.join(key);
     let cached_cue = cached_dir.join("disc.cue");
@@ -689,12 +680,15 @@ fn materialize_chd(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
     let cue = temporary.join("disc.cue");
     let bundled_chdman = std::env::current_exe()
         .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join("chdman")))
+        .and_then(|exe| {
+            exe.parent()
+                .map(|dir| crate::paths::executable_path(&dir.join("chdman")))
+        })
         .filter(|exe| exe.is_file());
     let mut command = bundled_chdman
         .as_ref()
         .map(Command::new)
-        .unwrap_or_else(|| Command::new("chdman"));
+        .unwrap_or_else(|| Command::new(crate::paths::find_executable("chdman")));
     if let Some(executable) = &bundled_chdman {
         if let Some(app_dir) = executable.parent().and_then(Path::parent) {
             let library_dir = app_dir.join("lib");
@@ -756,16 +750,7 @@ fn materialize_zip(path: &Path, cancelled: &AtomicBool) -> Result<PathBuf, DiscE
     metadata.len().hash(&mut hasher);
     metadata.modified().ok().hash(&mut hasher);
     let key = format!("{:016x}", hasher.finish());
-    let cache_root = std::env::var_os("XDG_CACHE_HOME")
-        .map(PathBuf::from)
-        .filter(|root| root.is_absolute())
-        .or_else(|| {
-            std::env::var_os("HOME")
-                .map(PathBuf::from)
-                .map(|home| home.join(".cache"))
-        })
-        .unwrap_or_else(std::env::temp_dir)
-        .join("org.popfe.PSPManager/disc-images");
+    let cache_root = crate::paths::cache_dir().join("disc-images");
     std::fs::create_dir_all(&cache_root)?;
     let cached_dir = cache_root.join(key);
     if let Some(image) = find_archived_disc(&cached_dir) {

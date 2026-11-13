@@ -292,7 +292,7 @@ pub fn create_from_image_with_progress_and_warnings(
             let patch_file = TempFile::new("xdelta-patch")?;
             fs::write(&patch_file.path, patch_data)?;
             let output = TempFile::new("xdelta-output")?;
-            let mut command = Command::new("xdelta3");
+            let mut command = Command::new(crate::paths::find_executable("xdelta3"));
             command
                 .arg("decode")
                 .arg("-s")
@@ -343,7 +343,7 @@ pub fn create_from_image_with_progress_and_warnings(
                 let mut input = disc.try_clone()?;
                 input.seek(SeekFrom::Start(0))?;
                 io::copy(&mut input, &mut source.file.try_clone()?)?;
-                let mut command = Command::new("xdelta3");
+                let mut command = Command::new(crate::paths::find_executable("xdelta3"));
                 command
                     .arg("decode")
                     .arg("-s")
@@ -1309,12 +1309,12 @@ fn prepare_audio_tracks(
 
 fn atracdenc_path() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("POPFE_ATRACDENC").map(PathBuf::from)
-        && path.is_file()
+        && crate::paths::executable_path(&path).is_file()
     {
-        return Some(path);
+        return Some(crate::paths::executable_path(&path));
     }
     if let Some(path) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|dir| dir.join("atracdenc"))
+        .map(|dir| crate::paths::executable_path(&dir.join("atracdenc")))
         .find(|path| path.is_file())
     {
         return Some(path);
@@ -1322,12 +1322,14 @@ fn atracdenc_path() -> Option<PathBuf> {
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
-        let sibling = directory.join("atracdenc");
+        let sibling = crate::paths::executable_path(&directory.join("atracdenc"));
         if sibling.is_file() {
             return Some(sibling);
         }
     }
-    let bundled = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("atracdenc/src/atracdenc");
+    let bundled = crate::paths::executable_path(
+        &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("atracdenc/src/atracdenc"),
+    );
     bundled.is_file().then_some(bundled)
 }
 
@@ -1498,20 +1500,20 @@ fn is_youtube_url(value: &str) -> bool {
 
 fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os(variable).map(PathBuf::from)
-        && path.is_file()
+        && crate::paths::executable_path(&path).is_file()
     {
-        return Some(path);
+        return Some(crate::paths::executable_path(&path));
     }
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
-        let bundled = directory.join(name);
+        let bundled = crate::paths::executable_path(&directory.join(name));
         if bundled.is_file() {
             return Some(bundled);
         }
     }
     std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
-        .map(|directory| directory.join(name))
+        .map(|directory| crate::paths::executable_path(&directory.join(name)))
         .find(|path| path.is_file())
 }
 
@@ -1532,13 +1534,14 @@ pub(crate) fn yt_dlp_executable() -> Option<PathBuf> {
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
-        let bundled = directory.join("yt-dlp");
+        let bundled = crate::paths::executable_path(&directory.join("yt-dlp"));
         if bundled.is_file() {
             return Some(bundled);
         }
     }
     std::env::var_os("POPFE_YT_DLP")
         .map(PathBuf::from)
+        .map(|path| crate::paths::executable_path(&path))
         .filter(|path| path.is_file())
 }
 

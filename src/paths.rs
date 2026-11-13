@@ -3,6 +3,88 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+const APP_DIRECTORY: &str = "org.popfe.PSPManager";
+
+pub fn home_dir() -> PathBuf {
+    #[cfg(windows)]
+    let candidates = ["USERPROFILE", "HOME"];
+    #[cfg(not(windows))]
+    let candidates = ["HOME", "USERPROFILE"];
+
+    candidates
+        .iter()
+        .filter_map(|name| std::env::var_os(name))
+        .map(PathBuf::from)
+        .find(|path| path.is_absolute())
+        .unwrap_or_else(std::env::temp_dir)
+}
+
+pub fn config_dir() -> PathBuf {
+    #[cfg(windows)]
+    let platform_dir = std::env::var_os("APPDATA").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    let platform_dir = Some(home_dir().join("Library/Application Support"));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let platform_dir = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| Some(home_dir().join(".config")));
+
+    platform_dir
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(|| home_dir())
+        .join(APP_DIRECTORY)
+}
+
+pub fn cache_dir() -> PathBuf {
+    #[cfg(windows)]
+    let platform_dir = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    let platform_dir = Some(home_dir().join("Library/Caches"));
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let platform_dir = std::env::var_os("XDG_CACHE_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| Some(home_dir().join(".cache")));
+
+    platform_dir
+        .filter(|path| path.is_absolute())
+        .unwrap_or_else(std::env::temp_dir)
+        .join(APP_DIRECTORY)
+}
+
+pub fn executable_path(path: &Path) -> PathBuf {
+    #[cfg(windows)]
+    if path.extension().is_none() {
+        let windows_path = path.with_extension("exe");
+        if windows_path.is_file() {
+            return windows_path;
+        }
+    }
+    path.to_path_buf()
+}
+
+pub fn find_executable(name: &str) -> PathBuf {
+    #[cfg(target_os = "macos")]
+    let name = if name == "7z" { "7zz" } else { name };
+
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let candidate = executable_path(&directory.join(name));
+        if candidate.is_file() {
+            return candidate;
+        }
+    }
+    if let Some(candidate) = std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
+        .map(|directory| executable_path(&directory.join(name)))
+        .find(|path| path.is_file())
+    {
+        return candidate;
+    }
+    PathBuf::from(name)
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ConversionPreferences {
@@ -42,7 +124,7 @@ impl ConversionPreferences {
         }
         let temporary = settings.with_extension(format!("{}.tmp", std::process::id()));
         if serde_json::to_vec(self).is_ok_and(|bytes| fs::write(&temporary, bytes).is_ok())
-            && fs::rename(&temporary, &settings).is_ok()
+            && replace_file(&temporary, &settings).is_ok()
         {
             true
         } else {
@@ -66,11 +148,8 @@ pub struct FolderHistory {
 
 impl FolderHistory {
     pub fn load() -> Self {
-        let home = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .filter(|path| path.is_absolute())
-            .unwrap_or_else(|| PathBuf::from("/"));
-        let settings = app_config_dir(&home).join("dialogs.json");
+        let home = home_dir();
+        let settings = config_dir().join("dialogs.json");
         let saved = fs::read(&settings)
             .ok()
             .and_then(|bytes| serde_json::from_slice::<Preferences>(&bytes).ok())
@@ -115,7 +194,7 @@ impl FolderHistory {
             };
             if let Ok(bytes) = serde_json::to_vec(&preferences)
                 && fs::write(&temporary, bytes).is_ok()
-                && fs::rename(&temporary, &self.settings).is_ok()
+                && replace_file(&temporary, &self.settings).is_ok()
             {
                 return true;
             }
@@ -130,17 +209,13 @@ impl FolderHistory {
 }
 
 fn preferences_path() -> PathBuf {
-    let home = std::env::var_os("HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| PathBuf::from("/"));
-    app_config_dir(&home).join("preferences.json")
+    config_dir().join("preferences.json")
 }
 
-fn app_config_dir(home: &Path) -> PathBuf {
-    std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|path| path.is_absolute())
-        .unwrap_or_else(|| home.join(".config"))
-        .join("org.popfe.PSPManager")
+pub(crate) fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
+    #[cfg(windows)]
+    if destination.exists() {
+        fs::remove_file(destination)?;
+    }
+    fs::rename(source, destination)
 }

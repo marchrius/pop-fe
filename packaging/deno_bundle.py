@@ -21,11 +21,23 @@ ASSETS = {
         "deno-aarch64-unknown-linux-gnu.zip",
         "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
     ),
+    "macos-x86_64": (
+        "deno-x86_64-apple-darwin.zip",
+        "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+    ),
+    "macos-aarch64": (
+        "deno-aarch64-apple-darwin.zip",
+        "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+    ),
+    "windows-x86_64": (
+        "deno-x86_64-pc-windows-msvc.zip",
+        "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+    ),
 }
 BINARY_SHA256 = {
     "x86_64": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7",
 }
-ARCH_ALIASES = {"amd64": "x86_64", "arm64": "aarch64"}
+ARCH_ALIASES = {"amd64": "x86_64", "arm64": "aarch64", "x86_64-apple-darwin": "macos-x86_64", "aarch64-apple-darwin": "macos-aarch64", "x86_64-pc-windows-msvc": "windows-x86_64"}
 
 
 def _sha256(path: Path) -> str:
@@ -56,7 +68,8 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
     cache = ROOT / "target/package-tools/deno" / VERSION / architecture
     cache.mkdir(parents=True, exist_ok=True)
     archive = cache / filename
-    executable = cache / "deno"
+    executable_name = "deno.exe" if architecture == "windows-x86_64" else "deno"
+    executable = cache / executable_name
     license_file = cache / "LICENSE.md"
 
     archive_valid = archive.is_file() and _sha256(archive) == expected_sha
@@ -93,10 +106,11 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
             raise RuntimeError(f"verified Deno archive {VERSION} is required to extract the binary")
         with tempfile.TemporaryDirectory(prefix="deno-extract-", dir=cache) as temporary:
             with ZipFile(archive) as bundle:
-                matches = [info for info in bundle.infolist() if Path(info.filename).name == "deno"]
+                executable_name = "deno.exe" if architecture == "windows-x86_64" else "deno"
+                matches = [info for info in bundle.infolist() if Path(info.filename).name == executable_name]
                 if len(matches) != 1 or matches[0].is_dir():
                     raise RuntimeError("official Deno archive does not contain exactly one deno executable")
-                temporary_executable = Path(temporary) / "deno"
+                temporary_executable = Path(temporary) / executable_name
                 with bundle.open(matches[0]) as source, temporary_executable.open("wb") as target:
                     while chunk := source.read(1024 * 1024):
                         target.write(chunk)

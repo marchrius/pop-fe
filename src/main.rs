@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use adw::prelude::*;
 use pop_fe_psp::app;
 
