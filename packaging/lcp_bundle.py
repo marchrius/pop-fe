@@ -1,7 +1,6 @@
 """Download and verify the official standalone LibCrypt patcher."""
 
 import hashlib
-import json
 from pathlib import Path
 import platform
 import shutil
@@ -15,7 +14,6 @@ SOURCE_COMMIT = "f1e70da5666a888ca82d8e1c0ba4d04b994ac426"
 LIB_ENIGMA_COMMIT = "7c4780c7031ba0d1236cb813aa3159931251ac84"
 SOURCE_REPOSITORY = "https://github.com/alex-free/libcrypt-patcher.git"
 RELEASE = f"https://github.com/alex-free/libcrypt-patcher/releases/download/v{VERSION}"
-GITHUB_RELEASE_API = f"https://api.github.com/repos/alex-free/libcrypt-patcher/releases/tags/v{VERSION}"
 ASSETS = {
     "x86_64": (
         "libcrypt-patcher-v1.1.0-linux-x86_64-static.zip",
@@ -25,8 +23,16 @@ ASSETS = {
     ),
 }
 PORTABLE_ASSETS = {
-    "macos-x86_64": ("libcrypt-patcher-v1.1.0-mac-os-x86_64.zip", "lcp"),
-    "windows-x86_64": ("libcrypt-patcher-v1.1.0-windows-x86_64-static.zip", "lcp.exe"),
+    "macos-x86_64": (
+        "libcrypt-patcher-v1.1.0-mac-os-x86_64.zip",
+        "97207aee825b82f3d13292e2817ebffd78bf5062762c2f5e8f5b3e4c561e65dc",
+        "lcp",
+    ),
+    "windows-x86_64": (
+        "libcrypt-patcher-v1.1.0-windows-x86_64-static.zip",
+        "ed8fe84507b770311ac435cdf5bee815ec80b4b344708ef7f4fa3f1f33172c30",
+        "lcp.exe",
+    ),
 }
 
 
@@ -48,22 +54,6 @@ def _sha256(path: Path) -> str:
         while chunk := source.read(1024 * 1024):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def _portable_asset_digest(asset_name: str) -> str:
-    request = urllib.request.Request(
-        GITHUB_RELEASE_API,
-        headers={"Accept": "application/vnd.github+json", "User-Agent": "POP-FE-PSP packaging"},
-    )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        release = json.load(response)
-    assets = [asset for asset in release.get("assets", []) if asset.get("name") == asset_name]
-    if len(assets) != 1:
-        raise RuntimeError(f"GitHub release v{VERSION} does not contain exactly one {asset_name}")
-    digest = assets[0].get("digest", "")
-    if not digest.startswith("sha256:") or len(digest) != 71:
-        raise RuntimeError(f"GitHub release has no valid SHA-256 digest for {asset_name}")
-    return digest.removeprefix("sha256:")
 
 
 def _git_revision(repository: Path, path: str = "") -> str:
@@ -140,27 +130,16 @@ def _ensure_macos_arm_bundle(offline: bool) -> Path:
             shutil.rmtree(source)
         temporary.replace(source)
 
-    if not executable.is_file() or subprocess.run(
-        ["/usr/bin/lipo", "-verify_arch", "arm64", str(executable)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False,
-    ).returncode:
-        make_command = ["make", "mac-os"]
-        if platform.machine().lower() in ("arm64", "aarch64"):
-            # Xcode 26's Apple Silicon runner can expose a non-native `gcc`
-            # wrapper; make the architecture explicit for the final link.
-            make_command.append("COMPILER=clang -arch arm64")
-        subprocess.run(make_command, cwd=source, check=True)
+    def is_arm64(path: Path) -> bool:
+        result = subprocess.run(["/usr/bin/file", str(path)], text=True, capture_output=True, check=False)
+        return result.returncode == 0 and "arm64" in result.stdout.lower()
+
+    if not executable.is_file() or not is_arm64(executable):
+        subprocess.run(["make", "mac-os"], cwd=source, check=True)
         built = source / "build" / f"lcp.{platform.machine()}"
         if not built.is_file():
             raise RuntimeError(f"native LibCrypt build did not produce {built.name}")
-        if subprocess.run(
-            ["/usr/bin/lipo", "-verify_arch", "arm64", str(built)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        ).returncode:
+        if not is_arm64(built):
             details = subprocess.run(
                 ["/usr/bin/file", str(built)], text=True, capture_output=True, check=False
             )
@@ -184,7 +163,7 @@ def ensure_bundle(architecture: str | None = None, offline: bool = False) -> Pat
         return _ensure_macos_arm_bundle(offline)
     portable_asset = PORTABLE_ASSETS.get(architecture)
     if portable_asset:
-        archive_name, executable_name = portable_asset
+        archive_name, expected_hash, executable_name = portable_asset
         cache = ROOT / "target/package-tools/libcrypt-patcher" / VERSION / architecture
         cache.mkdir(parents=True, exist_ok=True)
         archive = cache / archive_name
@@ -200,7 +179,6 @@ def ensure_bundle(architecture: str | None = None, offline: bool = False) -> Pat
             if len(expected_hash) != 64 or any(character not in "0123456789abcdef" for character in expected_hash):
                 raise RuntimeError(f"cached lcp digest is invalid for {architecture}")
         else:
-            expected_hash = _portable_asset_digest(archive_name)
             digest_file.write_text(expected_hash, encoding="ascii")
         if not archive.is_file() or _sha256(archive) != expected_hash:
             if offline:

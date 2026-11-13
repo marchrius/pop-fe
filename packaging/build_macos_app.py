@@ -217,7 +217,40 @@ def main() -> None:
             )
 
     macho_files = [*macos.iterdir(), *frameworks.glob("*.dylib"), *loader_dir.glob("*.dylib")]
+    processed: set[Path] = set()
     unresolved = []
+    while True:
+        pending = [path for path in macho_files if path not in processed]
+        if not pending:
+            break
+        for macho in pending:
+            processed.add(macho)
+            if not macho.is_file():
+                continue
+            inspected = subprocess.run(
+                ["otool", "-L", str(macho)], text=True, capture_output=True, check=False
+            )
+            if inspected.returncode:
+                continue  # Non-Mach-O runtime files (for example, shell helpers).
+            replacements = []
+            for line in inspected.stdout.splitlines()[1:]:
+                dependency = line.strip().split(" (compatibility version", 1)[0]
+                if not dependency.startswith(("/usr/local/", "/opt/homebrew/")):
+                    continue
+                source = Path(dependency)
+                target = frameworks / source.name
+                if not target.exists():
+                    if not source.is_file():
+                        unresolved.append(f"{macho.name}: missing bundled dependency {dependency}")
+                        continue
+                    shutil.copy2(source, target)
+                    target.chmod(0o755)
+                    macho_files.append(target)
+                relative = os.path.relpath(target, macho.parent)
+                replacements.extend(["-change", dependency, f"@loader_path/{relative}"])
+            if replacements:
+                subprocess.run(["install_name_tool", *replacements, str(macho)], check=True)
+
     for macho in macho_files:
         if not macho.is_file():
             continue
@@ -225,7 +258,7 @@ def main() -> None:
             ["otool", "-L", str(macho)], text=True, capture_output=True, check=False
         )
         if inspected.returncode:
-            continue  # Non-Mach-O runtime files (for example, shell helpers).
+            continue
         for line in inspected.stdout.splitlines()[1:]:
             dependency = line.strip().split(" (compatibility version", 1)[0]
             if dependency.startswith(("/usr/local/", "/opt/homebrew/")):
