@@ -2194,7 +2194,10 @@ fn nul_string(value: &str, max: usize) -> Vec<u8> {
     bytes
 }
 fn copy_text(target: &mut [u8], value: &str) {
-    let count = value.len().min(target.len());
+    let mut count = value.len().min(target.len());
+    while !value.is_char_boundary(count) {
+        count -= 1;
+    }
     target[..count].copy_from_slice(&value.as_bytes()[..count]);
 }
 fn bcd(value: u8) -> u8 {
