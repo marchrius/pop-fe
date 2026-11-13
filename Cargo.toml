@@ -23,7 +23,7 @@ gtk = { package = "gtk4", version = "0.10.3", features = ["v4_10"], optional = t
 adw = { package = "libadwaita", version = "0.8.1", features = ["v1_5"], optional = true }
 gdk-pixbuf = { version = "0.21.5", optional = true }
 cairo = { package = "cairo-rs", version = "0.21.5", features = ["png"], optional = true }
-opencv = { version = "0.98.2", default-features = false, features = ["photo", "xphoto"], optional = true }
+opencv = { version = "0.102.0", default-features = false, features = ["photo", "xphoto"], optional = true }
 reqwest = { version = "0.12.28", default-features = false, features = ["blocking", "rustls-tls"], optional = true }
 tokio = { version = "1.52.3", features = ["macros", "rt", "time"], optional = true }
 serde = { version = "1.0", features = ["derive"] }

@@ -34,13 +34,15 @@ jobs:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
       - name: Install native dependencies
-        run: brew install gtk4 libadwaita opencv libsndfile openssl@3 pkg-config cmake ffmpeg poppler sevenzip rom-tools xdelta dylibbundler librsvg
+        run: brew install gtk4 libadwaita opencv libsndfile openssl@3 llvm pkg-config cmake ffmpeg poppler sevenzip rom-tools xdelta dylibbundler librsvg
       - name: Build application
         run: |
           OPENSSL_DIR="$(brew --prefix openssl@3)" \
           OPENSSL_LIB_DIR="$(brew --prefix openssl@3)/lib" \
           OPENSSL_INCLUDE_DIR="$(brew --prefix openssl@3)/include" \
           PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:${PKG_CONFIG_PATH}" \
+          LIBCLANG_PATH="$(brew --prefix llvm)/lib" \
+          DYLD_LIBRARY_PATH="$(brew --prefix llvm)/lib:${DYLD_LIBRARY_PATH}" \
           RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib" \
           cargo build --locked --release
       - name: Build ATRAC3 encoder
