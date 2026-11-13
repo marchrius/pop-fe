@@ -459,14 +459,16 @@ pub fn create_from_image_with_progress_and_warnings(
             &disc,
             disc_len,
             &psiso.file,
-            &disc_id,
-            &config.title,
-            &psp_config,
-            magic_word,
-            cue_sheet.as_ref(),
-            &audio_tracks,
-            index,
-            config.images.len(),
+            &PsisoWriteConfig {
+                game_id: &disc_id,
+                title: &config.title,
+                psp_config: &psp_config,
+                magic_word,
+                cue_sheet: cue_sheet.as_ref(),
+                audio_tracks: &audio_tracks,
+                disc_index: index,
+                disc_count: config.images.len(),
+            },
             &progress,
             cancelled,
         )?;
@@ -1094,8 +1096,8 @@ fn apply_psx_undither(
             }
         }
         if changed {
-            for sector in 0..count {
-                if regions[sector].is_some() {
+            for (sector, region) in regions.iter().take(count).enumerate() {
+                if region.is_some() {
                     let start = sector * RAW_SECTOR;
                     repair_raw_sector(&mut pair[start..start + RAW_SECTOR]);
                 }
@@ -1800,7 +1802,7 @@ fn ecc(data: &[u8; 2352]) -> ([u8; 172], [u8; 104]) {
         for value in 0..256 {
             let doubled = (value << 1) ^ if value & 0x80 != 0 { 0x11d } else { 0 };
             forward[value] = doubled as u8;
-            backward[(value ^ doubled) as usize] = value as u8;
+            backward[value ^ doubled] = value as u8;
         }
         let size = major_count * minor_count;
         let mut output = vec![0u8; major_count * 2];
@@ -1882,21 +1884,33 @@ impl Drop for TempFile {
     }
 }
 
+struct PsisoWriteConfig<'a> {
+    game_id: &'a str,
+    title: &'a str,
+    psp_config: &'a [u8],
+    magic_word: Option<u16>,
+    cue_sheet: Option<&'a CueSheet>,
+    audio_tracks: &'a [EncodedAudioTrack],
+    disc_index: usize,
+    disc_count: usize,
+}
+
 fn write_psiso(
     disc: &File,
     disc_len: u64,
     output: &File,
-    game_id: &str,
-    title: &str,
-    psp_config: &[u8],
-    magic_word: Option<u16>,
-    cue_sheet: Option<&CueSheet>,
-    audio_tracks: &[EncodedAudioTrack],
-    disc_index: usize,
-    disc_count: usize,
+    options: &PsisoWriteConfig<'_>,
     progress: &dyn Fn(f64),
     cancelled: &AtomicBool,
 ) -> Result<(), CreateError> {
+    let game_id = options.game_id;
+    let title = options.title;
+    let psp_config = options.psp_config;
+    let magic_word = options.magic_word;
+    let cue_sheet = options.cue_sheet;
+    let audio_tracks = options.audio_tracks;
+    let disc_index = options.disc_index;
+    let disc_count = options.disc_count;
     let sector_count = disc_len.div_ceil(SECTOR_SIZE as u64);
     let image_size = sector_count
         .checked_mul(SECTOR_SIZE as u64)

@@ -1353,7 +1353,7 @@ fn render_pic0_pixbuf(
     let encoded = canvas.save_to_bufferv("png", &[]).ok()?;
     let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, encoded).ok()?;
-    fs::rename(temporary, &path).ok()?;
+    fs::rename(temporary, path).ok()?;
     Some(path.to_path_buf())
 }
 

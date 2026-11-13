@@ -513,7 +513,7 @@ impl CueSheet {
 
         for record in directory_records(&directory) {
             let Some(record) = record else { continue };
-            let name = std::str::from_utf8(&record.name).unwrap_or_default();
+            let name = std::str::from_utf8(record.name).unwrap_or_default();
             if name
                 .split(';')
                 .next()
@@ -1000,10 +1000,7 @@ fn parse_cue_filename(line: &str) -> Option<String> {
     if let Some(quoted) = value.strip_prefix('"') {
         Some(quoted.split_once('"')?.0.to_owned())
     } else {
-        let end = value
-            .rfind(char::is_whitespace)
-            .map(|index| index)
-            .unwrap_or(value.len());
+        let end = value.rfind(char::is_whitespace).unwrap_or(value.len());
         let filename = value[..end].trim();
         (!filename.is_empty()).then(|| filename.to_owned())
     }

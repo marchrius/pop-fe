@@ -132,7 +132,7 @@ fn decrypt_ps3_document(data: &[u8], cancelled: &AtomicBool) -> Result<Vec<Vec<u
         let record = 8 + index * 0x80;
         let offset = read_u32(&decoded_info, record)? as usize;
         let length = read_u32(&decoded_info, record + 0x0c)? as usize;
-        if length < 0x40 || length > MAX_PAGE_BYTES + 0x1000 {
+        if !(0x40..=MAX_PAGE_BYTES + 0x1000).contains(&length) {
             continue;
         }
         let encrypted_page = match data.get(offset..offset.saturating_add(length)) {
@@ -188,7 +188,7 @@ fn decrypt_ps3_document(data: &[u8], cancelled: &AtomicBool) -> Result<Vec<Vec<u
             continue;
         };
         let png_end = end + PNG_END.len();
-        if png_end >= 0x43 && png_end <= MAX_PAGE_BYTES {
+        if (0x43..=MAX_PAGE_BYTES).contains(&png_end) {
             page.truncate(png_end);
             pages.push(page);
         }
@@ -362,7 +362,7 @@ fn extract_rar(
             Err(error) => {
                 crate::process::terminate(&mut child);
                 let _ = child.wait();
-                return Err(error.into());
+                return Err(error);
             }
         };
         if size > MAX_MANUAL_BYTES as u64 || entries > MAX_ARCHIVE_ENTRIES {
@@ -440,10 +440,8 @@ fn read_source(
             && fs::create_dir_all(directory).is_ok()
         {
             let temporary = path.with_extension(format!("{}.tmp", std::process::id()));
-            if fs::write(&temporary, &contents).is_ok() {
-                if fs::rename(&temporary, &path).is_err() {
-                    let _ = fs::remove_file(temporary);
-                }
+            if fs::write(&temporary, &contents).is_ok() && fs::rename(&temporary, &path).is_err() {
+                let _ = fs::remove_file(temporary);
             }
         }
         return Ok(contents);

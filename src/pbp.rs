@@ -39,6 +39,19 @@ pub struct Pbp {
     file_size: u64,
 }
 
+struct ExtractedDisc {
+    image: PathBuf,
+    cue: PathBuf,
+    toc: PathBuf,
+    iso: Option<PathBuf>,
+    audio_tracks: Vec<PathBuf>,
+}
+
+struct PsarTitleDirectory {
+    title: [u8; 1024],
+    psiso_offsets: HashSet<u64>,
+}
+
 impl Pbp {
     pub fn open(path: &Path) -> Result<Self, PbpError> {
         let mut file = File::open(path)?;
@@ -153,24 +166,26 @@ impl Pbp {
             return Ok(output_files);
         }
         let title_directory = read_psar_title_directory(&mut source, psar, self.file_size)?;
-        if let Some((title, _)) = &title_directory {
+        if let Some(directory) = &title_directory {
             // PSTITLEIMG stores PSISO positions relative to the PSAR start.
             // Prefer those positions so arbitrary PSAR payload bytes that
             // happen to contain "PSISOIMG0000" are not treated as discs.
             let file = staging_dir.join("PSTITLEIMG.DAT");
-            fs::write(&file, title)?;
+            fs::write(&file, directory.title)?;
             reporter.add(1024);
             written.push(file);
         }
         let mut offset = psar;
         let mut disc_index = 0;
-        let allowed = title_directory.as_ref().map(|(_, offsets)| offsets);
+        let allowed = title_directory
+            .as_ref()
+            .map(|directory| &directory.psiso_offsets);
         while let Some((found, magic)) =
             find_next_psar_record(&mut source, offset, self.file_size, allowed, cancelled)?
         {
             offset = found;
             if &magic[..12] == b"PSISOIMG0000" {
-                let (image, cue, toc, iso, audio_tracks) = self.extract_disc(
+                let extracted = self.extract_disc(
                     &mut source,
                     offset,
                     staging_dir,
@@ -178,11 +193,11 @@ impl Pbp {
                     cancelled,
                     &mut reporter,
                 )?;
-                written.push(image);
-                written.push(cue);
-                written.push(toc);
-                written.extend(iso);
-                written.extend(audio_tracks);
+                written.push(extracted.image);
+                written.push(extracted.cue);
+                written.push(extracted.toc);
+                written.extend(extracted.iso);
+                written.extend(extracted.audio_tracks);
                 disc_index += 1;
                 let mut length = [0u8; 4];
                 source.seek(SeekFrom::Start(offset + 12))?;
@@ -232,7 +247,9 @@ impl Pbp {
         if title_directory.is_some() {
             work = work.saturating_add(1024);
         }
-        let allowed = title_directory.as_ref().map(|(_, offsets)| offsets);
+        let allowed = title_directory
+            .as_ref()
+            .map(|directory| &directory.psiso_offsets);
         while let Some((found, magic)) =
             find_next_psar_record(&mut source, offset, self.file_size, allowed, cancelled)?
         {
@@ -294,13 +311,12 @@ impl Pbp {
         disc: usize,
         cancelled: &AtomicBool,
         reporter: &mut ProgressReporter<'_>,
-    ) -> Result<(PathBuf, PathBuf, PathBuf, Option<PathBuf>, Vec<PathBuf>), PbpError> {
+    ) -> Result<ExtractedDisc, PbpError> {
         let mut image_size = [0u8; 4];
         source.seek(SeekFrom::Start(base + 12))?;
         source.read_exact(&mut image_size)?;
         let image_size = u32::from_le_bytes(image_size) as u64;
-        if image_size < PSISO_HEADER_SIZE
-            || image_size > MAX_DISC_BYTES
+        if !(PSISO_HEADER_SIZE..=MAX_DISC_BYTES).contains(&image_size)
             || base
                 .checked_add(image_size)
                 .is_none_or(|end| end > self.file_size)
@@ -454,7 +470,13 @@ impl Pbp {
             audio_paths.push(audio_path);
             track += 1;
         }
-        Ok((image, cue, toc, iso, audio_paths))
+        Ok(ExtractedDisc {
+            image,
+            cue,
+            toc,
+            iso,
+            audio_tracks: audio_paths,
+        })
     }
 }
 
@@ -462,7 +484,7 @@ fn read_psar_title_directory(
     source: &mut File,
     psar: u64,
     file_size: u64,
-) -> Result<Option<([u8; 1024], HashSet<u64>)>, PbpError> {
+) -> Result<Option<PsarTitleDirectory>, PbpError> {
     if psar >= file_size {
         return Ok(None);
     }
@@ -498,7 +520,10 @@ fn read_psar_title_directory(
             allowed.insert(position);
         }
     }
-    Ok(Some((title, allowed)))
+    Ok(Some(PsarTitleDirectory {
+        title,
+        psiso_offsets: allowed,
+    }))
 }
 
 fn find_next_psar_record(

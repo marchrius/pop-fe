@@ -429,7 +429,7 @@ fn convert_page(
         disable_snd0: gtk::CheckButton::with_label(&tr("Disable SND0")),
         youtube_cookies: gtk::Entry::builder()
             .hexpand(true)
-            .placeholder_text(&tr("Optional YouTube cookies.txt"))
+            .placeholder_text(tr("Optional YouTube cookies.txt"))
             .build(),
         ntsc_u_icon0: gtk::CheckButton::with_label(&tr("NTSC-U style ICON0")),
         status: gtk::Label::new(Some(&tr("Ready"))),
@@ -618,7 +618,7 @@ fn convert_page(
     let cancellation_for_dialog = cancel_state.clone();
     add.connect_clicked(move |_| {
         let chooser = gtk::FileDialog::builder()
-            .title(&tr("Select Disc Images"))
+            .title(tr("Select Disc Images"))
             .modal(true)
             .build();
         let initial = gio::File::for_path(history_for_dialog.borrow().current());
@@ -684,7 +684,7 @@ fn convert_page(
     let clear_patches = gtk::Button::with_label(&tr("Clear Patches"));
     clear_patches.set_sensitive(false);
     let patch_summary = gtk::Label::builder()
-        .label(&tr("No manual patches selected"))
+        .label(tr("No manual patches selected"))
         .xalign(0.0)
         .hexpand(true)
         .wrap(true)
@@ -702,7 +702,7 @@ fn convert_page(
     let clear_patches_for_dialog = clear_patches.clone();
     choose_patches.connect_clicked(move |_| {
         let chooser = gtk::FileDialog::builder()
-            .title(&tr("Select Romhack Patches"))
+            .title(tr("Select Romhack Patches"))
             .modal(true)
             .build();
         chooser.set_initial_folder(Some(&gio::File::for_path(patch_history.borrow().current())));
@@ -982,7 +982,7 @@ fn convert_page(
         let history_for_dialog = folder_history.clone();
         browse.connect_clicked(move |_| {
             let dialog = gtk::FileDialog::builder()
-                .title(&tr("Select Asset File"))
+                .title(tr("Select Asset File"))
                 .build();
             dialog.set_initial_folder(Some(&gio::File::for_path(
                 history_for_dialog.borrow().current(),
@@ -1020,7 +1020,7 @@ fn convert_page(
     let cookies_history = folder_history.clone();
     cookies_browse.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select YouTube cookies file"))
+            .title(tr("Select YouTube cookies file"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(
             cookies_history.borrow().current(),
@@ -1093,7 +1093,7 @@ fn convert_page(
     let history_for_manual = folder_history.clone();
     manual_browse.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select Manual File"))
+            .title(tr("Select Manual File"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(
             history_for_manual.borrow().current(),
@@ -1118,7 +1118,7 @@ fn convert_page(
     let history_for_manual_folder = folder_history.clone();
     manual_folder_browse.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select Manual Folder"))
+            .title(tr("Select Manual Folder"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(
             history_for_manual_folder.borrow().current(),
@@ -1244,7 +1244,7 @@ fn convert_page(
     let root_parent = parent.clone();
     root_browse.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select PSP Root Folder"))
+            .title(tr("Select PSP Root Folder"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(root_history.borrow().current())));
         let root = root.clone();
@@ -1589,7 +1589,7 @@ fn refresh_disc_list(
                 .text(&value)
                 .width_chars(9)
                 .max_length(9)
-                .tooltip_text(&tr("Disc ID"))
+                .tooltip_text(tr("Disc ID"))
                 .build();
             let path_for_id = path.clone();
             entry.connect_changed(move |entry| {
@@ -2383,9 +2383,6 @@ fn show_xmb_preview(
         let background = background.clone();
         let icon = icon.clone();
         let detail = detail.clone();
-        let disable_pic0 = disable_pic0;
-        let disable_pic1 = disable_pic1;
-        let watermark = watermark;
         let title = title.clone();
         let game_id = game_id.clone();
         let operation_busy = operation_busy.clone();
@@ -2504,7 +2501,7 @@ fn extract_page(
     let history_for_pbp = history.clone();
     choose_pbp.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select PBP File"))
+            .title(tr("Select PBP File"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(
             history_for_pbp.borrow().current(),
@@ -2534,7 +2531,7 @@ fn extract_page(
     let history_for_output = history.clone();
     choose_output.connect_clicked(move |_| {
         let dialog = gtk::FileDialog::builder()
-            .title(&tr("Select Output Folder"))
+            .title(tr("Select Output Folder"))
             .build();
         dialog.set_initial_folder(Some(&gio::File::for_path(
             history_for_output.borrow().current(),
