@@ -116,9 +116,10 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    senza dipendenze runtime da Python, yt-dlp o Deno di sistema. Su x86_64
    includono anche `lcp` standalone verificato con SHA-256, per applicare il
    fallback automatico alle revisioni LibCrypt non riconosciute dal database.
-   La GUI Flatpak è stata installata e avviata nel sandbox; conversione ed
-   estrazione con immagini reali e compatibilità degli EBOOT su PSP reale
-   restano da verificare.
+   La GUI Flatpak è stata installata e avviata nel sandbox. L'EBOOT di Bugs
+   Bunny - Lost in Time (hash `f166c09b70d2739ee82656cb64c60cf8`, ID
+   `SLES01726`) è stato confermato avviabile su PSP. Conversione ed estrazione
+   con un insieme più ampio di immagini restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
 Il crate non è ancora un sostituto completo:
@@ -131,11 +132,13 @@ dipendere da `lcp`; per le revisioni ancora sconosciute usa il patcher incluso
 nei pacchetti x86_64, o `lcp` nel PATH / `POPFE_LCP` sulle architetture senza
 bundle upstream. Se nessuno è disponibile, non applica una patch predefinita
 potenzialmente errata.
-Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
-finché non sarà validato su immagini e hardware reali. La decifratura DES dei
-manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono state verificate con
-un PGD sintetico cifrato secondo il formato originale, incluso il caso di una
-pagina senza blocchi cifrati; manca ancora la verifica con un manuale PS3 reale.
+Il port non è ancora verificato abbastanza da sostituire completamente il
+flusso originale per generare EBOOT: Bugs Bunny - Lost in Time è stato
+confermato su hardware, ma restano da verificare altri giochi e flussi. La
+decifratura DES dei manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono
+state verificate con un PGD sintetico cifrato secondo il formato originale,
+incluso il caso di una pagina senza blocchi cifrati; manca ancora la verifica
+con un manuale PS3 reale.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
 GTK4, libadwaita, OpenCV e libclang, oltre a Rust/Cargo.
