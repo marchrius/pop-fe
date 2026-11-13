@@ -1918,6 +1918,9 @@ fn refresh_theme_art(fields: &DiscFields) {
                     return gtk::glib::ControlFlow::Break;
                 }
                 if cancellation.load(std::sync::atomic::Ordering::Relaxed) {
+                    if fields.theme.selected() != 0 {
+                        fields.theme.set_selected(0);
+                    }
                     fields.status.set_text(&tr("Operation stopped"));
                     return gtk::glib::ControlFlow::Break;
                 }
