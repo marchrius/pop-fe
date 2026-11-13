@@ -1458,11 +1458,11 @@ fn convert_page(
         let cancel_state = state_for_create.clone();
         let warning_state = warning_state_for_create.clone();
         let operation_busy = operation_busy_for_create.clone();
-        let mut has_progress = false;
+        let mut last_progress_update = std::time::Instant::now();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
-                    has_progress |= fraction > 0.0;
+                    last_progress_update = std::time::Instant::now();
                     progress.set_fraction(fraction);
                     progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
                     gtk::glib::ControlFlow::Continue
@@ -1511,8 +1511,9 @@ fn convert_page(
                     gtk::glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => {
-                    if !has_progress {
+                    if last_progress_update.elapsed() >= Duration::from_secs(1) {
                         progress.pulse();
+                        progress.set_text(Some(&tr("Conversion in progress")));
                     }
                     gtk::glib::ControlFlow::Continue
                 }
@@ -2618,11 +2619,11 @@ fn extract_page(
         let cancel_button = cancel_button_for_extract.clone();
         let cancel_state = state_for_extract.clone();
         let operation_busy = operation_busy_for_extract.clone();
-        let mut has_progress = false;
+        let mut last_progress_update = std::time::Instant::now();
         gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
             match receiver.try_recv() {
                 Ok(TaskMessage::Progress(fraction)) => {
-                    has_progress |= fraction > 0.0;
+                    last_progress_update = std::time::Instant::now();
                     progress.set_fraction(fraction);
                     progress.set_text(Some(&format!("{:.0}%", fraction * 100.0)));
                     gtk::glib::ControlFlow::Continue
@@ -2662,8 +2663,9 @@ fn extract_page(
                     gtk::glib::ControlFlow::Break
                 }
                 Err(mpsc::TryRecvError::Empty) => {
-                    if !has_progress {
+                    if last_progress_update.elapsed() >= Duration::from_secs(1) {
                         progress.pulse();
+                        progress.set_text(Some(&tr("Extraction in progress")));
                     }
                     gtk::glib::ControlFlow::Continue
                 }
