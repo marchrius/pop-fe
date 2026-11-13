@@ -395,7 +395,11 @@ impl Pbp {
                 return Err(PbpError::Compression);
             }
             let digest = Sha1::digest(&sector);
-            if digest[..16] != entry[8..24] {
+            // Some older POPS EBOOT.PBP files leave the optional sector
+            // digest empty. Match the original dumper by validating hashes
+            // when present while accepting an all-zero legacy field.
+            let expected_digest = &entry[8..24];
+            if expected_digest.iter().any(|byte| *byte != 0) && digest[..16] != *expected_digest {
                 return Err(PbpError::Invalid(
                     "PSISO sector SHA-1 checksum mismatch".into(),
                 ));

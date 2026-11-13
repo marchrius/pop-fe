@@ -35,9 +35,11 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    la modalità della traccia nel CUE estratto viene dedotta dal primo settore.
    L'estrazione conserva anche HEADER.DAT e STARTDAT.DAT come il dumper
    originale. L'estrazione è stata eseguita su PBP reali di Metal Slug X e
-   Bugs Bunny - Lost in Time: entrambi hanno prodotto correttamente sezioni,
-   asset e immagini BIN/CUE; per nessuno dei due è stato creato un ISO
-   separato.
+   Bugs Bunny - Lost in Time e Final Fantasy IX Disc 2: tutti hanno prodotto
+   correttamente sezioni, asset e immagini BIN/CUE; per nessuno dei tre è stato
+   creato un ISO separato. Il PBP di Final Fantasy IX usa hash SHA-1 vuoti, che
+   il dumper legacy accetta; il backend Rust verifica gli hash presenti e
+   tollera il campo tutto zero.
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
    inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN. La verifica
    su più giochi, in particolare con tracce audio ATRAC, è ancora necessaria.
@@ -116,7 +118,7 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
    GNOME 51 ed è creato da `packaging/build_flatpak.py`. Il `.deb` ricava le
    dipendenze OpenCV dalla build; il Flatpak include le librerie OpenCV usate.
-   I pacchetti 0.1.100 includono yt-dlp standalone e Deno verificati con SHA-256,
+   I pacchetti 0.1.101 includono yt-dlp standalone e Deno verificati con SHA-256,
    senza dipendenze runtime da Python, yt-dlp o Deno di sistema. Su x86_64
    includono anche `lcp` standalone verificato con SHA-256, per applicare il
    fallback automatico alle revisioni LibCrypt non riconosciute dal database.
