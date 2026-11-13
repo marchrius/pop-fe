@@ -562,6 +562,9 @@ fn render_theme_pic0(
     title: &str,
     theme: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if theme == "DOTPAINTING" {
+        return render_dotpainting_pic0(path, title);
+    }
     let surface = ImageSurface::create(Format::ARgb32, 1000, 560)?;
     let context = Context::new(&surface)?;
     context.scale(4.0, 4.0);
@@ -614,6 +617,78 @@ fn render_theme_pic0(
     surface.write_to_png(&mut png)?;
     fs::write(path, png)?;
     Ok(())
+}
+
+fn render_dotpainting_pic0(path: &Path, title: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let mut source = ImageSurface::create(Format::ARgb32, 250, 140)?;
+    let context = Context::new(&source)?;
+    context.set_source_rgb(0.0, 0.0, 0.0);
+    context.paint()?;
+    context.select_font_face("monospace", FontSlant::Normal, FontWeight::Normal);
+    context.set_font_size(12.0);
+    let line_height = context.font_extents()?.height() + 2.0;
+    let draw_text = |text: &str, x: f64, y: f64| -> Result<(), cairo::Error> {
+        let extents = context.text_extents(text)?;
+        context.move_to(x - extents.x_bearing(), y - extents.y_bearing());
+        context.show_text(text)
+    };
+    context.set_source_rgb(1.0, 128.0 / 255.0, 128.0 / 255.0);
+    draw_text("##############################", 80.0, 1.0)?;
+    let mut y = 1.0 + line_height;
+    for line in title.split(" - ") {
+        context.set_source_rgb(1.0, 128.0 / 255.0, 128.0 / 255.0);
+        draw_text("#", 80.0, y)?;
+        context.set_source_rgb(1.0, 1.0, 1.0);
+        draw_text(line, 91.0, y)?;
+        y += line_height;
+    }
+    context.set_source_rgb(1.0, 128.0 / 255.0, 128.0 / 255.0);
+    draw_text("##############################", 80.0, y)?;
+    source.flush();
+
+    let stride = source.stride() as usize;
+    let ink = {
+        let data = source.data()?;
+        let mut ink = Vec::new();
+        for y in 0..140usize {
+            for x in 0..250usize {
+                let offset = y * stride + x * 4;
+                let pixel = u32::from_ne_bytes(data[offset..offset + 4].try_into()?);
+                let (red, green, blue) = (
+                    ((pixel >> 16) & 0xff) as u8,
+                    ((pixel >> 8) & 0xff) as u8,
+                    (pixel & 0xff) as u8,
+                );
+                if red != 0 || green != 0 || blue != 0 {
+                    ink.push((x, y, red, green, blue));
+                }
+            }
+        }
+        ink
+    };
+
+    let output = ImageSurface::create(Format::ARgb32, 1000, 560)?;
+    let context = Context::new(&output)?;
+    context.set_operator(cairo::Operator::Source);
+    context.set_source_rgba(0.0, 0.0, 0.0, 0.0);
+    context.paint()?;
+    context.set_operator(cairo::Operator::Over);
+    for (x, y, red, green, blue) in ink {
+        context.set_source_rgb(
+            red as f64 / 255.0,
+            green as f64 / 255.0,
+            blue as f64 / 255.0,
+        );
+        context.arc(
+            x as f64 * 4.0 + 1.5,
+            y as f64 * 4.0 + 1.5,
+            2.0,
+            0.0,
+            std::f64::consts::TAU,
+        );
+        context.fill()?;
+    }
+    write_png(output, path)
 }
 
 fn render_theme_pic1(
