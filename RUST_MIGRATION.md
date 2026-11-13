@@ -34,10 +34,14 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    implementata. L'ISO viene ricostruito dai settori dati Mode 1/Mode 2 Form 1;
    la modalità della traccia nel CUE estratto viene dedotta dal primo settore.
    L'estrazione conserva anche HEADER.DAT e STARTDAT.DAT come il dumper
-   originale.
+   originale. L'estrazione è stata eseguita su PBP reali di Metal Slug X e
+   Bugs Bunny - Lost in Time: entrambi hanno prodotto correttamente sezioni,
+   asset e immagini BIN/CUE; per nessuno dei due è stato creato un ISO
+   separato.
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
    inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN. La verifica
-   con PBP reali è ancora necessaria. I file vengono estratti in staging e
+   su più giochi, in particolare con tracce audio ATRAC, è ancora necessaria.
+   I file vengono estratti in staging e
    pubblicati nella cartella scelta solo a operazione completata; annullamento
    o errori durante la decodifica non lasciano immagini parziali.
 4. Writer PBP/SFO/PSISO e avvio asincrono dalla GUI: prototipo per un massimo
