@@ -827,10 +827,12 @@ fn convert_page(
                 let title_for_search = fields.title.clone();
                 let fields_for_search = fields.clone();
                 let status_for_search = fields.status.clone();
+                let progress_for_search = fields.analysis_progress.clone();
+                let cancel_button_for_search = fields.analysis_cancel_button.clone();
                 let busy_for_search = operation_busy.clone();
                 let cancel_state_for_search = cancel_state.clone();
                 search.connect_clicked(move |button| {
-                    if busy_for_search.get() {
+                    if busy_for_search.get() || fields_for_search.theme_loading.get() {
                         status_for_search.set_text(&tr("Another operation is in progress"));
                         return;
                     }
@@ -842,6 +844,11 @@ fn convert_page(
                         return;
                     }
                     status_for_search.set_text(&tr("Searching YouTube for game audio"));
+                    progress_for_search.set_text(Some(&tr("Searching YouTube for game audio")));
+                    progress_for_search.set_fraction(0.0);
+                    progress_for_search.set_visible(true);
+                    cancel_button_for_search.set_sensitive(true);
+                    cancel_button_for_search.set_visible(true);
                     button.set_sensitive(false);
                     busy_for_search.set(true);
                     let cancellation = Arc::new(AtomicBool::new(false));
@@ -859,6 +866,8 @@ fn convert_page(
                     let status = status_for_search.clone();
                     let busy = busy_for_search.clone();
                     let button = button.clone();
+                    let progress = progress_for_search.clone();
+                    let cancel_button = cancel_button_for_search.clone();
                     let cancel_state = cancel_state_for_search.clone();
                     gtk::glib::timeout_add_local(
                         Duration::from_millis(100),
@@ -867,6 +876,9 @@ fn convert_page(
                                 entry.set_text(&url);
                                 status.set_text(&tr("YouTube audio selected"));
                                 button.set_sensitive(true);
+                                progress.set_visible(false);
+                                cancel_button.set_sensitive(false);
+                                cancel_button.set_visible(false);
                                 busy.set(false);
                                 *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
@@ -881,17 +893,26 @@ fn convert_page(
                                     );
                                 }
                                 button.set_sensitive(true);
+                                progress.set_visible(false);
+                                cancel_button.set_sensitive(false);
+                                cancel_button.set_visible(false);
                                 busy.set(false);
                                 *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
                             }
-                            Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+                            Err(mpsc::TryRecvError::Empty) => {
+                                progress.pulse();
+                                gtk::glib::ControlFlow::Continue
+                            }
                             Err(mpsc::TryRecvError::Disconnected) => {
                                 status.set_text(
                                     &tr("YouTube search failed: {error}")
                                         .replace("{error}", "worker stopped"),
                                 );
                                 button.set_sensitive(true);
+                                progress.set_visible(false);
+                                cancel_button.set_sensitive(false);
+                                cancel_button.set_visible(false);
                                 busy.set(false);
                                 *cancel_state.borrow_mut() = None;
                                 gtk::glib::ControlFlow::Break
@@ -1146,6 +1167,7 @@ fn convert_page(
     content.append(&analysis_row);
     content.append(&log_panel(&fields.log));
     let fields_for_analysis_cancel = fields.clone();
+    let cancel_state_for_analysis_cancel = cancel_state.clone();
     fields.analysis_cancel_button.connect_clicked(move |_| {
         let mut stopping = false;
         if let Some(token) = fields_for_analysis_cancel.analysis_cancel.borrow().as_ref() {
@@ -1153,6 +1175,10 @@ fn convert_page(
             stopping = true;
         }
         if let Some(token) = fields_for_analysis_cancel.theme_cancel.borrow().as_ref() {
+            token.store(true, std::sync::atomic::Ordering::Relaxed);
+            stopping = true;
+        }
+        if let Some(token) = cancel_state_for_analysis_cancel.borrow().as_ref() {
             token.store(true, std::sync::atomic::Ordering::Relaxed);
             stopping = true;
         }
