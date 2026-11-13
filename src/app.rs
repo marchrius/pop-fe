@@ -1973,7 +1973,12 @@ fn refresh_theme_art(fields: &DiscFields) {
                 &worker_cancellation,
             )
         } else {
-            crate::assets::load_theme_assets_offline(&game_id, &theme_name, &base)
+            crate::assets::load_theme_assets_offline_cancellable(
+                &game_id,
+                &theme_name,
+                &base,
+                &worker_cancellation,
+            )
         };
         apply_asset_overrides(&mut assets, &overrides, &fallback, true);
         let _ = sender.send(assets);
@@ -2355,7 +2360,12 @@ fn show_xmb_preview(
                     &worker_cancellation,
                 )
             } else {
-                crate::assets::load_theme_assets_offline(&id, &selected_theme, &base)
+                crate::assets::load_theme_assets_offline_cancellable(
+                    &id,
+                    &selected_theme,
+                    &base,
+                    &worker_cancellation,
+                )
             };
             apply_asset_overrides(&mut assets, &overrides, &fallback, true);
             let _ = sender.send(assets);

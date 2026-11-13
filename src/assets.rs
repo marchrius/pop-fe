@@ -387,7 +387,7 @@ pub fn load_theme_assets_cancellable(
         return base.clone();
     };
     let Some(repository) = theme_info.url.as_deref() else {
-        return procedural_theme_assets(game_id, theme, base);
+        return procedural_theme_assets(game_id, theme, base, cancelled);
     };
     let directory = cache_directory().join("themes");
     if fs::create_dir_all(&directory).is_err() {
@@ -452,6 +452,18 @@ pub fn load_theme_assets_cancellable(
 }
 
 pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+    load_theme_assets_offline_cancellable(game_id, theme, base, &AtomicBool::new(false))
+}
+
+pub fn load_theme_assets_offline_cancellable(
+    game_id: &str,
+    theme: &str,
+    base: &PbpAssets,
+    cancelled: &AtomicBool,
+) -> PbpAssets {
+    if cancelled.load(Ordering::Relaxed) {
+        return base.clone();
+    }
     let mut result = base.clone();
     let cached_game_assets = load_game_assets_cached(game_id);
     merge_missing_assets(&mut result, &cached_game_assets);
@@ -459,7 +471,7 @@ pub fn load_theme_assets_offline(game_id: &str, theme: &str, base: &PbpAssets) -
         return result;
     };
     if theme_info.url.is_none() {
-        return procedural_theme_assets(game_id, theme, &result);
+        return procedural_theme_assets(game_id, theme, &result, cancelled);
     }
     let directory = cache_directory().join("themes");
     for (key, size) in [
@@ -530,7 +542,15 @@ fn valid_wave_file(path: &Path) -> bool {
         && &header[8..] == b"WAVE"
 }
 
-fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
+fn procedural_theme_assets(
+    game_id: &str,
+    theme: &str,
+    base: &PbpAssets,
+    cancelled: &AtomicBool,
+) -> PbpAssets {
+    if cancelled.load(Ordering::Relaxed) {
+        return base.clone();
+    }
     let directory = cache_directory().join("themes").join("generated-v5");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
@@ -539,16 +559,22 @@ fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpA
     let pic0_path = directory.join(format!("{}-{theme}-pic0.png", safe_id(game_id)));
     let pic1_path = directory.join(format!("{}-{theme}-pic1.png", safe_id(game_id)));
     let mut result = base.clone();
-    if !pic0_path.is_file() && render_theme_pic0(&pic0_path, title, theme).is_err() {
-        return result;
+    if !pic0_path.is_file() && render_theme_pic0(&pic0_path, title, theme, cancelled).is_err() {
+        return base.clone();
+    }
+    if cancelled.load(Ordering::Relaxed) {
+        return base.clone();
     }
     if !pic1_path.is_file() {
         let icon = base.icon0.as_deref().or(base.pic1.as_deref());
         if let Some(icon) = icon {
-            if render_theme_pic1(&pic1_path, icon, theme).is_err() {
-                return result;
+            if render_theme_pic1(&pic1_path, icon, theme, cancelled).is_err() {
+                return base.clone();
             }
         }
+    }
+    if cancelled.load(Ordering::Relaxed) {
+        return base.clone();
     }
     result.pic0 = Some(pic0_path);
     if pic1_path.is_file() {
@@ -561,9 +587,13 @@ fn render_theme_pic0(
     path: &Path,
     title: &str,
     theme: &str,
+    cancelled: &AtomicBool,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(std::io::Error::other("operation cancelled").into());
+    }
     if theme == "DOTPAINTING" {
-        return render_dotpainting_pic0(path, title);
+        return render_dotpainting_pic0(path, title, cancelled);
     }
     let surface = ImageSurface::create(Format::ARgb32, 1000, 560)?;
     let context = Context::new(&surface)?;
@@ -595,6 +625,9 @@ fn render_theme_pic0(
     draw_text("##############################", origin, 1.0)?;
     let mut y = 1.0 + line_height;
     for line in title.split(" - ") {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("operation cancelled").into());
+        }
         if ascii {
             context.set_source_rgb(r, g, b);
             draw_text("#", origin, y)?;
@@ -619,7 +652,11 @@ fn render_theme_pic0(
     Ok(())
 }
 
-fn render_dotpainting_pic0(path: &Path, title: &str) -> Result<(), Box<dyn std::error::Error>> {
+fn render_dotpainting_pic0(
+    path: &Path,
+    title: &str,
+    cancelled: &AtomicBool,
+) -> Result<(), Box<dyn std::error::Error>> {
     let mut source = ImageSurface::create(Format::ARgb32, 250, 140)?;
     let context = Context::new(&source)?;
     context.set_source_rgb(0.0, 0.0, 0.0);
@@ -651,6 +688,9 @@ fn render_dotpainting_pic0(path: &Path, title: &str) -> Result<(), Box<dyn std::
         let data = source.data()?;
         let mut ink = Vec::new();
         for y in 0..140usize {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(std::io::Error::other("operation cancelled").into());
+            }
             for x in 0..250usize {
                 let offset = y * stride + x * 4;
                 let pixel = u32::from_ne_bytes(data[offset..offset + 4].try_into()?);
@@ -673,7 +713,10 @@ fn render_dotpainting_pic0(path: &Path, title: &str) -> Result<(), Box<dyn std::
     context.set_source_rgba(0.0, 0.0, 0.0, 0.0);
     context.paint()?;
     context.set_operator(cairo::Operator::Over);
-    for (x, y, red, green, blue) in ink {
+    for (index, (x, y, red, green, blue)) in ink.into_iter().enumerate() {
+        if index % 512 == 0 && cancelled.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("operation cancelled").into());
+        }
         context.set_source_rgb(
             red as f64 / 255.0,
             green as f64 / 255.0,
@@ -695,6 +738,7 @@ fn render_theme_pic1(
     path: &Path,
     source: &Path,
     theme: &str,
+    cancelled: &AtomicBool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let original = Pixbuf::from_file(source)?;
     let painterly = matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
@@ -720,6 +764,9 @@ fn render_theme_pic1(
         context.set_font_size(3.0);
         context.set_source_rgb(0.75, 0.75, 0.75);
         for y in 0..120usize {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(std::io::Error::other("operation cancelled").into());
+            }
             for x in 0..120usize {
                 let p = pixel(pixels, stride, channels, x, y);
                 let gray = (p[0] as u32 * 299 + p[1] as u32 * 587 + p[2] as u32 * 114 + 500) / 1000;
@@ -730,6 +777,9 @@ fn render_theme_pic1(
         }
     } else if theme == "DOTPAINTING" {
         for y in 0..120usize {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(std::io::Error::other("operation cancelled").into());
+            }
             for x in 0..120usize {
                 let p = pixel(pixels, stride, channels, x, y);
                 context.set_source_rgb(
@@ -750,6 +800,9 @@ fn render_theme_pic1(
     } else {
         let pixel_size = 250.0 / icon_size as f64;
         for y in 0..icon_size as usize {
+            if cancelled.load(Ordering::Relaxed) {
+                return Err(std::io::Error::other("operation cancelled").into());
+            }
             for x in 0..icon_size as usize {
                 let mut p = pixel(pixels, stride, channels, x, y);
                 if painterly {
