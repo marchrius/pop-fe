@@ -531,7 +531,7 @@ fn valid_wave_file(path: &Path) -> bool {
 }
 
 fn procedural_theme_assets(game_id: &str, theme: &str, base: &PbpAssets) -> PbpAssets {
-    let directory = cache_directory().join("themes").join("generated-v4");
+    let directory = cache_directory().join("themes").join("generated-v5");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
     }
@@ -722,8 +722,8 @@ fn render_theme_pic1(
         for y in 0..120usize {
             for x in 0..120usize {
                 let p = pixel(pixels, stride, channels, x, y);
-                let gray = (p[0] as u16 * 30 + p[1] as u16 * 59 + p[2] as u16 * 11) / 100;
-                let shade = 10 - (gray as usize / 26).min(10);
+                let gray = (p[0] as u32 * 299 + p[1] as u32 * 587 + p[2] as u32 * 114 + 500) / 1000;
+                let shade = 10 - (gray as usize / 25).min(10);
                 context.move_to(52.5 + x as f64 * 2.25, y as f64 * 2.25);
                 context.show_text(shades[shade])?;
             }
