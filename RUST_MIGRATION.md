@@ -41,9 +41,12 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    il dumper legacy accetta; il backend Rust verifica gli hash presenti e
    tollera il campo tutto zero. Un ciclo completo Rust BIN→PBP→BIN su Metal
    Slug X ha ricostruito l'immagine sorgente byte per byte (104.315.904 byte).
+   Un CUE multitraccia con lo stesso BIN e cinque secondi di audio PCM ha
+   prodotto un EBOOT da cui è stato estratto `TRACK_0_02.aea` (83.040 byte,
+   intestazione EA3 valida).
    Le tracce ATRAC separate restano file AEA e non producono indici CUE
    inesistenti né padding sparso nel BIN; CDDA raw resta nel BIN. La verifica
-   su più giochi, in particolare con tracce audio ATRAC, è ancora necessaria.
+   con PBP multitraccia di giochi reali e in modalità CDDA è ancora necessaria.
    I file vengono estratti in staging e
    pubblicati nella cartella scelta solo a operazione completata; annullamento
    o errori durante la decodifica non lasciano immagini parziali.
