@@ -28,7 +28,7 @@ Se non hai ancora creato le cache yt-dlp e Deno, esegui una volta il build senza
 
 ## macOS e Windows (build da sorgente)
 
-La CI compila l'app e pubblica artefatti per macOS 26 Intel, macOS 26 Apple Silicon e Windows x86_64. Per build locali su macOS servono Xcode Command Line Tools, Rust, CMake e le dipendenze native seguenti:
+La CI compila l'app per macOS 26 Intel e Apple Silicon, macOS 27 Apple Silicon (runner preview) e Windows x86_64. La build macOS 26 verifica il target stabile Intel/Apple Silicon; quella macOS 27 controlla la compatibilità con la versione più recente disponibile sui runner. Per build locali su macOS servono Xcode Command Line Tools, Rust, CMake e le dipendenze native seguenti:
 
 ```sh
 brew install gtk4 libadwaita opencv libsndfile openssl@3 pkg-config cmake ffmpeg poppler sevenzip rom-tools xdelta dylibbundler librsvg

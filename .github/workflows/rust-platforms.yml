@@ -10,16 +10,24 @@ permissions:
 
 jobs:
   macos:
-    name: macOS (${{ matrix.arch }})
+    name: macOS ${{ matrix.macos }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - arch: Intel
+          - macos: 26
+            arch: Intel
+            artifact_arch: x86_64
             runner: macos-26-intel
-          - arch: Apple Silicon
+          - macos: 26
+            arch: Apple Silicon
+            artifact_arch: aarch64
             runner: macos-26
+          - macos: 27-preview
+            arch: Apple Silicon
+            artifact_arch: aarch64
+            runner: xcode-27
     steps:
       - uses: actions/checkout@v5
         with:
@@ -43,7 +51,7 @@ jobs:
         run: python3 packaging/build_macos_app.py
       - uses: actions/upload-artifact@v6
         with:
-          name: pop-fe-psp-macos-${{ matrix.arch == 'Intel' && 'x86_64' || 'aarch64' }}
+          name: pop-fe-psp-macos-${{ matrix.macos }}-${{ matrix.artifact_arch }}
           path: dist/pop-fe-psp-macos-*.zip
 
   windows:
