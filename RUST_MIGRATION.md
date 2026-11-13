@@ -106,9 +106,11 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.92
-   includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
-   runtime da Python, yt-dlp o Deno di sistema. L'avvio della GUI nel sandbox e
+GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.93
+includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
+runtime da Python, yt-dlp o Deno di sistema. Su x86_64 includono anche `lcp`
+standalone verificato con SHA-256, per applicare il fallback automatico alle
+revisioni LibCrypt non riconosciute dal database. L'avvio della GUI nel sandbox e
    la compatibilità degli EBOOT su PSP reale restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
@@ -118,9 +120,10 @@ esplicita conserva invece l'audio raw e imposta i flag POPS. Il
 database descrive 230 ID LibCrypt: ora tutti hanno una patch automatica inclusa
 oppure una revisione identificata che non richiede patch. Per le sette
 famiglie con firme upstream il backend Rust riconosce le revisioni senza
-dipendere da `lcp`; per le revisioni ancora sconosciute può usare `lcp` se
-disponibile nel PATH o in `POPFE_LCP`, altrimenti non applica una patch
-predefinita potenzialmente errata. I pacchetti non includono `lcp`.
+dipendere da `lcp`; per le revisioni ancora sconosciute usa il patcher incluso
+nei pacchetti x86_64, o `lcp` nel PATH / `POPFE_LCP` sulle architetture senza
+bundle upstream. Se nessuno è disponibile, non applica una patch predefinita
+potenzialmente errata.
 Non usare ancora il port come sostituto per generare EBOOT destinati alla PSP
 finché non sarà validato su immagini e hardware reali. La decifratura DES dei
 manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono state verificate con

@@ -1449,6 +1449,14 @@ fn executable_path(variable: &str, name: &str) -> Option<PathBuf> {
     {
         return Some(path);
     }
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let bundled = directory.join(name);
+        if bundled.is_file() {
+            return Some(bundled);
+        }
+    }
     std::env::split_paths(&std::env::var_os("PATH").unwrap_or_default())
         .map(|directory| directory.join(name))
         .find(|path| path.is_file())

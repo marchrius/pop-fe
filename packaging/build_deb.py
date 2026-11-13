@@ -10,6 +10,7 @@ import tempfile
 
 from yt_dlp_bundle import ensure_bundle
 from deno_bundle import ensure_bundle as ensure_deno_bundle
+from lcp_bundle import ensure_bundle as ensure_lcp_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -49,6 +50,7 @@ def main():
     arch = subprocess.check_output(['dpkg', '--print-architecture'], text=True).strip()
     yt_dlp, yt_dlp_license, yt_dlp_third_party = ensure_bundle(arch, offline=args.offline)
     deno, deno_license = ensure_deno_bundle(arch, offline=args.offline)
+    lcp = ensure_lcp_bundle(arch, offline=args.offline)
     output = ROOT / 'dist'
     output.mkdir(exist_ok=True)
     package = output / f'pop-fe-psp_{args.version}_{arch}.deb'
@@ -59,6 +61,8 @@ def main():
         install(encoder, app / 'atracdenc', 0o755)
         install(yt_dlp, app / 'yt-dlp', 0o755)
         install(deno, app / 'deno', 0o755)
+        if lcp:
+            install(lcp, app / 'lcp', 0o755)
         install(ROOT / 'packaging/pop-fe-psp', stage / 'usr/bin/pop-fe-psp', 0o755)
         install(ROOT / 'packaging/org.popfe.PSPManager.desktop', stage / 'usr/share/applications/org.popfe.PSPManager.desktop')
         shutil.copytree(ROOT / 'packaging/icons', stage / 'usr/share/icons')
