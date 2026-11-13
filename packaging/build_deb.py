@@ -15,6 +15,29 @@ from lcp_bundle import ensure_bundle as ensure_lcp_bundle
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def shared_library_dependencies(binary, workdir):
+    debian = workdir / 'debian'
+    debian.mkdir()
+    (debian / 'control').write_text(
+        'Source: pop-fe-psp\nSection: utils\nPriority: optional\n'
+        'Maintainer: POP-FE local build <noreply@localhost>\n'
+        'Standards-Version: 4.6.2\n\n'
+        'Package: pop-fe-psp\nArchitecture: any\nDescription: temporary dependency scan\n',
+        encoding='utf-8',
+    )
+    result = subprocess.run(
+        ['dpkg-shlibdeps', '-O', f'-e{binary}'],
+        cwd=workdir,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for line in result.stdout.splitlines():
+        if line.startswith('shlibs:Depends='):
+            return [dependency.strip() for dependency in line.partition('=')[2].split(',')]
+    raise RuntimeError('dpkg-shlibdeps did not return shared-library dependencies')
+
+
 def install(source, target, mode=0o644):
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, target)
@@ -83,13 +106,10 @@ def main():
 
         control = stage / 'DEBIAN/control'
         control.parent.mkdir()
-        depends = [
-            'libc6', 'libstdc++6', 'libsndfile1', 'xdelta3', 'mame-tools',
-            'poppler-utils', 'ffmpeg', '7zip',
-            'libssl3 | libssl3t64',
-            'libgtk-4-1 (>= 4.10.0)', 'libadwaita-1-0 (>= 1.5.0)',
-            'libgdk-pixbuf-2.0-0',
-        ]
+        depends = ['libsndfile1', 'xdelta3', 'mame-tools', 'poppler-utils', 'ffmpeg', '7zip']
+        with tempfile.TemporaryDirectory(prefix='pop-fe-shlibdeps-') as temporary:
+            depends.extend(shared_library_dependencies(binary, Path(temporary)))
+        depends = list(dict.fromkeys(depends))
         control.write_text(
             f'Package: pop-fe-psp\nVersion: {args.version}\nArchitecture: {arch}\n'
             'Maintainer: POP-FE local build <noreply@localhost>\n'

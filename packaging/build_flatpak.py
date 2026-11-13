@@ -214,6 +214,8 @@ def main():
             (yt_dlp_third_party, app / 'share/licenses/yt-dlp-THIRD_PARTY_LICENSES.txt'),
             (deno, app / 'bin/deno'),
             (deno_license, app / 'share/licenses/deno-LICENSE.md'),
+            (Path('/usr/share/doc/libopencv-contrib-dev/copyright'),
+             app / 'share/licenses/OpenCV-copyright.txt'),
         ]
         if lcp:
             install_pairs.append((lcp, app / 'bin/lcp'))

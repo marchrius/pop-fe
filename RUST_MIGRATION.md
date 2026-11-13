@@ -75,8 +75,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
 5. Selezione e preview XMB: caricamento immagini e SND0 dei temi 98DEMAKE e
    generazione locale di ASCIIART, DOTPAINTING, OILPAINTING, WATERCOLOR e
    COLORSKETCH. Il PIC0 segue il flusso di disegno e ridimensionamento della
-   GUI originale; i filtri pittorici PIC1 restano approssimazioni Rust dei
-   filtri OpenCV originali.
+   GUI originale. OILPAINTING, WATERCOLOR e COLORSKETCH usano i filtri OpenCV
+   originali e la cover sorgente ad alta risoluzione.
    Il caricamento del tema può essere annullato, si interrompe prima di caricare
    la nuova selezione e la chiusura dell'app attende la terminazione del worker.
 6. PPF2 e PPF3 metodo 2 sono inclusi e vengono applicati automaticamente sui
@@ -110,12 +110,14 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    I file `.pspconfig` accanto all'immagine vengono usati come fallback alle
    configurazioni specifiche incluse nel database.
    Il `.deb` Rust è generato da `packaging/build_deb.py`; il bundle Flatpak usa
-GNOME 51 ed è creato da `packaging/build_flatpak.py`. I pacchetti 0.1.98
-includono yt-dlp standalone e Deno verificati con SHA-256, senza dipendenze
-runtime da Python, yt-dlp o Deno di sistema. Su x86_64 includono anche `lcp`
-standalone verificato con SHA-256, per applicare il fallback automatico alle
-revisioni LibCrypt non riconosciute dal database. L'avvio della GUI nel sandbox e
-   la compatibilità degli EBOOT su PSP reale restano da verificare.
+   GNOME 51 ed è creato da `packaging/build_flatpak.py`. Il `.deb` ricava le
+   dipendenze OpenCV dalla build; il Flatpak include le librerie OpenCV usate.
+   I pacchetti 0.1.99 includono yt-dlp standalone e Deno verificati con SHA-256,
+   senza dipendenze runtime da Python, yt-dlp o Deno di sistema. Su x86_64
+   includono anche `lcp` standalone verificato con SHA-256, per applicare il
+   fallback automatico alle revisioni LibCrypt non riconosciute dal database.
+   L'avvio della GUI nel sandbox e la compatibilità degli EBOOT su PSP reale
+   restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
 Il crate non è ancora un sostituto completo:
@@ -133,8 +135,6 @@ finché non sarà validato su immagini e hardware reali. La decifratura DES dei
 manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono state verificate con
 un PGD sintetico cifrato secondo il formato originale, incluso il caso di una
 pagina senza blocchi cifrati; manca ancora la verifica con un manuale PS3 reale.
-I filtri pittorici Rust sono approssimazioni dei
-filtri OpenCV.
 
 Per compilare la GUI su Debian/Ubuntu sono richiesti i pacchetti di sviluppo
-GTK4 e libadwaita, oltre a Rust/Cargo.
+GTK4, libadwaita, OpenCV e libclang, oltre a Rust/Cargo.

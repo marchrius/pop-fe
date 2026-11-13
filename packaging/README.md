@@ -6,11 +6,11 @@ La conversione accetta immagini CUE, CCD, CHD, ISO, BIN e IMG, anche contenute i
 
 ## Debian
 
-Servono Rust/Cargo, CMake, un compilatore C/C++, GTK 4.10 o superiore, libadwaita 1.5 o superiore, `libsndfile1-dev`, `libssl-dev`, `poppler-utils`, `ffmpeg` e `7zip` (per i manuali PDF/JP2/RAR). Il pacchetto installato include un eseguibile autonomo `yt-dlp` e non richiede Python, Deno o il pacchetto `yt-dlp` del sistema.
+Servono Rust/Cargo, CMake, un compilatore C/C++, `libclang-dev`, GTK 4.10 o superiore, libadwaita 1.5 o superiore, `libopencv-contrib-dev`, `libsndfile1-dev`, `libssl-dev`, `poppler-utils`, `ffmpeg` e `7zip` (per i manuali PDF/JP2/RAR). Il `.deb` dichiara le dipendenze condivise rilevate dalla build; il Flatpak include OpenCV. Il pacchetto installato include un eseguibile autonomo `yt-dlp` e non richiede Python, Deno o il pacchetto `yt-dlp` del sistema.
 
 ```sh
 python3 packaging/build_deb.py --offline
-sudo apt install ./dist/pop-fe-psp_0.1.98_amd64.deb
+sudo apt install ./dist/pop-fe-psp_0.1.99_amd64.deb
 ```
 
 Al primo build, esegui il comando senza `--offline` per scaricare e verificare yt-dlp, Deno e lcp x86_64 nelle rispettive cache sotto `target/package-tools/`. In seguito puoi usare `--offline` anche per i build Cargo. Lo script compila `atracdenc` se manca, compila l'app Rust in release e crea il `.deb` in `dist/` senza privilegi di root.

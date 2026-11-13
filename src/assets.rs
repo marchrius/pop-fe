@@ -9,6 +9,8 @@ use std::time::Duration;
 use cairo::{Context, FontSlant, FontWeight, Format, ImageSurface};
 use gdk_pixbuf::{InterpType, Pixbuf};
 use md5::{Digest, Md5};
+use opencv::core::{Mat, Vec3b};
+use opencv::prelude::*;
 use reqwest::blocking::Client;
 
 use crate::create::PbpAssets;
@@ -594,7 +596,7 @@ fn procedural_theme_assets(
     if cancelled.load(Ordering::Relaxed) {
         return base.clone();
     }
-    let directory = cache_directory().join("themes").join("generated-v5");
+    let directory = cache_directory().join("themes").join("generated-v6");
     if fs::create_dir_all(&directory).is_err() {
         return base.clone();
     }
@@ -784,12 +786,10 @@ fn render_theme_pic1(
     cancelled: &AtomicBool,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let original = Pixbuf::from_file(source)?;
-    let painterly = matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH");
-    // The original filters process a 1000×1000 icon before it is composited
-    // into the 1920×1080 PIC1. At the final 480×272 size that corresponds to
-    // 250×250 pixels; retain that working resolution instead of filtering a
-    // 120×120 thumbnail and magnifying its artifacts.
-    let icon_size = if painterly { 250 } else { 120 };
+    if matches!(theme, "OILPAINTING" | "WATERCOLOR" | "COLORSKETCH") {
+        return render_opencv_theme_pic1(path, &original, theme, cancelled);
+    }
+    let icon_size = 120;
     let icon = original
         .scale_simple(icon_size, icon_size, InterpType::Bilinear)
         .ok_or("could not resize theme icon")?;
@@ -847,10 +847,7 @@ fn render_theme_pic1(
                 return Err(std::io::Error::other("operation cancelled").into());
             }
             for x in 0..icon_size as usize {
-                let mut p = pixel(pixels, stride, channels, x, y);
-                if painterly {
-                    p = painterly_pixel(pixels, stride, channels, x, y, icon_size as usize, theme);
-                }
+                let p = pixel(pixels, stride, channels, x, y);
                 context.set_source_rgb(
                     p[0] as f64 / 255.0,
                     p[1] as f64 / 255.0,
@@ -869,49 +866,129 @@ fn render_theme_pic1(
     write_png(surface, path)
 }
 
+fn render_opencv_theme_pic1(
+    path: &Path,
+    original: &Pixbuf,
+    theme: &str,
+    cancelled: &AtomicBool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(std::io::Error::other("operation cancelled").into());
+    }
+    if original.width() <= 0
+        || original.height() <= 0
+        || original.width() > 8000
+        || original.height() > 8000
+        || original.width() as i64 * original.height() as i64 > 50_000_000
+    {
+        return Err("theme cover dimensions exceed the supported limit".into());
+    }
+    let filter_input = if theme == "COLORSKETCH" {
+        original.clone()
+    } else {
+        original
+            .scale_simple(1000, 1000, InterpType::Bilinear)
+            .ok_or("could not prepare theme cover for OpenCV")?
+    };
+    let filtered = apply_opencv_theme_filter(&filter_input, theme, cancelled)?;
+    let working = if theme == "COLORSKETCH" {
+        filtered
+            .scale_simple(1000, 1000, InterpType::Nearest)
+            .ok_or("could not resize color sketch")?
+    } else {
+        filtered
+    };
+    let icon = working
+        .scale_simple(250, 250, InterpType::Hyper)
+        .ok_or("could not resize filtered theme cover")?;
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(std::io::Error::other("operation cancelled").into());
+    }
+    let bytes = icon.read_pixel_bytes();
+    let pixels = bytes.as_ref();
+    let channels = icon.n_channels() as usize;
+    let stride = icon.rowstride() as usize;
+    let surface = ImageSurface::create(Format::ARgb32, 480, 272)?;
+    let context = Context::new(&surface)?;
+    context.set_source_rgb(0.0, 0.0, 0.0);
+    context.paint()?;
+    for y in 0..250usize {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("operation cancelled").into());
+        }
+        for x in 0..250usize {
+            let p = pixel(pixels, stride, channels, x, y);
+            context.set_source_rgb(
+                p[0] as f64 / 255.0,
+                p[1] as f64 / 255.0,
+                p[2] as f64 / 255.0,
+            );
+            context.rectangle((25 + x) as f64, y as f64, 1.0, 1.0);
+            context.fill()?;
+        }
+    }
+    write_png(surface, path)
+}
+
+fn apply_opencv_theme_filter(
+    source: &Pixbuf,
+    theme: &str,
+    cancelled: &AtomicBool,
+) -> Result<Pixbuf, Box<dyn std::error::Error>> {
+    let width = source.width() as usize;
+    let height = source.height() as usize;
+    let channels = source.n_channels() as usize;
+    let stride = source.rowstride() as usize;
+    let source_bytes = source.read_pixel_bytes();
+    let source_pixels = source_bytes.as_ref();
+    let mut rows = Vec::with_capacity(height);
+    for y in 0..height {
+        if cancelled.load(Ordering::Relaxed) {
+            return Err(std::io::Error::other("operation cancelled").into());
+        }
+        let mut row = Vec::with_capacity(width);
+        for x in 0..width {
+            let rgb = pixel(source_pixels, stride, channels, x, y);
+            row.push(Vec3b::from([rgb[2], rgb[1], rgb[0]]));
+        }
+        rows.push(row);
+    }
+    let input = Mat::from_slice_2d(&rows)?;
+    let mut output = Mat::default();
+    match theme {
+        "OILPAINTING" => opencv::xphoto::oil_painting_1(&input, &mut output, 7, 1)?,
+        "WATERCOLOR" => opencv::photo::stylization(&input, &mut output, 60.0, 0.6)?,
+        "COLORSKETCH" => {
+            let mut gray = Mat::default();
+            opencv::photo::pencil_sketch(&input, &mut gray, &mut output, 150.0, 0.20, 0.02)?;
+        }
+        _ => return Err(format!("unknown OpenCV theme filter: {theme}").into()),
+    }
+    if cancelled.load(Ordering::Relaxed) {
+        return Err(std::io::Error::other("operation cancelled").into());
+    }
+    let mut rgb = Vec::with_capacity(width * height * 3);
+    for y in 0..height as i32 {
+        let row = output.at_row::<Vec3b>(y)?;
+        for pixel in row.iter().take(width) {
+            rgb.extend_from_slice(&[pixel[2], pixel[1], pixel[0]]);
+        }
+    }
+    let data = gdk_pixbuf::glib::Bytes::from_owned(rgb);
+    Ok(Pixbuf::from_bytes(
+        &data,
+        gdk_pixbuf::Colorspace::Rgb,
+        false,
+        8,
+        width as i32,
+        height as i32,
+        (width * 3) as i32,
+    ))
+}
+
 fn pixel(data: &[u8], stride: usize, channels: usize, x: usize, y: usize) -> [u8; 3] {
     let i = y * stride + x * channels;
     [data[i], data[i + 1], data[i + 2]]
-}
-
-fn painterly_pixel(
-    data: &[u8],
-    stride: usize,
-    channels: usize,
-    x: usize,
-    y: usize,
-    size: usize,
-    theme: &str,
-) -> [u8; 3] {
-    let mut sum = [0u32; 3];
-    let mut count = 0u32;
-    for dy in -2i32..=2 {
-        for dx in -2i32..=2 {
-            let nx = (x as i32 + dx).clamp(0, size as i32 - 1) as usize;
-            let ny = (y as i32 + dy).clamp(0, size as i32 - 1) as usize;
-            let p = pixel(data, stride, channels, nx, ny);
-            for c in 0..3 {
-                sum[c] += p[c] as u32;
-            }
-            count += 1;
-        }
-    }
-    let mut out = [0; 3];
-    for c in 0..3 {
-        let avg = (sum[c] / count) as u8;
-        out[c] = match theme {
-            "OILPAINTING" => (avg / 32) * 32,
-            "WATERCOLOR" => {
-                ((avg as u16 * 3 + pixel(data, stride, channels, x, y)[c] as u16) / 4 / 16 * 16)
-                    as u8
-            }
-            _ => {
-                ((pixel(data, stride, channels, x, y)[c] as u16 * (255 - avg as u16 / 2)) / 255)
-                    as u8
-            }
-        };
-    }
-    out
 }
 
 fn write_png(surface: ImageSurface, path: &Path) -> Result<(), Box<dyn std::error::Error>> {
@@ -1051,7 +1128,7 @@ fn cached_icon0_candidates(
     if is_cancelled(cancelled) {
         return None;
     }
-    let path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+    let path = directory.join(format!("{}-icon0-source-v1.png", safe_id(game_id)));
     if valid_icon0_path(&path) {
         return Some(path);
     }
@@ -1063,27 +1140,38 @@ fn cached_icon0_candidates(
         if is_cancelled(cancelled) {
             return None;
         }
-        let aspect = pixbuf.width() as f64 / pixbuf.height() as f64;
-        let size = if aspect > 0.75 && aspect < 1.4 {
-            (80, 80)
-        } else {
-            (144, 80)
-        };
-        if save_scaled_with_interpolation(&pixbuf, &path, size, InterpType::Hyper).is_ok() {
+        if save_pixbuf(&pixbuf, &path).is_ok() {
             return Some(path);
         }
     }
-    cached_image_path(directory, game_id, "icon0-v2", (80, 80))
+    let old_path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+    valid_pbp_icon0_path(&old_path)
+        .then_some(old_path)
+        .or_else(|| cached_image_path(directory, game_id, "icon0-v2", (80, 80)))
 }
 
 fn cached_icon0_path(directory: &Path, game_id: &str) -> Option<PathBuf> {
-    let path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+    let path = directory.join(format!("{}-icon0-source-v1.png", safe_id(game_id)));
     valid_icon0_path(&path)
         .then_some(path)
+        .or_else(|| {
+            let old_path = directory.join(format!("{}-icon0-v3.png", safe_id(game_id)));
+            valid_pbp_icon0_path(&old_path).then_some(old_path)
+        })
         .or_else(|| cached_image_path(directory, game_id, "icon0-v2", (80, 80)))
 }
 
 fn valid_icon0_path(path: &Path) -> bool {
+    Pixbuf::from_file(path).ok().is_some_and(|image| {
+        image.width() > 0
+            && image.height() > 0
+            && image.width() <= 8000
+            && image.height() <= 8000
+            && image.width() as i64 * image.height() as i64 <= 50_000_000
+    })
+}
+
+fn valid_pbp_icon0_path(path: &Path) -> bool {
     Pixbuf::from_file(path).ok().is_some_and(|image| {
         (image.width() == 80 && image.height() == 80)
             || (image.width() == 144 && image.height() == 80)
@@ -1476,6 +1564,15 @@ fn save_scaled_with_interpolation(
         .scale_simple(size.0, size.1, interpolation)
         .ok_or("could not resize image")?;
     let bytes = scaled.save_to_bufferv("png", &[])?;
+    save_png_bytes(&bytes, destination)
+}
+
+fn save_pixbuf(pixbuf: &Pixbuf, destination: &Path) -> Result<(), Box<dyn std::error::Error>> {
+    let bytes = pixbuf.save_to_bufferv("png", &[])?;
+    save_png_bytes(&bytes, destination)
+}
+
+fn save_png_bytes(bytes: &[u8], destination: &Path) -> Result<(), Box<dyn std::error::Error>> {
     let temporary = destination.with_extension(format!("{}.tmp", std::process::id()));
     fs::write(&temporary, bytes)?;
     fs::rename(temporary, destination)?;
