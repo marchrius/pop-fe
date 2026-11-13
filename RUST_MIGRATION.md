@@ -118,7 +118,8 @@ formato PBP sono risorse incluse; non vengono eseguiti gli script Python.
    fallback automatico alle revisioni LibCrypt non riconosciute dal database.
    La GUI Flatpak è stata installata e avviata nel sandbox. L'EBOOT di Bugs
    Bunny - Lost in Time (hash `f166c09b70d2739ee82656cb64c60cf8`, ID
-   `SLES01726`) è stato confermato avviabile su PSP. Conversione ed estrazione
+   `SLES01726`) è stato confermato avviabile su PSP; anche il relativo manuale
+   viene visualizzato e renderizzato correttamente. Conversione ed estrazione
    con un insieme più ampio di immagini restano da verificare.
 
 Durante la migrazione gli script Python restano il riferimento di comportamento.
@@ -134,7 +135,8 @@ bundle upstream. Se nessuno è disponibile, non applica una patch predefinita
 potenzialmente errata.
 Il port non è ancora verificato abbastanza da sostituire completamente il
 flusso originale per generare EBOOT: Bugs Bunny - Lost in Time è stato
-confermato su hardware, ma restano da verificare altri giochi e flussi. La
+confermato su hardware insieme al rendering del manuale, ma restano da
+verificare altri giochi e flussi. La
 decifratura DES dei manuali PS3 PGD e la conversione in `DOCUMENT.DAT` sono
 state verificate con un PGD sintetico cifrato secondo il formato originale,
 incluso il caso di una pagina senza blocchi cifrati; manca ancora la verifica
