@@ -210,6 +210,7 @@ jobs:
         shell: msys2 {0}
         env:
           PKG_CONFIG_PATH: /clangarm64/lib/pkgconfig:/clangarm64/share/pkgconfig
+          PKG_CONFIG_ALLOW_CROSS: 1
           LIBCLANG_PATH: /clangarm64/bin
           CC_aarch64_pc_windows_gnullvm: aarch64-w64-mingw32-clang
           CXX_aarch64_pc_windows_gnullvm: aarch64-w64-mingw32-clang++
