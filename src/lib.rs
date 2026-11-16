@@ -4,6 +4,9 @@ pub mod app;
 pub mod assets;
 pub mod create;
 pub mod database;
+pub mod database_store;
+#[cfg(feature = "database-updates")]
+pub mod database_update;
 pub mod disc;
 pub mod i18n;
 #[cfg(feature = "gui")]

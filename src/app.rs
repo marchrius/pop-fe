@@ -161,6 +161,31 @@ pub fn activate(application: &adw::Application) {
     });
     window.add_action(&help);
 
+    let database_update = gio::SimpleAction::new("database-update", None);
+    let update_parent = window.clone();
+    let rollback_action = gio::SimpleAction::new("database-rollback", None);
+    let rollback_for_update = rollback_action.clone();
+    database_update.connect_activate(move |_, _| {
+        start_database_update(&update_parent, &rollback_for_update);
+    });
+    window.add_action(&database_update);
+    rollback_action.set_enabled(crate::database_store::has_rollback());
+    let rollback_parent = window.clone();
+    let rollback_for_action = rollback_action.clone();
+    rollback_action.connect_activate(move |_, _| match crate::database_store::rollback() {
+        Ok(revision) => {
+            rollback_for_action.set_enabled(crate::database_store::has_rollback());
+            show_notice(
+                &rollback_parent,
+                &tr("Previous database restored"),
+                &tr("Database source restored: {revision}. Restart the application to use it.")
+                    .replace("{revision}", &revision),
+            );
+        }
+        Err(error) => show_notice(&rollback_parent, &tr("Database restore failed"), &error),
+    });
+    window.add_action(&rollback_action);
+
     let switcher = gtk::StackSwitcher::builder()
         .stack(&stack)
         .halign(gtk::Align::Center)
@@ -172,6 +197,16 @@ pub fn activate(application: &adw::Application) {
     main_section.append(Some(&tr("Convert")), Some("win.convert"));
     main_section.append(Some(&tr("Extract")), Some("win.extract"));
     menu.append_section(None, &main_section);
+    let database_section = gio::Menu::new();
+    database_section.append(
+        Some(&tr("Check for Database Updates…")),
+        Some("win.database-update"),
+    );
+    database_section.append(
+        Some(&tr("Restore Previous Database")),
+        Some("win.database-rollback"),
+    );
+    menu.append_section(None, &database_section);
     let help_section = gio::Menu::new();
     help_section.append(Some(&tr("Help and Shortcuts")), Some("win.help"));
     help_section.append(Some(&tr("About POP-FE")), Some("win.about"));
@@ -2744,4 +2779,108 @@ fn append_entry(parent: &gtk::Box, label: &str, value: &str) -> gtk::Entry {
     row.append(&entry);
     parent.append(&row);
     entry
+}
+
+fn start_database_update(parent: &adw::ApplicationWindow, rollback_action: &gio::SimpleAction) {
+    let parent = parent.clone();
+    let dialog = gtk::Window::builder()
+        .title(tr("Database Update"))
+        .transient_for(&parent)
+        .modal(true)
+        .default_width(400)
+        .resizable(false)
+        .deletable(false)
+        .build();
+    let content = gtk::Box::builder()
+        .orientation(gtk::Orientation::Vertical)
+        .spacing(14)
+        .margin_top(20)
+        .margin_bottom(20)
+        .margin_start(20)
+        .margin_end(20)
+        .build();
+    let status = gtk::Label::builder()
+        .label(tr("Checking for database updates…"))
+        .wrap(true)
+        .xalign(0.0)
+        .build();
+    let progress = gtk::ProgressBar::new();
+    progress.set_show_text(true);
+    progress.set_text(Some(&tr("Working…")));
+    let cancel = gtk::Button::with_label(&tr("Cancel"));
+    cancel.set_halign(gtk::Align::End);
+    content.append(&status);
+    content.append(&progress);
+    content.append(&cancel);
+    dialog.set_child(Some(&content));
+
+    let cancelled = Arc::new(AtomicBool::new(false));
+    let cancel_flag = cancelled.clone();
+    let status_for_cancel = status.clone();
+    let cancel_button = cancel.clone();
+    cancel.connect_clicked(move |_| {
+        cancel_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        status_for_cancel.set_text(&tr("Canceling database update…"));
+        cancel_button.set_sensitive(false);
+    });
+    let (sender, receiver) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let result = crate::database_update::check_and_install(&cancelled);
+        let _ = sender.send(result);
+    });
+
+    let dialog_for_poll = dialog.clone();
+    let progress_for_poll = progress.clone();
+    let rollback_action = rollback_action.clone();
+    gtk::glib::timeout_add_local(Duration::from_millis(100), move || {
+        progress_for_poll.pulse();
+        match receiver.try_recv() {
+            Ok(Ok(Some(revision))) => {
+                rollback_action.set_enabled(crate::database_store::has_rollback());
+                dialog_for_poll.close();
+                show_notice(
+                    &parent,
+                    &tr("Database updated"),
+                    &tr("Database revision {revision} is installed. Restart the application to use it.")
+                        .replace("{revision}", &revision),
+                );
+                gtk::glib::ControlFlow::Break
+            }
+            Ok(Ok(None)) => {
+                dialog_for_poll.close();
+                show_notice(
+                    &parent,
+                    &tr("Database is up to date"),
+                    &tr("No database update is available."),
+                );
+                gtk::glib::ControlFlow::Break
+            }
+            Ok(Err(error)) => {
+                dialog_for_poll.close();
+                if error != "database update cancelled" {
+                    show_notice(&parent, &tr("Database update failed"), &error);
+                }
+                gtk::glib::ControlFlow::Break
+            }
+            Err(mpsc::TryRecvError::Disconnected) => {
+                dialog_for_poll.close();
+                show_notice(
+                    &parent,
+                    &tr("Database update failed"),
+                    &tr("The update worker stopped unexpectedly."),
+                );
+                gtk::glib::ControlFlow::Break
+            }
+            Err(mpsc::TryRecvError::Empty) => gtk::glib::ControlFlow::Continue,
+        }
+    });
+    dialog.present();
+}
+
+fn show_notice(parent: &adw::ApplicationWindow, title: &str, message: &str) {
+    let dialog = adw::AlertDialog::new(Some(title), Some(message));
+    dialog.add_response("close", &tr("Close"));
+    dialog.set_default_response(Some("close"));
+    dialog.set_close_response("close");
+    dialog.present(Some(parent));
 }
