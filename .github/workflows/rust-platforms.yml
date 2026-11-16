@@ -42,7 +42,7 @@ jobs:
           OPENSSL_INCLUDE_DIR="$(brew --prefix openssl@3)/include" \
           PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:${PKG_CONFIG_PATH}" \
           LIBCLANG_PATH="$(brew --prefix llvm)/lib" \
-          RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib -C link-arg=-Wl,-rpath,$(brew --prefix llvm)/lib" \
+          RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib -C link-arg=-Wl,-rpath,$(brew --prefix llvm)/lib -C link-arg=-Wl,-headerpad_max_install_names" \
           cargo build --locked --release
       - name: Build ATRAC3 encoder
         run: |

@@ -67,10 +67,13 @@ def main() -> None:
         xdelta = shutil.which("xdelta3.exe")
         if xdelta is None:
             raise RuntimeError("xdelta3.exe is required to package automatic compatibility patches")
+        xdelta_path = Path(xdelta)
         for name in ("msys-2.0.dll", "msys-xdelta3-3.dll", "msys-lzma-5.dll"):
-            dependency = shutil.which(name)
-            if dependency is None:
-                raise RuntimeError(f"MSYS2 xdelta3 runtime dependency is missing: {name}")
+            # DLLs are not executable, so shutil.which() does not locate them;
+            # the MSYS xdelta package installs its runtime dependencies beside it.
+            dependency = xdelta_path.parent / name
+            if not dependency.is_file():
+                raise RuntimeError(f"MSYS2 xdelta3 runtime dependency is missing: {dependency}")
             shutil.copy2(dependency, stage / name)
 
         licenses = stage / "licenses"
