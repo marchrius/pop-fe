@@ -24,7 +24,7 @@ See the [user guide](docs/USER_GUIDE.md) for conversion, extraction, options, ar
 
 ## Project history
 
-This repository contains a Rust rewrite of the original Python `pop-fe` project. The older scripts and their documentation remain for historical and compatibility reference; see [README.legacy.md](README.legacy.md) for the old command-line guide. The current desktop application is the GTK 4 Rust program built from `src/`.
+This repository contains a Rust rewrite of the original Python `pop-fe` project. The old Python application and command-line tools have been removed. The original project documentation remains archived in [README.legacy.md](README.legacy.md); the current desktop application is the GTK 4 Rust program built from `src/`. Python data sources and build scripts remain only where needed to maintain embedded Rust data and platform packages.
 
 ## License
 

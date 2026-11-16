@@ -1,4 +1,4 @@
-> **Legacy documentation:** this file describes the original Python command-line tools and their non-PSP targets. It is retained for historical/reference use and does not document the current Rust/GTK 4 PSP application. Start with [README.md](README.md) and the [user guide](docs/USER_GUIDE.md).
+> **Archived documentation:** this file describes the original Python command-line tools, which are no longer included in this repository. Its commands and installation instructions are historical and cannot be used with the current Rust/GTK 4 application. Start with [README.md](README.md) and the [user guide](docs/USER_GUIDE.md).
 
 POPstation-FEtcher
 ==================

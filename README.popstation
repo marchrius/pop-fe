@@ -1,4 +1,4 @@
-> **Legacy documentation:** this describes the original Python `popstation.py` utility. For the current Rust/GTK 4 application, see [README.md](README.md) and the [user guide](docs/USER_GUIDE.md).
+> **Archived documentation:** the original Python `popstation.py` utility is no longer included. These commands are retained for reference only. For the current Rust/GTK 4 application, see [README.md](README.md) and the [user guide](docs/USER_GUIDE.md).
 
 popstation.py
 =============

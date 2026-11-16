@@ -1943,8 +1943,8 @@ fn write_psiso(
     title_block[8..10].copy_from_slice(&[0xff, 0x07]);
     copy_text(&mut title_block[12..], title);
     if let Some(magic_word) = magic_word {
-        // Match popstation.py: POPS reads this compatibility word from the
-        // PSISO title block as well as the generated LibCrypt subchannels.
+        // POPS reads this compatibility word from both the PSISO title block
+        // and the generated LibCrypt subchannels.
         put_u32(&mut title_block, 144, u32::from(magic_word));
     }
     psiso.write_all(&title_block)?;
