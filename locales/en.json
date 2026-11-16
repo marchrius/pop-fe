@@ -442,5 +442,19 @@
   "YouTube SND0 IPv4 retry": "YouTube SND0 IPv4 retry",
   "CHD input requires chdman (MAME tools): {error}": "CHD input requires chdman (MAME tools): {error}",
   "ffmpeg SND0 conversion": "ffmpeg SND0 conversion",
-  "ATRAC3 SND0 encoding": "ATRAC3 SND0 encoding"
+  "ATRAC3 SND0 encoding": "ATRAC3 SND0 encoding",
+  "Check for Database Updates…": "Check for Database Updates…",
+  "Restore Previous Database": "Restore Previous Database",
+  "Database Update": "Database Update",
+  "Checking for database updates…": "Checking for database updates…",
+  "Canceling database update…": "Canceling database update…",
+  "Working…": "Working…",
+  "Database updated": "Database updated",
+  "Database is up to date": "Database is up to date",
+  "No database update is available.": "No database update is available.",
+  "Database revision {revision} is installed. Restart the application to use it.": "Database revision {revision} is installed. Restart the application to use it.",
+  "Database source restored: {revision}. Restart the application to use it.": "Database source restored: {revision}. Restart the application to use it.",
+  "Database restore failed": "Database restore failed",
+  "Database update failed": "Database update failed",
+  "The update worker stopped unexpectedly.": "The update worker stopped unexpectedly."
 }

@@ -33,7 +33,11 @@ def ensure_encoder():
     if encoder.is_file():
         return encoder
     build_dir = ROOT / 'target/atracdenc-build'
-    run('cmake', '-S', str(ROOT / 'atracdenc/src'), '-B', str(build_dir), '-DCMAKE_BUILD_TYPE=Release')
+    run(
+        'cmake', '-S', str(ROOT / 'atracdenc/src'), '-B', str(build_dir),
+        '-DCMAKE_BUILD_TYPE=Release', '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
+        '-DCMAKE_CXX_FLAGS=-include stdint.h',
+    )
     run('cmake', '--build', str(build_dir), '--parallel')
     encoder = build_dir / 'atracdenc'
     if not encoder.is_file():

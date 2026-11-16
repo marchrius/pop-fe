@@ -1,0 +1,46 @@
+name: Database Release
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "data/*.json"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: database-release
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check whether this commit was already published
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${GITHUB_REPOSITORY}/releases/tags/database-${GITHUB_SHA}" >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build database archive and manifest
+        if: steps.existing.outputs.published != 'true'
+        run: python3 tools/build_database_release.py --output dist/database
+      - name: Publish database-only release
+        if: steps.existing.outputs.published != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: database-${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          name: Database ${{ github.sha }}
+          body: "Versioned game database bundle. This release contains no application binaries."
+          files: |
+            dist/database/pop-fe-database-*.zip
+            dist/database/database-manifest.json
+          make_latest: false

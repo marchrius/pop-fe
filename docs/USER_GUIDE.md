@@ -12,6 +12,10 @@ POP-FE PSP Manager is the GTK 4 desktop application in this repository. It conve
 
 The file chooser remembers the last folder used and falls back to your home folder if that location is no longer accessible.
 
+### Update the game database
+
+Use **Main Menu → Check for Database Updates…** to download and verify a database-only update. The application stores each update separately from its executable and activates it on the next launch. **Restore Previous Database** switches back to the prior verified version; restart the application afterward. Updates are optional, and the bundled database remains available offline. See [database update operations](DATABASE_UPDATES.md) for release and recovery details.
+
 ### Automatic metadata and artwork
 
 When an image is analyzed, the built-in game database is used to identify it and select matching metadata and compatibility settings. Artwork and manuals are loaded when available. Theme artwork can be loaded for the selected theme, and **XMB Preview** opens a mock XMB screen using the real selected assets. The preview is illustrative; system graphics and playback can differ on a PSP.

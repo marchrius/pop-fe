@@ -214,8 +214,38 @@ fn preferences_path() -> PathBuf {
 
 pub(crate) fn replace_file(source: &Path, destination: &Path) -> std::io::Result<()> {
     #[cfg(windows)]
-    if destination.exists() {
-        fs::remove_file(destination)?;
+    {
+        use std::os::windows::ffi::OsStrExt;
+
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn MoveFileExW(existing: *const u16, replacement: *const u16, flags: u32) -> i32;
+        }
+
+        const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+        const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+        let source = source
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let destination = destination
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let result = unsafe {
+            MoveFileExW(
+                source.as_ptr(),
+                destination.as_ptr(),
+                MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+            )
+        };
+        if result == 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        return Ok(());
     }
+    #[cfg(not(windows))]
     fs::rename(source, destination)
 }

@@ -95,49 +95,49 @@ impl Database {
     pub fn embedded() -> &'static Self {
         static DATABASE: OnceLock<Database> = OnceLock::new();
         DATABASE.get_or_init(|| {
-            let games_json = include_str!("../data/games.json");
-            let games: HashMap<String, GameRecord> =
-                serde_json::from_str(games_json).expect("game database JSON must be valid");
-            let game_fields: HashMap<String, HashSet<String>> =
-                serde_json::from_str::<HashMap<String, serde_json::Value>>(games_json)
-                    .expect("game database JSON must be valid")
-                    .into_iter()
-                    .map(|(id, record)| {
-                        let fields = record
-                            .as_object()
-                            .map(|object| object.keys().cloned().collect())
-                            .unwrap_or_default();
-                        (id, fields)
-                    })
-                    .collect();
-            Self {
-                discs: serde_json::from_str(include_str!("../data/disc_by_md5.json"))
-                    .expect("disc database JSON must be valid"),
-                games,
-                game_fields,
-                psp_configs: serde_json::from_str(include_str!("../data/psp_configs.json"))
-                    .expect("PSP config database JSON must be valid"),
-                libcrypt: serde_json::from_str(include_str!("../data/libcrypt.json"))
-                    .expect("LibCrypt database JSON must be valid"),
-                themes: serde_json::from_str(include_str!("../data/themes.json"))
-                    .expect("theme database JSON must be valid"),
-                ppf_fixes: serde_json::from_str(include_str!("../data/ppf_fixes.json"))
-                    .expect("PPF database JSON must be valid"),
-                ppf_data: serde_json::from_str(include_str!("../data/ppf_data.json"))
-                    .expect("PPF data JSON must be valid"),
-                libcrypt_patches: serde_json::from_str(include_str!(
-                    "../data/libcrypt_patches.json"
-                ))
-                .expect("LibCrypt patch map JSON must be valid"),
-                libcrypt_hash_patches: serde_json::from_str(include_str!(
-                    "../data/libcrypt_hash_patches.json"
-                ))
-                .expect("LibCrypt revision patch map JSON must be valid"),
-                libcrypt_revision_signatures: serde_json::from_str(include_str!(
-                    "../data/libcrypt_revision_signatures.json"
-                ))
-                .expect("LibCrypt revision signatures JSON must be valid"),
-            }
+            let files = crate::database_store::load_active_files()
+                .unwrap_or_else(crate::database_store::embedded_files);
+            Self::from_json_files(&files).unwrap_or_else(|_| {
+                let embedded = crate::database_store::embedded_files();
+                Self::from_json_files(&embedded).expect("bundled database JSON must be valid")
+            })
+        })
+    }
+
+    pub(crate) fn validate_json_files(files: &HashMap<String, String>) -> Result<(), String> {
+        Self::from_json_files(files)
+            .map(|_| ())
+            .map_err(|error| error.to_string())
+    }
+
+    fn from_json_files(files: &HashMap<String, String>) -> Result<Self, serde_json::Error> {
+        let games_json = &files["games.json"];
+        let games: HashMap<String, GameRecord> = serde_json::from_str(games_json)?;
+        let game_fields: HashMap<String, HashSet<String>> =
+            serde_json::from_str::<HashMap<String, serde_json::Value>>(games_json)?
+                .into_iter()
+                .map(|(id, record)| {
+                    let fields = record
+                        .as_object()
+                        .map(|object| object.keys().cloned().collect())
+                        .unwrap_or_default();
+                    (id, fields)
+                })
+                .collect();
+        Ok(Self {
+            discs: serde_json::from_str(&files["disc_by_md5.json"])?,
+            games,
+            game_fields,
+            psp_configs: serde_json::from_str(&files["psp_configs.json"])?,
+            libcrypt: serde_json::from_str(&files["libcrypt.json"])?,
+            themes: serde_json::from_str(&files["themes.json"])?,
+            ppf_fixes: serde_json::from_str(&files["ppf_fixes.json"])?,
+            ppf_data: serde_json::from_str(&files["ppf_data.json"])?,
+            libcrypt_patches: serde_json::from_str(&files["libcrypt_patches.json"])?,
+            libcrypt_hash_patches: serde_json::from_str(&files["libcrypt_hash_patches.json"])?,
+            libcrypt_revision_signatures: serde_json::from_str(
+                &files["libcrypt_revision_signatures.json"],
+            )?,
         })
     }
 

@@ -22,6 +22,8 @@ See the [installation and build guide](packaging/README.md) for Linux packages a
 
 See the [user guide](docs/USER_GUIDE.md) for conversion, extraction, options, artwork, English screenshots, and troubleshooting.
 
+The application can check for versioned game database updates from its main menu. Database archives are published separately from application packages; see the [database update notes](docs/DATABASE_UPDATES.md).
+
 ## Project history
 
 This repository contains a Rust rewrite of the original Python `pop-fe` project. The old Python application and command-line tools have been removed. The original project documentation remains archived in [README.legacy.md](README.legacy.md); the current desktop application is the GTK 4 Rust program built from `src/`. Python data sources and build scripts remain only where needed to maintain embedded Rust data and platform packages.

@@ -10,6 +10,9 @@ of the runtime application.
   by this script.
 - `import_libcrypt_patches.py` imports unambiguous compatibility patch mappings
   from an upstream `libcrypt-patcher` checkout into Rust's embedded data.
+- `build_database_release.py` packages the ten runtime JSON databases into a
+  versioned ZIP with SHA-256 checksums and a manifest. GitHub Actions publishes
+  these assets as database-only releases; see [database update operations](../docs/DATABASE_UPDATES.md).
 
 Run the exporter from any working directory with Python 3:
 

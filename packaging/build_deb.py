@@ -58,6 +58,8 @@ def main():
         subprocess.run([
             'cmake', '-S', str(ROOT / 'atracdenc/src'), '-B', str(encoder_build),
             '-DCMAKE_BUILD_TYPE=Release',
+            '-DCMAKE_POLICY_VERSION_MINIMUM=3.5',
+            '-DCMAKE_CXX_FLAGS=-include stdint.h',
         ], check=True)
         subprocess.run(['cmake', '--build', str(encoder_build), '--parallel'], check=True)
         encoder = encoder_build / 'atracdenc'
