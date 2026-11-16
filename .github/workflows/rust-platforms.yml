@@ -9,11 +9,60 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 jobs:
+  build-linux-images:
+    name: Build Linux CI images
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish Debian build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/containers/debian
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/marchrius/pop-fe-ci-debian:sha-${{ github.sha }}
+            ghcr.io/marchrius/pop-fe-ci-debian:latest
+          labels: org.opencontainers.image.source=https://github.com/marchrius/pop-fe
+          cache-from: type=gha,scope=ci-debian
+          cache-to: type=gha,scope=ci-debian,mode=max
+      - name: Build and publish Fedora build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .github/containers/fedora
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/marchrius/pop-fe-ci-fedora:sha-${{ github.sha }}
+            ghcr.io/marchrius/pop-fe-ci-fedora:latest
+          labels: org.opencontainers.image.source=https://github.com/marchrius/pop-fe
+          cache-from: type=gha,scope=ci-fedora
+          cache-to: type=gha,scope=ci-fedora,mode=max
+
   linux-deb:
     name: Debian package (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    needs: build-linux-images
+    if: ${{ always() && (needs.build-linux-images.result == 'success' || needs.build-linux-images.result == 'skipped') }}
+    container:
+      image: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && format('ghcr.io/marchrius/pop-fe-ci-debian:sha-{0}', github.sha) || 'ghcr.io/marchrius/pop-fe-ci-debian:latest' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -27,12 +76,6 @@ jobs:
         with:
           submodules: recursive
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Linux build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential cmake pkg-config libclang-dev \
-            libgtk-4-dev libadwaita-1-dev libopencv-dev libopencv-contrib-dev libsndfile1-dev \
-            libssl-dev poppler-utils ffmpeg p7zip-full xdelta3 mame-tools dpkg-dev
       - name: Build Debian package
         run: python3 packaging/build_deb.py
       - uses: actions/upload-artifact@v6
@@ -44,8 +87,13 @@ jobs:
   linux-rpm:
     name: Fedora RPM (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
+    needs: build-linux-images
+    if: ${{ always() && (needs.build-linux-images.result == 'success' || needs.build-linux-images.result == 'skipped') }}
     container:
-      image: fedora:45
+      image: ${{ (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && format('ghcr.io/marchrius/pop-fe-ci-fedora:sha-{0}', github.sha) || 'ghcr.io/marchrius/pop-fe-ci-fedora:latest' }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -55,12 +103,6 @@ jobs:
           - arch: aarch64
             runner: ubuntu-24.04-arm
     steps:
-      - name: Install Fedora build dependencies
-        run: |
-          dnf install -y git tar gzip gcc gcc-c++ cmake pkgconf-pkg-config \
-            clang-devel gtk4-devel libadwaita-devel opencv-devel libsndfile-devel \
-            openssl-devel python3 rpm-build xdelta mame-tools poppler-utils \
-            ffmpeg-free 7zip
       - uses: actions/checkout@v5
         with:
           submodules: recursive
