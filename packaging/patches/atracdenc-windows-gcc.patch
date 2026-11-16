@@ -8,6 +8,14 @@
  
  class TPCMBufferTooSmall : public std::exception {
      virtual const char* what() const throw() {
+--- a/src/aea.cpp
++++ b/src/aea.cpp
+@@ -21,4 +21,5 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
++#include <errno.h>
+ #include <string.h>
+ #include <memory>
 --- a/src/CMakeLists.txt
 +++ b/src/CMakeLists.txt
 @@ -32,21 +32,16 @@
