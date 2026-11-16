@@ -11,6 +11,68 @@ permissions:
   contents: read
 
 jobs:
+  linux-deb:
+    name: Debian package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake pkg-config libclang-dev \
+            libgtk-4-dev libadwaita-1-dev libopencv-contrib-dev libsndfile1-dev \
+            libssl-dev poppler-utils ffmpeg p7zip-full xdelta3 mame-tools dpkg-dev
+      - name: Build Debian package
+        run: python3 packaging/build_deb.py
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pop-fe-psp-linux-deb-${{ matrix.arch }}
+          path: dist/*.deb
+          if-no-files-found: error
+
+  linux-rpm:
+    name: Fedora RPM (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: fedora:45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Install Fedora build dependencies
+        run: |
+          dnf install -y git tar gzip gcc gcc-c++ cmake pkgconf-pkg-config \
+            clang-devel gtk4-devel libadwaita-devel opencv-devel libsndfile-devel \
+            openssl-devel python3 rpm-build xdelta mame-tools poppler-utils \
+            ffmpeg-free 7zip
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build Fedora RPM
+        run: python3 packaging/build_rpm.py
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pop-fe-psp-linux-rpm-${{ matrix.arch }}
+          path: dist/*.rpm
+          if-no-files-found: error
+
   macos:
     name: macOS ${{ matrix.macos }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}

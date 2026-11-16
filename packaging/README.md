@@ -2,9 +2,9 @@
 
 POP-FE PSP Manager is the Rust/GTK 4 rewrite of the original Python `pop-fe` project. These instructions apply to the current Rust application. The legacy scripts in the repository have separate dependencies and workflows.
 
-## Linux: Debian package
+## Linux: Debian and Fedora packages
 
-The Debian package is built locally and is not currently published by the cross-platform GitHub release workflow. Building requires Rust/Cargo, CMake, a C/C++ compiler, `libclang-dev`, GTK 4.10+, libadwaita 1.5+, OpenCV contrib development files, libsndfile development files, OpenSSL development files, Poppler utilities, FFmpeg, and 7-Zip. `chdman` from MAME tools is needed to read CHD images. The package includes standalone `yt-dlp` and Deno; it does not require Python, Deno, or the system `yt-dlp` package at runtime.
+GitHub releases include `.deb` packages for Debian/Ubuntu and `.rpm` packages built on Fedora, for x86_64 and AArch64. Building requires Rust/Cargo, CMake, a C/C++ compiler, `libclang`, GTK 4.10+, libadwaita 1.5+, OpenCV contrib development files, libsndfile development files, OpenSSL development files, Poppler utilities, FFmpeg, and 7-Zip. `chdman` from MAME tools is needed to read CHD images. Packages include standalone `yt-dlp` and Deno; they do not require Python, Deno, or the system `yt-dlp` package at runtime.
 
 On Debian or Ubuntu, install the native build dependencies and run the GUI from the checkout with:
 
@@ -18,6 +18,15 @@ Build and install:
 ```sh
 python3 packaging/build_deb.py
 sudo apt install ./dist/pop-fe-psp_*_amd64.deb
+```
+
+On Fedora 45, install the native build dependencies, then build an RPM:
+
+```sh
+sudo dnf install gcc gcc-c++ cmake pkgconf-pkg-config clang-devel gtk4-devel \
+  libadwaita-devel opencv-devel libsndfile-devel openssl-devel python3 rpm-build
+python3 packaging/build_rpm.py
+sudo dnf install ./dist/pop-fe-psp-*.rpm
 ```
 
 After the package tools have been downloaded and verified once, `--offline` can be used for a subsequent build:
@@ -86,7 +95,7 @@ The patch adapts the ATRAC3 encoder source for the Windows MinGW build. Do not a
 
 ## GitHub releases
 
-The release workflow builds macOS Intel, macOS Apple Silicon, macOS preview, and Windows x86_64 ZIP packages when a `v*` tag is pushed. Linux Debian and Flatpak packages are not attached by that workflow.
+The release workflow builds Linux `.deb` and Fedora `.rpm` packages for x86_64 and AArch64, plus macOS Intel, macOS Apple Silicon, macOS preview, and Windows x86_64 ZIP packages when a `v*` tag is pushed. Flatpak bundles are built locally and are not attached by that workflow.
 
 ```sh
 git tag v<version>

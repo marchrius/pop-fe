@@ -38,11 +38,21 @@ jobs:
               "pop-fe-psp-macos-27-preview-aarch64",
               "pop-fe-psp-windows-x86_64",
           }
+          expected_linux = {
+              "pop-fe-psp-linux-deb-amd64": "*.deb",
+              "pop-fe-psp-linux-deb-arm64": "*.deb",
+              "pop-fe-psp-linux-rpm-x86_64": "*.rpm",
+              "pop-fe-psp-linux-rpm-aarch64": "*.rpm",
+          }
           root = Path("dist")
           missing = sorted(name for name in expected if not list((root / name).glob("*.zip")))
+          missing.extend(
+              name for name, pattern in expected_linux.items()
+              if not list((root / name).glob(pattern))
+          )
           if missing:
               raise SystemExit(f"Missing release package(s): {', '.join(missing)}")
-          print("All four platform ZIPs are present.")
+          print("All macOS, Windows, Debian, and Fedora packages are present.")
           PY
 
       - name: Publish release
@@ -52,4 +62,7 @@ jobs:
           name: pop-f(org)e ${{ github.ref_name }}
           generate_release_notes: true
           fail_on_unmatched_files: true
-          files: dist/**/*.zip
+          files: |
+            dist/**/*.zip
+            dist/**/*.deb
+            dist/**/*.rpm
