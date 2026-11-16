@@ -1,4 +1,6 @@
-# Migrazione Rust
+# Rust Migration Notes
+
+> Historical engineering notes for the Rust port. For current installation and user instructions, see [README.md](README.md), [the user guide](docs/USER_GUIDE.md), and [the packaging guide](packaging/README.md). The migration notes are not a release checklist and may describe implementation stages as they were completed.
 
 La GUI e il backend PSP vengono riscritti in Rust/GTK4. I database del
 progetto sono esportati in JSON incluso nel crate. I dati binari PSP usati dal

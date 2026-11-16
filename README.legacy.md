@@ -1,3 +1,5 @@
+> **Legacy documentation:** this file describes the original Python command-line tools and their non-PSP targets. It is retained for historical/reference use and does not document the current Rust/GTK 4 PSP application. Start with [README.md](README.md) and the [user guide](docs/USER_GUIDE.md).
+
 POPstation-FEtcher
 ==================
 ==================
@@ -24,35 +26,6 @@ Or create a PS3 PKG:
   $ ./pop-fe.py --ps3-pkg=Grandia.pkg /psx/Grandia1of2.ccd /psx/Grandia2of2.ccd
 
 or ...
-
-POP-FE PSP Manager
-------------------
-
-The PSP manager is the native Rust/GTK4 application. It provides Converti and
-Estrai pages. Converti accepts one or more CUE/BIN/IMG/ISO/CCD/CHD images or
-supported disc images inside ZIP archives and creates
-`PSP/GAME/<game-id>/EBOOT.PBP`; Estrai reads an EBOOT.PBP and exports
-its disc images, CUE files and available audio tracks. The manager also loads
-game metadata and artwork, supports themes and an XMB preview, and reports
-progress with cancellation. The interface follows the system language when it
-is Italian or English, and defaults to English otherwise.
-
-To build and run the GUI from the source tree on Debian/Ubuntu, install Rust,
-GTK 4.10 development files and libadwaita 1.5 development files, then run:
-
-  $ cargo run --locked
-
-For installable Debian and Flatpak packages, see `packaging/README.md`. The
-Python PSP GUI is legacy; the Python packaging scripts build and ship the Rust
-application.
-
-The existing Python command-line tools continue to cover the project's other
-target platforms. The PSP GTK manager no longer launches the Python backend.
-
-
-Enjoy.
-
-
 
 HOW TO RUN POP-FE:
 ==================

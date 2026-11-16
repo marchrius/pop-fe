@@ -1,56 +1,79 @@
-# Pacchetti Debian e Flatpak
+# Installation and builds
 
-Entrambi i pacchetti contengono l'applicazione GTK4/libadwaita compilata in Rust, l'encoder ATRAC3, yt-dlp standalone e Deno. Su x86_64 includono anche il patcher LibCrypt standalone. Non richiedono yt-dlp, Deno, lcp o Python installati nel sistema. Le versioni incluse sono verificate con SHA-256. Deno permette a yt-dlp di risolvere le challenge JavaScript di YouTube.
+POP-FE PSP Manager is the Rust/GTK 4 rewrite of the original Python `pop-fe` project. These instructions apply to the current Rust application. The legacy scripts in the repository have separate dependencies and workflows.
 
-La conversione accetta immagini CUE, CCD, CHD, ISO, BIN e IMG, anche contenute in archivi ZIP. Il patcher LibCrypt standalone è incluso nei bundle x86_64 e viene verificato tramite il digest SHA-256 pubblicato nella release GitHub upstream. Per un errore YouTube HTTP 403, è possibile selezionare nelle opzioni SND0 un file `cookies.txt` in formato Netscape esportato dal browser; l'app lo passa al yt-dlp incluso nel pacchetto. L'app preferisce sempre il downloader incluso, anche se è presente un override `POPFE_YT_DLP`.
+## Linux: Debian package
 
-## Debian
+The Debian package is built locally and is not currently published by the cross-platform GitHub release workflow. Building requires Rust/Cargo, CMake, a C/C++ compiler, `libclang-dev`, GTK 4.10+, libadwaita 1.5+, OpenCV contrib development files, libsndfile development files, OpenSSL development files, Poppler utilities, FFmpeg, and 7-Zip. `chdman` from MAME tools is needed to read CHD images. The package includes standalone `yt-dlp` and Deno; it does not require Python, Deno, or the system `yt-dlp` package at runtime.
 
-Servono Rust/Cargo, CMake, un compilatore C/C++, `libclang-dev`, GTK 4.10 o superiore, libadwaita 1.5 o superiore, `libopencv-contrib-dev`, `libsndfile1-dev`, `libssl-dev`, `poppler-utils`, `ffmpeg` e `7zip` (per i manuali PDF/JP2/RAR). Il `.deb` dichiara le dipendenze condivise rilevate dalla build; il Flatpak include OpenCV. Il pacchetto installato include un eseguibile autonomo `yt-dlp` e non richiede Python, Deno o il pacchetto `yt-dlp` del sistema.
+On Debian or Ubuntu, install the native build dependencies and run the GUI from the checkout with:
+
+```sh
+sudo apt install build-essential cmake pkg-config libclang-dev libgtk-4-dev libadwaita-1-dev libopencv-contrib-dev libsndfile1-dev libssl-dev poppler-utils ffmpeg p7zip-full
+cargo run --locked
+```
+
+Build and install:
+
+```sh
+python3 packaging/build_deb.py
+sudo apt install ./dist/pop-fe-psp_*_amd64.deb
+```
+
+After the package tools have been downloaded and verified once, `--offline` can be used for a subsequent build:
 
 ```sh
 python3 packaging/build_deb.py --offline
-sudo apt install ./dist/pop-fe-psp_0.1.101_amd64.deb
 ```
 
-Al primo build, esegui il comando senza `--offline` per scaricare e verificare yt-dlp, Deno e lcp x86_64 nelle rispettive cache sotto `target/package-tools/`. In seguito puoi usare `--offline` anche per i build Cargo. Lo script compila `atracdenc` se manca, compila l'app Rust in release e crea il `.deb` in `dist/` senza privilegi di root.
+The script creates the package under `dist/` without running the build as root.
 
-## Flatpak
+## Linux: Flatpak bundle
 
-La build compila Rust e `atracdenc` sull'host e assembla un bundle con il runtime GNOME 51. Servono gli strumenti e le librerie di sviluppo della build Debian, Flatpak, `poppler-utils`, `ffmpeg`, `7zip`, `libssl-dev` e il runtime `org.gnome.Platform//51`. Il bundle include yt-dlp standalone e Deno; non usa le versioni installate sull'host.
+The Flatpak build also runs locally. It requires the Linux build dependencies above, Flatpak/Flatpak Builder, and the GNOME Platform runtime version listed in `packaging/org.popfe.PSPManager.yaml`. The resulting bundle includes the application and standalone `yt-dlp`/Deno, but the target system must have the referenced GNOME runtime installed.
 
 ```sh
-python3 packaging/build_flatpak.py --offline
+flatpak install flathub org.gnome.Platform//51
+python3 packaging/build_flatpak.py
 flatpak install --user --bundle dist/org.popfe.PSPManager.flatpak
 ```
 
-Se non hai ancora creato le cache yt-dlp e Deno, esegui una volta il build senza `--offline`. Installa prima il runtime se manca: `flatpak install flathub org.gnome.Platform//51`. Il bundle richiede il runtime sul sistema destinatario; il file `.flatpak` contiene l'app, l'encoder, yt-dlp standalone e Deno, non il runtime GNOME. Il manifest di `flatpak-builder` è in `packaging/org.popfe.PSPManager.yaml`.
+Use `python3 packaging/build_flatpak.py --offline` after the required package caches have been populated. The manifest is `packaging/org.popfe.PSPManager.yaml`.
 
-## macOS e Windows (build da sorgente)
+## macOS
 
-La CI compila l'app per macOS 26 Intel e Apple Silicon, macOS 27 Apple Silicon (runner preview) e Windows x86_64. La build macOS 26 verifica il target stabile Intel/Apple Silicon; quella macOS 27 controlla la compatibilità con la versione più recente disponibile sui runner. Per build locali su macOS servono Xcode Command Line Tools, Rust, CMake e le dipendenze native seguenti:
+GitHub Actions builds macOS 26 packages for Intel and Apple Silicon and a macOS 27 preview package for Apple Silicon. These are ZIP files containing an `.app`. They are not signed or notarized. Local builds require Xcode Command Line Tools, Rust, CMake, Python 3, and the Homebrew dependencies below:
 
 ```sh
-brew install gtk4 libadwaita opencv libsndfile openssl@3 pkg-config cmake ffmpeg poppler sevenzip rom-tools xdelta dylibbundler librsvg
+brew install gtk4 libadwaita opencv libsndfile openssl@3 llvm pkg-config cmake ffmpeg poppler sevenzip rom-tools xdelta dylibbundler librsvg
+```
+
+Then build the application and helpers:
+
+```sh
 OPENSSL_DIR="$(brew --prefix openssl@3)" \
 OPENSSL_LIB_DIR="$(brew --prefix openssl@3)/lib" \
 OPENSSL_INCLUDE_DIR="$(brew --prefix openssl@3)/include" \
 PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:${PKG_CONFIG_PATH}" \
 LIBCLANG_PATH="$(brew --prefix llvm)/lib" \
-RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib -C link-arg=-Wl,-rpath,$(brew --prefix llvm)/lib" cargo build --locked --release
+RUSTFLAGS="-L native=$(brew --prefix openssl@3)/lib -C link-arg=-Wl,-rpath,$(brew --prefix llvm)/lib -C link-arg=-Wl,-headerpad_max_install_names" \
+cargo build --locked --release
 cmake -S atracdenc/src -B target/atracdenc-build -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build target/atracdenc-build --parallel
 python3 packaging/build_macos_app.py
 ```
 
-Il bundle Apple Silicon compila il patcher LibCrypt in modo nativo dal tag upstream v1.1.0 e dalla revisione fissata di `lib-enigma`; la prima build richiede Git e l'accesso a GitHub. Dopo aver creato la cache, il packaging può essere eseguito con `--offline`.
+Extract the ZIP and move `POP-FE PSP Manager.app` to Applications. Because the app is not signed or notarized, macOS may require opening it from Finder's context menu the first time. CHD support requires `chdman` from MAME tools on `PATH`.
 
-Su Windows si usa MSYS2 UCRT64 con GTK 4, libadwaita, OpenCV, libsndfile, OpenSSL, CMake, Ninja e la toolchain Rust GNU x86_64. L'app va avviata dall'ambiente UCRT64 affinché GTK e OpenCV trovino le DLL e i dati di runtime. Il workflow `.github/workflows/rust-platforms.yml` contiene la configurazione di build e packaging.
+## Windows
 
-In UCRT64, la build locale usa gli stessi pacchetti della CI:
+GitHub Actions builds a portable x86_64 ZIP using MSYS2 UCRT64 and the GNU Rust toolchain. The ZIP contains the GTK/OpenCV runtime, OpenSSL, ATRAC3 encoder, `yt-dlp`, Deno, FFmpeg, Poppler, 7-Zip, and patching helpers. It is not an installer. Extract it and run `Start POP-FE PSP Manager.cmd`.
+
+CHD support requires `chdman.exe` from the official MAME distribution and its adjacent DLLs. Put them beside the application or add their directory to `PATH`.
+
+To build locally, use an MSYS2 UCRT64 shell and install the same packages listed in `.github/workflows/rust-platforms.yml`. Then run:
 
 ```sh
-pacman -S --needed base-devel mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja mingw-w64-ucrt-x86_64-gtk4 mingw-w64-ucrt-x86_64-libadwaita mingw-w64-ucrt-x86_64-opencv mingw-w64-ucrt-x86_64-libsndfile mingw-w64-ucrt-x86_64-openssl mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-clang mingw-w64-ucrt-x86_64-python mingw-w64-ucrt-x86_64-ffmpeg mingw-w64-ucrt-x86_64-poppler mingw-w64-ucrt-x86_64-7zip xdelta3
 rustup toolchain install stable-x86_64-pc-windows-gnu --profile minimal
 cargo +stable-x86_64-pc-windows-gnu build --locked --release
 git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
@@ -59,19 +82,19 @@ cmake --build target/atracdenc-build --parallel
 python packaging/build_windows_portable.py
 ```
 
-Gli artefatti CI contengono una `.app` macOS per ciascuna architettura e uno ZIP Windows portabile. Su Windows il bundle include GTK/OpenCV, OpenSSL con il provider legacy, encoder ATRAC3, yt-dlp, Deno, i patcher LibCrypt e Xdelta, FFmpeg, Poppler e 7-Zip. Per le immagini CHD, scarica la distribuzione Windows ufficiale di [MAME](https://www.mamedev.org/release.html) ed estrai `chdman.exe` e le DLL adiacenti nella cartella dell'app; in alternativa aggiungi quella cartella al `PATH`. Il patcher LibCrypt nei bundle macOS è compilato nativamente per Intel e Apple Silicon dalla sorgente upstream fissata alla release 1.1.0. Gli artefatti CI non sono firmati/notarizzati per la distribuzione pubblica.
+The patch adapts the ATRAC3 encoder source for the Windows MinGW build. Do not apply it repeatedly to the same checkout.
 
-## Pubblicare una release GitHub
+## GitHub releases
 
-La workflow `.github/workflows/release.yml` crea una release quando viene pushato un tag `v*`. Dopo aver aggiornato la versione nel progetto e aver verificato i build, crea e invia il tag corrispondente:
+The release workflow builds macOS Intel, macOS Apple Silicon, macOS preview, and Windows x86_64 ZIP packages when a `v*` tag is pushed. Linux Debian and Flatpak packages are not attached by that workflow.
 
 ```sh
-git tag v0.1.102
-git push origin v0.1.102
+git tag v<version>
+git push origin v<version>
 ```
 
-La workflow ricompila i pacchetti e pubblica i quattro ZIP macOS Intel, macOS Apple Silicon stabile, macOS Apple Silicon preview e Windows x86_64 con le note generate da GitHub. La pubblicazione si interrompe se manca uno dei pacchetti.
+The release workflow expects all four platform builds to succeed before publishing the release. Check the version in `Cargo.toml` and the workflow status before tagging a production release.
 
-Su macOS estrai lo ZIP, sposta `POP-FE PSP Manager.app` in `Applicazioni` e aprila. Essendo un artefatto non firmato/notarizzato, al primo avvio macOS può richiedere l'apertura dal menu contestuale. Su Windows estrai lo ZIP in una cartella e avvia `Start POP-FE PSP Manager.cmd`.
+## Runtime paths and language
 
-Avvio Linux dal menu applicazioni oppure con `pop-fe-psp`. La lingua segue il sistema (italiano e inglese, inglese come fallback). La configurazione è salvata nella cartella standard della piattaforma: `~/.config/org.popfe.PSPManager` su Linux, `~/Library/Application Support/org.popfe.PSPManager` su macOS e `%APPDATA%/org.popfe.PSPManager` su Windows. Cache e file temporanei usano la cartella cache standard del sistema.
+The application follows the system language when it is Italian or English, and otherwise uses English. Configuration is stored under `org.popfe.PSPManager` in the platform's standard configuration directory; cache and temporary files use the platform cache directory.
