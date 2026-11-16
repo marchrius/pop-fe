@@ -160,7 +160,17 @@ jobs:
         run: cargo +stable-x86_64-pc-windows-gnu build --locked --release
       - name: Apply MinGW fixes to ATRAC3 submodule
         shell: msys2 {0}
-        run: git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
+        run: |
+          git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("atracdenc/src/delay_buffer.h")
+          text = source.read_text()
+          old = 'std::is_pod<T>::value, "T must be a POD type."'
+          new = 'std::is_trivially_copyable<T>::value, "T must be trivially copyable."'
+          if old not in text or "#include <type_traits>" in text:
+              raise SystemExit("unexpected ATRACDEnc delay_buffer.h content")
+          source.write_text(text.replace("#include <cstring>\n", "#include <cstring>\n#include <type_traits>\n").replace(old, new))
       - name: Build ATRAC3 encoder
         shell: msys2 {0}
         run: |
@@ -218,7 +228,17 @@ jobs:
         run: cargo build --target aarch64-pc-windows-gnullvm --locked --release
       - name: Apply MinGW fixes to ATRAC3 submodule
         shell: msys2 {0}
-        run: git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
+        run: |
+          git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("atracdenc/src/delay_buffer.h")
+          text = source.read_text()
+          old = 'std::is_pod<T>::value, "T must be a POD type."'
+          new = 'std::is_trivially_copyable<T>::value, "T must be trivially copyable."'
+          if old not in text or "#include <type_traits>" in text:
+              raise SystemExit("unexpected ATRACDEnc delay_buffer.h content")
+          source.write_text(text.replace("#include <cstring>\n", "#include <cstring>\n#include <type_traits>\n").replace(old, new))
       - name: Build ATRAC3 encoder
         shell: msys2 {0}
         run: |
