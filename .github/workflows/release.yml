@@ -37,6 +37,7 @@ jobs:
               "pop-fe-psp-macos-26-aarch64",
               "pop-fe-psp-macos-27-preview-aarch64",
               "pop-fe-psp-windows-x86_64",
+              "pop-fe-psp-windows-arm64",
           }
           expected_linux = {
               "pop-fe-psp-linux-deb-amd64": "*.deb",

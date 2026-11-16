@@ -14,6 +14,7 @@ ASSETS = {
     "aarch64": ("yt-dlp_linux_aarch64", "e87e9533e89fe5889abaa21f5114dfe7756d6aa6219b83551add04d48b18e483"),
     "macos": ("yt-dlp_macos", "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"),
     "windows-x86_64": ("yt-dlp.exe", "f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d"),
+    "windows-arm64": ("yt-dlp_arm64.exe", "0066dbac3c124028e2dcae2a197fccee33cd91f456313d24f7af89fd54590e98"),
 }
 LICENSE_SHA256 = "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
 THIRD_PARTY_SHA256 = "472aefe951c7db35e1657c1d13fd337140511ed6f2b329205105ad441c5a02b7"
@@ -46,6 +47,8 @@ def ensure_bundle(architecture: str | None = None, offline: bool = False) -> tup
         architecture = "macos"
     elif architecture in ("AMD64", "x86_64") and platform.system() == "Windows":
         architecture = "windows-x86_64"
+    elif architecture in ("ARM64", "aarch64") and platform.system() == "Windows":
+        architecture = "windows-arm64"
     architecture = {"amd64": "x86_64", "arm64": "aarch64"}.get(architecture, architecture)
     if architecture not in ASSETS:
         raise RuntimeError(f"yt-dlp standalone is not available for architecture {architecture}")
@@ -53,7 +56,7 @@ def ensure_bundle(architecture: str | None = None, offline: bool = False) -> tup
     asset, expected = ASSETS[architecture]
     cache = ROOT / "target/package-tools/yt-dlp" / VERSION / architecture
     cache.mkdir(parents=True, exist_ok=True)
-    executable = cache / ("yt-dlp.exe" if architecture == "windows-x86_64" else "yt-dlp")
+    executable = cache / ("yt-dlp.exe" if architecture.startswith("windows-") else "yt-dlp")
     license_file = cache / "LICENSE"
     third_party = cache / "THIRD_PARTY_LICENSES.txt"
 

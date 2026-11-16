@@ -31,7 +31,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake pkg-config libclang-dev \
-            libgtk-4-dev libadwaita-1-dev libopencv-contrib-dev libsndfile1-dev \
+            libgtk-4-dev libadwaita-1-dev libopencv-dev libopencv-contrib-dev libsndfile1-dev \
             libssl-dev poppler-utils ffmpeg p7zip-full xdelta3 mame-tools dpkg-dev
       - name: Build Debian package
         run: python3 packaging/build_deb.py
@@ -173,3 +173,61 @@ jobs:
         with:
           name: pop-fe-psp-windows-x86_64
           path: dist/pop-fe-psp-windows-x86_64.zip
+
+  windows-arm64:
+    name: Windows ARM64
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install Rust ARM64 target
+        shell: pwsh
+        run: rustup target add aarch64-pc-windows-gnullvm
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: CLANGARM64
+          update: true
+          path-type: inherit
+          install: >-
+            base-devel
+            mingw-w64-clang-aarch64-toolchain
+            mingw-w64-clang-aarch64-cmake
+            mingw-w64-clang-aarch64-ninja
+            mingw-w64-clang-aarch64-gtk4
+            mingw-w64-clang-aarch64-libadwaita
+            mingw-w64-clang-aarch64-opencv
+            mingw-w64-clang-aarch64-libsndfile
+            mingw-w64-clang-aarch64-openssl
+            mingw-w64-clang-aarch64-pkgconf
+            mingw-w64-clang-aarch64-python
+            mingw-w64-clang-aarch64-ffmpeg
+            mingw-w64-clang-aarch64-poppler
+            mingw-w64-clang-aarch64-7zip
+            xdelta3
+      - name: Build application
+        shell: msys2 {0}
+        env:
+          PKG_CONFIG_PATH: /clangarm64/lib/pkgconfig:/clangarm64/share/pkgconfig
+          LIBCLANG_PATH: /clangarm64/bin
+          CC_aarch64_pc_windows_gnullvm: aarch64-w64-mingw32-clang
+          CXX_aarch64_pc_windows_gnullvm: aarch64-w64-mingw32-clang++
+          CARGO_TARGET_AARCH64_PC_WINDOWS_GNULLVM_LINKER: aarch64-w64-mingw32-clang
+        run: cargo build --target aarch64-pc-windows-gnullvm --locked --release
+      - name: Apply MinGW fixes to ATRAC3 submodule
+        shell: msys2 {0}
+        run: git apply --directory=atracdenc -p1 packaging/patches/atracdenc-windows-gcc.patch
+      - name: Build ATRAC3 encoder
+        shell: msys2 {0}
+        run: |
+          cmake -S atracdenc/src -B target/atracdenc-arm64-build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+          cmake --build target/atracdenc-arm64-build --parallel
+      - name: Package portable Windows ARM64 ZIP
+        shell: msys2 {0}
+        run: python packaging/build_windows_portable.py --architecture arm64
+      - uses: actions/upload-artifact@v6
+        with:
+          name: pop-fe-psp-windows-arm64
+          path: dist/pop-fe-psp-windows-arm64.zip
+          if-no-files-found: error

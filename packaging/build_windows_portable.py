@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assemble a portable Windows ZIP from a UCRT64 build environment."""
+"""Assemble a portable Windows ZIP from an MSYS2 MinGW build environment."""
 
 import argparse
 import os
@@ -24,34 +24,49 @@ def copy_tree(source: Path, target: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=ROOT / "dist/pop-fe-psp-windows-x86_64.zip")
+    parser.add_argument(
+        "--architecture",
+        choices=("x86_64", "arm64"),
+        default="x86_64",
+        help="Windows target architecture",
+    )
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--offline", action="store_true")
     args = parser.parse_args()
     prefix_value = os.environ.get("MINGW_PREFIX")
     if not prefix_value:
-        parser.error("run this script in an MSYS2 UCRT64 shell (MINGW_PREFIX is missing)")
+        parser.error("run this script in an MSYS2 MinGW shell (MINGW_PREFIX is missing)")
     prefix = Path(prefix_value)
-    binary = ROOT / "target/release/pop-fe-psp.exe"
-    encoder = ROOT / "target/atracdenc-build/atracdenc.exe"
+    target_name = "windows-arm64" if args.architecture == "arm64" else "windows-x86_64"
+    if args.architecture == "arm64":
+        binary = ROOT / "target/aarch64-pc-windows-gnullvm/release/pop-fe-psp.exe"
+        encoder = ROOT / "target/atracdenc-arm64-build/atracdenc.exe"
+    else:
+        binary = ROOT / "target/release/pop-fe-psp.exe"
+        encoder = ROOT / "target/atracdenc-build/atracdenc.exe"
     if not binary.is_file() or not encoder.is_file():
         parser.error("build pop-fe-psp.exe and atracdenc.exe before packaging")
 
-    yt_dlp, yt_license, yt_third_party = ensure_yt_dlp_bundle("windows-x86_64", offline=args.offline)
-    deno, deno_license = ensure_deno_bundle("windows-x86_64", offline=args.offline)
-    lcp = ensure_lcp_bundle("windows-x86_64", offline=args.offline)
+    if args.output is None:
+        args.output = ROOT / f"dist/pop-fe-psp-{target_name}.zip"
+    yt_dlp, yt_license, yt_third_party = ensure_yt_dlp_bundle(target_name, offline=args.offline)
+    deno, deno_license = ensure_deno_bundle(target_name, offline=args.offline)
+    lcp = ensure_lcp_bundle(target_name, offline=args.offline)
     xdelta_license = ensure_apache_2_license(offline=args.offline)
     args.output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="pop-fe-windows-") as temporary:
         stage = Path(temporary) / "POP-FE PSP Manager"
         stage.mkdir()
-        for source, name in (
+        runtime_binaries = [
             (binary, "pop-fe-psp.exe"),
             (encoder, "atracdenc.exe"),
             (yt_dlp, "yt-dlp.exe"),
             (deno, "deno.exe"),
-            (lcp, "lcp.exe"),
-        ):
+        ]
+        if lcp:
+            runtime_binaries.append((lcp, "lcp.exe"))
+        for source, name in runtime_binaries:
             shutil.copy2(source, stage / name)
 
         # Include the utilities used by the existing conversion and manual flows.
@@ -85,10 +100,10 @@ def main() -> None:
         shutil.copy2(ROOT / "licenses/lib-enigma-BSD-3-Clause.txt", licenses / "lib-enigma-LICENSE.txt")
         shutil.copy2(xdelta_license, licenses / "xdelta3-Apache-2.0.txt")
         shutil.copy2(ROOT / "LICENCE-LGPL-2.1.txt", licenses / "pop-fe-LICENSE.txt")
-        copy_tree(prefix / "share/licenses", licenses / "msys2-ucrt64")
+        copy_tree(prefix / "share/licenses", licenses / f"msys2-{prefix.name.lower()}")
         copy_tree(prefix.parent / "usr/share/licenses", licenses / "msys2-runtime")
 
-        # MSYS2's UCRT64 packages install the GTK/OpenCV runtime DLLs together.
+        # MSYS2's MinGW environment installs the GTK/OpenCV runtime DLLs together.
         runtime_bin = prefix / "bin"
         for source in runtime_bin.glob("*.dll"):
             shutil.copy2(source, stage / source.name)
@@ -140,9 +155,10 @@ def main() -> None:
         (stage / "README.txt").write_text(
             "POP-FE PSP Manager portable build\n\n"
             "Run Start POP-FE PSP Manager.cmd. This ZIP includes the GTK/OpenCV runtime, "
-            "ATRAC3 encoder, yt-dlp, Deno, LibCrypt/Xdelta patchers, FFmpeg, Poppler and 7-Zip.\n"
-            "CHD images need chdman.exe from MAME (https://www.mamedev.org/release.html) and its adjacent DLLs. "
-            "Place them beside the application or add their folder to PATH.\n",
+            "ATRAC3 encoder, yt-dlp, Deno, Xdelta patcher, FFmpeg, Poppler and 7-Zip.\n"
+            + ("It also includes the LibCrypt patcher.\n" if lcp else "The LibCrypt patcher is not available in this ARM64 build.\n")
+            + "CHD images need chdman.exe from MAME (https://www.mamedev.org/release.html) and its adjacent DLLs. "
+            + "Place them beside the application or add their folder to PATH.\n",
             encoding="utf-8",
         )
         with ZipFile(args.output, "w", compression=ZIP_DEFLATED, compresslevel=8) as archive:

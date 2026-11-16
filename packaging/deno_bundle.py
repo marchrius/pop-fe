@@ -33,11 +33,22 @@ ASSETS = {
         "deno-x86_64-pc-windows-msvc.zip",
         "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
     ),
+    "windows-arm64": (
+        "deno-aarch64-pc-windows-msvc.zip",
+        "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+    ),
 }
 BINARY_SHA256 = {
     "x86_64": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7",
 }
-ARCH_ALIASES = {"amd64": "x86_64", "arm64": "aarch64", "x86_64-apple-darwin": "macos-x86_64", "aarch64-apple-darwin": "macos-aarch64", "x86_64-pc-windows-msvc": "windows-x86_64"}
+ARCH_ALIASES = {
+    "amd64": "x86_64",
+    "arm64": "aarch64",
+    "x86_64-apple-darwin": "macos-x86_64",
+    "aarch64-apple-darwin": "macos-aarch64",
+    "x86_64-pc-windows-msvc": "windows-x86_64",
+    "aarch64-pc-windows-msvc": "windows-arm64",
+}
 
 
 def _sha256(path: Path) -> str:
@@ -68,7 +79,7 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
     cache = ROOT / "target/package-tools/deno" / VERSION / architecture
     cache.mkdir(parents=True, exist_ok=True)
     archive = cache / filename
-    executable_name = "deno.exe" if architecture == "windows-x86_64" else "deno"
+    executable_name = "deno.exe" if architecture.startswith("windows-") else "deno"
     executable = cache / executable_name
     license_file = cache / "LICENSE.md"
 
@@ -106,7 +117,7 @@ def ensure_bundle(architecture: str, offline: bool = False) -> tuple[Path, Path]
             raise RuntimeError(f"verified Deno archive {VERSION} is required to extract the binary")
         with tempfile.TemporaryDirectory(prefix="deno-extract-", dir=cache) as temporary:
             with ZipFile(archive) as bundle:
-                executable_name = "deno.exe" if architecture == "windows-x86_64" else "deno"
+                executable_name = "deno.exe" if architecture.startswith("windows-") else "deno"
                 matches = [info for info in bundle.infolist() if Path(info.filename).name == executable_name]
                 if len(matches) != 1 or matches[0].is_dir():
                     raise RuntimeError("official Deno archive does not contain exactly one deno executable")

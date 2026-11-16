@@ -76,7 +76,7 @@ Extract the ZIP and move `POP-FE PSP Manager.app` to Applications. Because the a
 
 ## Windows
 
-GitHub Actions builds a portable x86_64 ZIP using MSYS2 UCRT64 and the GNU Rust toolchain. The ZIP contains the GTK/OpenCV runtime, OpenSSL, ATRAC3 encoder, `yt-dlp`, Deno, FFmpeg, Poppler, 7-Zip, and patching helpers. It is not an installer. Extract it and run `Start POP-FE PSP Manager.cmd`.
+GitHub Actions builds portable x86_64 and ARM64 ZIPs. x86_64 uses MSYS2 UCRT64 and the GNU Rust toolchain; ARM64 uses the native MSYS2 CLANGARM64 environment and Rust's Windows GNU-LLVM target. Both ZIPs include the GTK/OpenCV runtime, OpenSSL, ATRAC3 encoder, `yt-dlp`, Deno, FFmpeg, Poppler, 7-Zip, and Xdelta. The x86_64 ZIP also includes the LibCrypt patcher; no upstream Windows ARM64 build is available. These ZIPs are not installers. Extract one and run `Start POP-FE PSP Manager.cmd`.
 
 CHD support requires `chdman.exe` from the official MAME distribution and its adjacent DLLs. Put them beside the application or add their directory to `PATH`.
 
@@ -95,14 +95,14 @@ The patch adapts the ATRAC3 encoder source for the Windows MinGW build. Do not a
 
 ## GitHub releases
 
-The release workflow builds Linux `.deb` and Fedora `.rpm` packages for x86_64 and AArch64, plus macOS Intel, macOS Apple Silicon, macOS preview, and Windows x86_64 ZIP packages when a `v*` tag is pushed. Flatpak bundles are built locally and are not attached by that workflow.
+The release workflow builds Linux `.deb` and Fedora `.rpm` packages for x86_64 and AArch64, macOS Intel and Apple Silicon packages, and portable Windows x86_64 and ARM64 ZIPs when a `v*` tag is pushed. The Windows ARM64 ZIP uses native GTK/OpenCV builds and does not include the LibCrypt patcher, which has no upstream ARM64 release. Flatpak bundles are built locally and are not attached by that workflow.
 
 ```sh
 git tag v<version>
 git push origin v<version>
 ```
 
-The release workflow expects all four platform builds to succeed before publishing the release. Check the version in `Cargo.toml` and the workflow status before tagging a production release.
+The release workflow expects every platform build to succeed before publishing the release. Check the version in `Cargo.toml` and the workflow status before tagging a production release.
 
 ## Runtime paths and language
 
