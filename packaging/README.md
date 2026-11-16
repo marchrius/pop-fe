@@ -61,6 +61,17 @@ python packaging/build_windows_portable.py
 
 Gli artefatti CI contengono una `.app` macOS per ciascuna architettura e uno ZIP Windows portabile. Su Windows il bundle include GTK/OpenCV, OpenSSL con il provider legacy, encoder ATRAC3, yt-dlp, Deno, i patcher LibCrypt e Xdelta, FFmpeg, Poppler e 7-Zip. Per le immagini CHD, scarica la distribuzione Windows ufficiale di [MAME](https://www.mamedev.org/release.html) ed estrai `chdman.exe` e le DLL adiacenti nella cartella dell'app; in alternativa aggiungi quella cartella al `PATH`. Il patcher LibCrypt nei bundle macOS è compilato nativamente per Intel e Apple Silicon dalla sorgente upstream fissata alla release 1.1.0. Gli artefatti CI non sono firmati/notarizzati per la distribuzione pubblica.
 
+## Pubblicare una release GitHub
+
+La workflow `.github/workflows/release.yml` crea una release quando viene pushato un tag `v*`. Dopo aver aggiornato la versione nel progetto e aver verificato i build, crea e invia il tag corrispondente:
+
+```sh
+git tag v0.1.102
+git push origin v0.1.102
+```
+
+La workflow ricompila i pacchetti e pubblica i quattro ZIP macOS Intel, macOS Apple Silicon stabile, macOS Apple Silicon preview e Windows x86_64 con le note generate da GitHub. La pubblicazione si interrompe se manca uno dei pacchetti.
+
 Su macOS estrai lo ZIP, sposta `POP-FE PSP Manager.app` in `Applicazioni` e aprila. Essendo un artefatto non firmato/notarizzato, al primo avvio macOS può richiedere l'apertura dal menu contestuale. Su Windows estrai lo ZIP in una cartella e avvia `Start POP-FE PSP Manager.cmd`.
 
 Avvio Linux dal menu applicazioni oppure con `pop-fe-psp`. La lingua segue il sistema (italiano e inglese, inglese come fallback). La configurazione è salvata nella cartella standard della piattaforma: `~/.config/org.popfe.PSPManager` su Linux, `~/Library/Application Support/org.popfe.PSPManager` su macOS e `%APPDATA%/org.popfe.PSPManager` su Windows. Cache e file temporanei usano la cartella cache standard del sistema.

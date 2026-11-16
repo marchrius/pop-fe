@@ -1,0 +1,55 @@
+name: Release packages
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build release packages
+    permissions:
+      contents: read
+    uses: ./.github/workflows/rust-platforms.yml
+
+  publish:
+    name: Publish GitHub release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download platform packages
+        uses: actions/download-artifact@v6
+        with:
+          path: dist
+
+      - name: Verify all platform packages are present
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          expected = {
+              "pop-fe-psp-macos-26-x86_64",
+              "pop-fe-psp-macos-26-aarch64",
+              "pop-fe-psp-macos-27-preview-aarch64",
+              "pop-fe-psp-windows-x86_64",
+          }
+          root = Path("dist")
+          missing = sorted(name for name in expected if not list((root / name).glob("*.zip")))
+          if missing:
+              raise SystemExit(f"Missing release package(s): {', '.join(missing)}")
+          print("All four platform ZIPs are present.")
+          PY
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: pop-f(org)e ${{ github.ref_name }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: dist/**/*.zip
